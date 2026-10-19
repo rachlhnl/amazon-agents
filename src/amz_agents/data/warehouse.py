@@ -74,7 +74,11 @@ CREATE TABLE IF NOT EXISTS actions (
     impact_usd  REAL,              -- chief of staff's estimate of 30-day profit impact
     confidence  TEXT,              -- low | medium | high
     goal        TEXT,              -- goal this action serves, if any
-    executed_at TEXT
+    executed_at TEXT,
+    team        TEXT,              -- team that owns the work
+    effort      TEXT,              -- XS | S | M | L | XL
+    roi         REAL,              -- impact_usd / cost of the effort
+    priority    TEXT               -- now | high | medium | low | judgment
 );
 
 -- Daily per-SKU history (Sales & Traffic + Ads reports). The chief of staff
@@ -157,7 +161,8 @@ class Warehouse:
         """Add columns introduced after a warehouse was first created."""
         have = {r["name"] for r in self.conn.execute("PRAGMA table_info(actions)")}
         for col, typ in [("sku", "TEXT"), ("impact_usd", "REAL"), ("confidence", "TEXT"),
-                         ("goal", "TEXT"), ("executed_at", "TEXT")]:
+                         ("goal", "TEXT"), ("executed_at", "TEXT"), ("team", "TEXT"),
+                         ("effort", "TEXT"), ("roi", "REAL"), ("priority", "TEXT")]:
             if col not in have:
                 self.conn.execute(f"ALTER TABLE actions ADD COLUMN {col} {typ}")
         self.conn.commit()

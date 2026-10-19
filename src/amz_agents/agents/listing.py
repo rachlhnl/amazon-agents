@@ -10,7 +10,7 @@ import re
 
 from .. import llm
 from ..actions import Action
-from .base import Agent, Context
+from .base import Agent, Context, Role
 
 STOPWORDS = {"a", "an", "and", "for", "of", "the", "with", "to", "in", "oz"}
 MIN_ORDERS = 2
@@ -22,6 +22,12 @@ def _words(s: str) -> set[str]:
 
 class ListingAgent(Agent):
     name = "listing"
+    role = Role(
+        mission="Keep listing copy matched to what shoppers search for and honest about "
+                "known complaints.",
+        team="amazon_ops", proposes={"update_listing_copy": "M"},
+        needs=("products", "search_terms"),
+    )
 
     def run(self, ctx: Context) -> list[Action]:
         themes = ctx.shared.get("review_themes", {})

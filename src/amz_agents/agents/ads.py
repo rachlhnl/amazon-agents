@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from ..actions import Action
 from ..guardrails import clamp_bid
-from .base import Agent, Context
+from .base import Agent, Context, Role
 
 MIN_CLICKS_FOR_BID_CHANGE = 15
 MIN_CHANGE_PCT = 0.03  # ignore noise-level adjustments
@@ -17,6 +17,13 @@ HARVEST_MIN_ORDERS = 2
 
 class AdsAgent(Agent):
     name = "ads"
+    role = Role(
+        mission="Run Sponsored Products efficiently: tune bids to target ACoS, harvest "
+                "converting search terms, negate wasted ones.",
+        team="amazon_ops",
+        proposes={"update_bid": "XS", "add_keyword": "XS", "add_negative": "XS"},
+        needs=("keywords", "search_terms"),
+    )
 
     def run(self, ctx: Context) -> list[Action]:
         return self._bids(ctx) + self._harvest_and_negate(ctx)

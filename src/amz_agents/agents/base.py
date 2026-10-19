@@ -18,8 +18,34 @@ class Context:
     shared: dict[str, Any] = field(default_factory=dict)
 
 
+# Teams that own agents' work. The chief of staff groups the brief by team and,
+# when BRIEF_TO_<TEAM> is set (e.g. BRIEF_TO_MARKETING), emails each team its part.
+TEAMS = {
+    "amazon_ops": "Amazon operations",
+    "marketing": "Marketing",
+    "sales": "Sales & wholesale",
+    "data": "Data & insights",
+}
+
+# Level of effort -> hours of a person's time, for ROI. XS is a click to approve
+# a change the system then makes; L is days of work.
+EFFORT_HOURS = {"XS": 0.1, "S": 0.5, "M": 2.0, "L": 8.0, "XL": 24.0}
+
+
+@dataclass(frozen=True)
+class Role:
+    """What an agent is for. The chief of staff reads this to route, prioritize and
+    check on each agent's work."""
+
+    mission: str
+    team: str  # key of TEAMS
+    proposes: dict[str, str]  # action kind -> level of effort to carry it out
+    needs: tuple[str, ...] = ()  # warehouse tables it can't work without
+
+
 class Agent(ABC):
     name: str = "agent"
+    role: Role
 
     @abstractmethod
     def run(self, ctx: Context) -> list[Action]:

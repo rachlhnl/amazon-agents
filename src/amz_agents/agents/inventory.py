@@ -8,7 +8,7 @@ from __future__ import annotations
 import math
 
 from ..actions import Action
-from .base import Agent, Context, days_of_cover
+from .base import Agent, Context, Role, days_of_cover
 
 SAFETY_DAYS = 14
 TARGET_DAYS_AFTER_ARRIVAL = 60
@@ -17,6 +17,11 @@ OVERSTOCK_DAYS = 180
 
 class InventoryAgent(Agent):
     name = "inventory"
+    role = Role(
+        mission="Keep every SKU in stock without tying up cash: reorders, stockout and "
+                "overstock warnings for the other agents.",
+        team="amazon_ops", proposes={"reorder": "S"}, needs=("products", "metrics_daily"),
+    )
 
     def run(self, ctx: Context) -> list[Action]:
         actions: list[Action] = []

@@ -32,6 +32,14 @@ human-approval workflow.
 | Listing | search terms, review themes | `update_listing_copy` (+ LLM draft) | human |
 | Marketing | external campaigns, stock | `update_campaign_budget`, `pause_campaign`, `email_campaign` (+ LLM draft) | Meta Marketing API; human for Google/TikTok and email |
 | Sales | other channels' prices, CRM leads | `update_channel_price`, `list_on_channel`, `send_outreach` (+ LLM draft) | Shopify Admin API; human otherwise |
+| Data | everything, plus the other agents' proposals | `opportunity` (finding, recommendation, owner, impact, effort) | human |
+
+Each agent declares a **role** (`agents/base.py`: `Role`): its mission, the team
+that owns its work (Amazon operations, Marketing, Sales & wholesale, Data &
+insights), the action types it proposes with the level of effort each takes a
+person (XS–XL), and the warehouse tables it needs. The chief of staff reads the
+roles to route, prioritize and check on the agents; adding an agent means
+declaring its role, not editing the chief of staff.
 
 The orchestrator runs them in that order. Inventory and reviews publish findings
 to a shared context that later agents use: the ads agent won't raise bids and the
@@ -42,6 +50,36 @@ Amazon price the pricing agent is about to set.
 
 An action already awaiting approval, or carried out in the last 30 days, isn't
 proposed again.
+
+### Data agent
+
+Runs last. It reviews the warehouse for opportunities the other agents' rules
+don't cover, and for problems in the data they all depend on:
+
+- **Data quality:** stale daily sales, products missing costs, Amazon-bound
+  campaigns with no attributed sales (Attribution not loaded?), keywords not tied
+  to a product.
+- **Opportunities:** in-stock SKUs with no advertising, fulfillment fees eating
+  margin, SKUs that depend on ads for most sales (weak organic rank), sales
+  trending sharply up or down, price elasticity measured from past price changes
+  vs. the assumption the estimates use, Amazon's share of total sales, and
+  products rated under 4 stars.
+
+It works with the other agents: each opportunity is routed to the agent whose
+role covers it (so it lands with that agent's team), linked to the proposals
+that already work on it ("in progress via [12], [15]"), and sized with a 30-day
+impact and a level of effort. Opportunities are recommendations for a person
+and are never executed. Once acknowledged, one stays quiet for 30 days.
+
+### Priority, ROI and effort
+
+The chief of staff scores every action and opportunity the same way:
+**ROI** = estimated 30-day impact ÷ (effort hours × `HOURLY_COST`, default $75).
+Effort comes from the proposing agent's role (or the data agent's estimate);
+in `auto` mode, changes the system carries out count as XS.
+**Priority:** `high` (≥ $500 and ROI ≥ 3), `medium` (ROI ≥ 1), `low` (below that,
+or negative impact), `judgment` (no dollar estimate: outreach, defects, listings),
+and `now` for escalations. The queue is ordered by priority, then impact.
 
 ### Marketing agent (outside Amazon)
 
@@ -85,9 +123,16 @@ person can act on in five minutes. It doesn't make changes itself. Each run it:
 5. **Checks past changes.** A week after an action executes, it compares the
    SKU's daily profit before and after, records a verdict, and says which action
    types have earned more autonomy and which need tighter guardrails.
-6. **Writes the brief**: needs your attention, goals, top actions by impact,
-   actions to consider rejecting, judgment calls, and whether past changes worked.
-   With SMTP settings in `.env`, `amz-agents run` also emails it to the team.
+6. **Checks on the agents:** whether each one ran, has the data its role needs
+   (and whether daily sales are fresh), and only proposed the action types it
+   declared. Problems go to the top of the brief; one failing agent no longer
+   stops the run.
+7. **Writes the brief**: needs your attention, goals, sales by channel, top
+   priorities across teams, the data agent's opportunities, then a section per
+   team (ranked queue, low priority, consider rejecting, judgment calls), whether
+   past changes worked, and agent health. It also writes a brief per team to
+   `reports/<team>/`. With SMTP settings in `.env`, `amz-agents run` emails the
+   full brief to `BRIEF_TO` and each team's brief to `BRIEF_TO_<TEAM>`.
 
 The before/after checks need daily per-SKU history in `metrics_daily`
 (Sales & Traffic report plus Ads reports; see `ingest.py`).
@@ -168,7 +213,7 @@ src/amz_agents/
   llm.py             optional Claude calls
   ingest.py          API -> warehouse jobs, CSV imports
   agents/            inventory, reviews, pricing, ads, listing, marketing, sales,
-                     chief_of_staff
+                     data, chief_of_staff; base.py holds roles, teams, effort scale
   data/              warehouse (SQLite), API clients, sample data
 goals.toml           goals the chief of staff steers toward
 tests/               guardrail, agent and chief-of-staff tests

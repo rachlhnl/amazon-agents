@@ -95,7 +95,7 @@ def _history(today: date) -> list[dict]:
             {"date": d, "sku": "BTL-32-SGE", "units": 11 + wobble, "revenue": (11 + wobble) * 29.99,
              "ad_spend": 6.0, "ad_sales": 25.0},
             {"date": d, "sku": "LID-STRAW", "units": lid_units, "revenue": lid_units * lid_price,
-             "ad_spend": 2.0, "ad_sales": 10.0},
+             "ad_spend": 0.0, "ad_sales": 0.0},  # not advertised: a data-agent opportunity
             {"date": d, "sku": "BTL-64-BLK", "units": big_units, "revenue": big_units * 39.99,
              "ad_spend": 5.0, "ad_sales": 40.0 if big_units else 0.0},
         ]

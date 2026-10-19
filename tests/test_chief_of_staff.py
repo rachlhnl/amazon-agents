@@ -37,17 +37,22 @@ def test_sales_drop_escalated_with_likely_cause(ctx):
     assert esc and "Buy Box" in esc[0].reason and "not a stockout" in esc[0].reason.lower()
 
 
-def test_actions_ranked_by_impact(ctx):
+def test_actions_ranked_by_priority_then_impact(ctx):
+    from amz_agents.agents.chief_of_staff import TIER
+
     _, submitted = run(ctx)
-    impacts = [a.impact_usd for _, a in submitted
-               if a.kind != "escalation" and a.impact_usd is not None]
-    assert impacts == sorted(impacts, reverse=True)
+    ranked = [a for _, a in submitted if a.kind != "escalation"]
+    tiers = [TIER[a.priority] for a in ranked]
+    assert tiers == sorted(tiers)
+    for tier in ("high", "medium", "low"):
+        impacts = [a.impact_usd for a in ranked if a.priority == tier]
+        assert impacts == sorted(impacts, reverse=True)
 
 
 def test_every_action_has_sku_and_goal_tags_make_sense(ctx):
     _, submitted = run(ctx)
     for _, a in submitted:
-        assert a.sku, a
+        assert a.sku or (a.kind == "opportunity" and a.target.endswith("/all")), a
     tags = {(a.kind, a.target): a.goal for _, a in submitted}
     assert tags[("add_negative", "c3/ag3")] == "serves: Keep TACoS under 12%"
     assert tags[("update_price", "BTL-32-SGE")] == "works against: Grow Sage bottle sales"
@@ -103,7 +108,9 @@ def test_brief_has_all_sections(ctx):
     ctx.settings = Settings(mode=Mode.APPROVE)
     orch, submitted = run(ctx, Mode.APPROVE)
     text = orch.chief.brief(submitted, orch.outcomes)
-    for section in ("Needs your attention", "Goals", "Top actions", "Did past changes work?"):
+    for section in ("Needs your attention", "Goals", "Top priorities across teams",
+                    "Opportunities from the data agent", "Did past changes work?",
+                    "Agent health"):
         assert f"## {section}" in text
     assert "amz-agents approve" in text
     assert "(see action [" in text  # anomaly links to the pricing action

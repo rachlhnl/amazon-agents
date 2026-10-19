@@ -32,6 +32,10 @@ class Action:
     impact_usd: float | None = None
     confidence: str = ""
     goal: str = ""
+    team: str = ""  # team that owns the work (from the proposing agent's role)
+    effort: str = ""  # XS..XL level of effort for a person
+    roi: float | None = None  # impact / cost of that effort
+    priority: str = ""  # now | high | medium | low | judgment
 
 
 class Executor(Protocol):
@@ -41,7 +45,7 @@ class Executor(Protocol):
 # Customer-facing or real-world actions that always need a human, even in auto mode.
 HUMAN_ONLY = {
     "update_listing_copy", "reorder", "flag_defect", "escalation",
-    "list_on_channel", "send_outreach", "email_campaign",
+    "list_on_channel", "send_outreach", "email_campaign", "opportunity",
 }
 
 # Statuses that mean an action is still waiting, or was carried out recently
@@ -67,7 +71,8 @@ class ActionLog:
             status = "pending_approval"
         action_id = self.wh.execute(
             "INSERT INTO actions (agent, kind, target, before, after, reason, status, notes, "
-            "sku, impact_usd, confidence, goal) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            "sku, impact_usd, confidence, goal, team, effort, roi, priority) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 action.agent,
                 action.kind,
@@ -81,6 +86,10 @@ class ActionLog:
                 action.impact_usd,
                 action.confidence,
                 action.goal,
+                action.team,
+                action.effort,
+                action.roi,
+                action.priority,
             ),
         )
         if status == "approved":
@@ -95,14 +104,24 @@ class ActionLog:
         self._set_status(action_id, "rejected", expect="pending_approval")
 
     def already_open_or_done(self, action: Action) -> bool:
-        """True if the same change is awaiting approval or was carried out recently."""
+        """True if the same change is awaiting approval or was carried out recently.
+
+        Anything for the same kind and target still awaiting approval counts, even with
+        different numbers (a reorder whose quantity drifted by a unit). Done work counts
+        only if identical, except opportunities: once acknowledged, an opportunity stays
+        quiet for the lookback period even as its numbers move.
+        """
         rows = self.wh.query(
-            "SELECT after FROM actions WHERE kind=? AND target=? AND status IN "
+            "SELECT status, after FROM actions WHERE kind=? AND target=? AND status IN "
             f"({','.join('?' * len(OPEN_OR_DONE))}) AND created >= date('now', ?)",
             (action.kind, action.target, *OPEN_OR_DONE, f"-{REPEAT_LOOKBACK_DAYS} days"),
         )
         after = json.dumps(action.after, sort_keys=True)
-        return any(json.dumps(json.loads(r["after"]), sort_keys=True) == after for r in rows)
+        return any(
+            r["status"] == "pending_approval" or action.kind == "opportunity"
+            or json.dumps(json.loads(r["after"]), sort_keys=True) == after
+            for r in rows
+        )
 
     def list(self, status: str | None = None) -> list[dict[str, Any]]:
         if status:

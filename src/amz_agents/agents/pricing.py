@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from ..actions import Action
 from ..guardrails import clamp_price, price_floor
-from .base import Agent, Context
+from .base import Agent, Context, Role
 
 LOW_STOCK_RAISE = 0.05
 OVERSTOCK_CUT = 0.05
@@ -13,6 +13,11 @@ OVERSTOCK_CUT = 0.05
 
 class PricingAgent(Agent):
     name = "pricing"
+    role = Role(
+        mission="Set Amazon prices: protect margin, compete for the Buy Box, manage "
+                "sell-through.",
+        team="amazon_ops", proposes={"update_price": "XS"}, needs=("products",),
+    )
 
     def run(self, ctx: Context) -> list[Action]:
         g = ctx.settings.guardrails

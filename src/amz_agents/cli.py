@@ -4,7 +4,8 @@
   amz-agents ingest [--only JOBS] [--costs FILE]
                                   pull Amazon, Shopify and Meta data into the warehouse
   amz-agents import TABLE FILE    load a CSV export (reviews, leads, Google Ads, ...)
-  amz-agents run [--no-email]     run all agents, write the brief, email it if SMTP is set
+  amz-agents run [--no-email]     run all agents, write the brief and team briefs, email
+                                  them if SMTP is set
   amz-agents actions [--status S] list logged actions
   amz-agents approve ID [ID ...]  approve and execute pending actions
   amz-agents reject ID [ID ...]   reject pending actions
@@ -18,7 +19,7 @@ import os
 import sys
 
 from .actions import ActionLog
-from .agents.base import Context
+from .agents.base import TEAMS, Context
 from .config import Mode, Settings
 from .data.sample import seed
 from .data.warehouse import Warehouse
@@ -70,14 +71,22 @@ def main(argv: list[str] | None = None) -> int:
         orch = Orchestrator(Context(wh, settings), _log(wh, settings))
         submitted = orch.run()
         path = orch.brief(submitted)
+        teams = orch.team_briefs(submitted)
         text = path.read_text()
         print(text)
         print(f"Brief written to {path}")
+        for team, p in teams.items():
+            print(f"{TEAMS[team]} brief written to {p}")
         if args.cmd == "run" and not args.no_email:
-            from .notify import send_brief
+            from .notify import send_brief, team_recipients_var
 
-            if send_brief(text, f"Amazon brief: {path.stem.removeprefix('brief-')}"):
+            day = path.stem.removeprefix("brief-")
+            if send_brief(text, f"Daily brief: {day}"):
                 print("Brief emailed.")
+            for team, p in teams.items():
+                if send_brief(p.read_text(), f"{TEAMS[team]} brief: {day}",
+                              team_recipients_var(team)):
+                    print(f"{TEAMS[team]} brief emailed.")
     elif args.cmd == "ingest":
         from . import ingest
 

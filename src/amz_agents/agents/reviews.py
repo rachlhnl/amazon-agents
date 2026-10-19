@@ -12,7 +12,7 @@ from collections import defaultdict
 
 from .. import llm
 from ..actions import Action
-from .base import Agent, Context
+from .base import Agent, Context, Role
 
 # Starter themes; extend per catalog. When an API key is set the LLM pass
 # also surfaces themes these patterns miss.
@@ -30,6 +30,10 @@ LOW_RATING = 3
 
 class ReviewsAgent(Agent):
     name = "reviews"
+    role = Role(
+        mission="Find recurring product complaints in reviews and flag defects; read-only.",
+        team="amazon_ops", proposes={"flag_defect": "M"}, needs=("reviews",),
+    )
 
     def run(self, ctx: Context) -> list[Action]:
         hits: dict[tuple[str, str], list[str]] = defaultdict(list)

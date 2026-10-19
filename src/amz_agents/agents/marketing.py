@@ -14,7 +14,7 @@ from __future__ import annotations
 from .. import llm
 from ..actions import Action
 from ..guardrails import clamp_budget_change
-from .base import Agent, Context
+from .base import Agent, Context, Role
 
 # Amazon credits brand-registered sellers a share of sales from external traffic
 # tagged with Amazon Attribution. ~10% on average; check the current rate per
@@ -69,6 +69,14 @@ def draws_on_fba_stock(ctx: Context, c: dict) -> bool:
 
 class MarketingAgent(Agent):
     name = "marketing"
+    role = Role(
+        mission="Spend outside Amazon (Meta, Google, TikTok, email) where it returns "
+                "profit, and stop spend that sells stock we're short of.",
+        team="marketing",
+        proposes={"update_campaign_budget": "XS", "pause_campaign": "XS",
+                  "email_campaign": "M"},
+        needs=("external_campaigns",),
+    )
 
     def run(self, ctx: Context) -> list[Action]:
         return self._campaigns(ctx) + self._email(ctx)

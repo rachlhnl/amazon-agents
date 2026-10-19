@@ -1,5 +1,6 @@
-"""Email the brief to the team. Sends only when SMTP settings and recipients are
-configured; otherwise it's a no-op and the brief stays in reports/."""
+"""Email the brief. The full brief goes to BRIEF_TO; each team's part goes to
+BRIEF_TO_<TEAM> (e.g. BRIEF_TO_MARKETING) when set. Sends only when SMTP settings
+and recipients are configured; otherwise it's a no-op and briefs stay in reports/."""
 
 from __future__ import annotations
 
@@ -8,17 +9,21 @@ import smtplib
 from email.message import EmailMessage
 
 
-def email_configured() -> bool:
-    return bool(os.getenv("SMTP_HOST") and os.getenv("BRIEF_TO") and os.getenv("BRIEF_FROM"))
+def email_configured(to_var: str = "BRIEF_TO") -> bool:
+    return bool(os.getenv("SMTP_HOST") and os.getenv(to_var) and os.getenv("BRIEF_FROM"))
 
 
-def send_brief(markdown: str, subject: str) -> bool:
-    if not email_configured():
+def team_recipients_var(team: str) -> str:
+    return f"BRIEF_TO_{team.upper()}"
+
+
+def send_brief(markdown: str, subject: str, to_var: str = "BRIEF_TO") -> bool:
+    if not email_configured(to_var):
         return False
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = os.environ["BRIEF_FROM"]
-    msg["To"] = ", ".join(x.strip() for x in os.environ["BRIEF_TO"].split(",") if x.strip())
+    msg["To"] = ", ".join(x.strip() for x in os.environ[to_var].split(",") if x.strip())
     msg.set_content(markdown)
 
     host, port = os.environ["SMTP_HOST"], int(os.getenv("SMTP_PORT", "587"))

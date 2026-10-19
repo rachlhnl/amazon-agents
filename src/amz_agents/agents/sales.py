@@ -21,7 +21,7 @@ from datetime import date
 from .. import llm
 from ..actions import Action
 from ..guardrails import clamp_price
-from .base import Agent, Context
+from .base import Agent, Context, Role
 
 PARITY_TOLERANCE = 0.02  # off-Amazon price may sit this far below Amazon's
 MIN_VELOCITY_TO_EXPAND = 5.0  # Amazon units/day before suggesting another channel
@@ -30,6 +30,13 @@ FOLLOW_UP_DAYS = {"new": 2, "contacted": 7, "negotiating": 3}
 
 class SalesAgent(Agent):
     name = "sales"
+    role = Role(
+        mission="Grow sales outside Amazon (own store, other marketplaces, wholesale) "
+                "without undercutting the Amazon Buy Box.",
+        team="sales",
+        proposes={"update_channel_price": "XS", "list_on_channel": "L", "send_outreach": "S"},
+        needs=("channel_listings", "leads"),
+    )
 
     def __init__(self, today: date | None = None):
         self.today = today or date.today()
