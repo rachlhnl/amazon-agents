@@ -23,6 +23,9 @@
   --good: #0a7a3d;
   --bad: #c2362f;
   --chip: #ecebe6;
+  --pos: #2a78d6;
+  --mid: #c9c7bf;
+  --neg: #e34948;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -43,6 +46,9 @@
     --good: #4cc27f;
     --bad: #f07a72;
     --chip: #262624;
+    --pos: #3987e5;
+    --mid: #4a4a46;
+    --neg: #e66767;
   }
 }
 :root[data-theme="dark"] {
@@ -63,6 +69,9 @@
   --good: #4cc27f;
   --bad: #f07a72;
   --chip: #262624;
+  --pos: #3987e5;
+  --mid: #4a4a46;
+  --neg: #e66767;
 }
 * { box-sizing: border-box; }
 body {
@@ -136,6 +145,14 @@ th { color: var(--text-secondary); font-weight: 600; cursor: pointer; user-selec
 th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
 th[aria-sort="ascending"]::after { content: " ▲"; font-size: 10px; }
 th[aria-sort="descending"]::after { content: " ▼"; font-size: 10px; }
+.seg { position: absolute; top: 2px; height: 14px; }
+.seg + .seg { border-left: 2px solid var(--surface-1); }
+.seg:first-child { border-radius: 0; }
+.seg:last-child { border-radius: 0 4px 4px 0; }
+td.wrap { white-space: normal; min-width: 280px; color: var(--text-secondary); }
+.quotes { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.quotes blockquote { margin: 0; font-size: 14px; border-left: 3px solid var(--border); padding-left: 12px; }
+.quotes .qm { font-size: 12px; color: var(--text-muted); margin-top: 4px; padding-left: 15px; }
 .errors { font-size: 12px; color: var(--text-muted); }
 #tip {
   position: fixed; pointer-events: none; z-index: 10; display: none;
@@ -239,6 +256,7 @@ function lines(c) {
   const vals = all.map((p) => p[1]);
   let lo = Math.min(...vals), hi = Math.max(...vals);
   if (c.fmt === "rank" || c.fmt === "usd" || c.fmt === "pct") { const pad = (hi - lo) * 0.15 || Math.abs(hi) * 0.05 || 1; lo -= pad; hi += pad; }
+  if (c.fmt === "pct") { lo = Math.max(0, lo); hi = Math.min(1, hi); }
   else { lo = Math.min(0, lo); hi = hi * 1.05 || 1; }
   const t0 = Date.parse(dates[0]), t1 = Date.parse(dates[dates.length - 1]);
   const x = (d) => L + (Date.parse(d) - t0) / (t1 - t0) * (W - L - R);
@@ -253,7 +271,8 @@ function lines(c) {
   }
   for (const d of [dates[0], dates[dates.length - 1]]) {
     const t = svgEl("text", { x: x(d), y: H - 6, "text-anchor": d === dates[0] ? "start" : "end" });
-    t.textContent = new Date(d + "T12:00").toLocaleDateString(undefined, { month: "short", day: "numeric" }); svg.append(t);
+    const long = t1 - t0 > 200 * 864e5;
+    t.textContent = new Date(d + "T12:00").toLocaleDateString(undefined, long ? { month: "short", year: "numeric" } : { month: "short", day: "numeric" }); svg.append(t);
   }
   for (const s of c.series) {
     if (!s.points.length) continue;
@@ -336,7 +355,7 @@ function table(c) {
     const body = rows.map((r) => {
       const tr = el("tr");
       c.columns.forEach((col, i) => {
-        const td = el("td", isNum(col) ? "num" : null);
+        const td = el("td", isNum(col) ? "num" : col.wrap ? "wrap" : null);
         if (i === 0 && r[1]) { const a = el("a", null, r[0]); a.href = r[1]; td.append(a); }
         else { const v = val(r, i); td.textContent = col.fmt ? F[col.fmt](v) : (v ?? ""); }
         tr.append(td);
@@ -350,7 +369,39 @@ function table(c) {
   const w = el("div", "table-wrap"); w.append(t); return w;
 }
 
-const KINDS = { bars, lines, dots, table };
+function stacked(c) {
+  const box = el("div", "rows");
+  for (const r of c.rows) {
+    const row = el("div", "row"); row.tabIndex = 0;
+    const plot = el("div", "plot");
+    let x = 0;
+    for (const part of r.parts) {
+      if (part.v <= 0) continue;
+      const s = el("div", "seg"); s.style.left = x * 100 + "%"; s.style.width = part.v * 100 + "%";
+      s.style.background = color(part.color); plot.append(s); x += part.v;
+    }
+    const n = el("div", "name", r.name); n.title = r.name;
+    row.append(n, plot, el("div", "val", r.label));
+    hover(row, r.tip);
+    box.append(row);
+  }
+  return box;
+}
+
+function quotes(c) {
+  const ul = el("ul", "quotes");
+  for (const q of c.items) {
+    const li = el("li"); li.append(el("blockquote", null, q.text));
+    const m = el("div", "qm");
+    if (q.url) { const a = el("a", null, q.meta); a.href = q.url; m.append(a); } else m.textContent = q.meta;
+    li.append(m); ul.append(li);
+  }
+  return ul;
+}
+
+const note = (c) => el("div", "empty", c.text);
+
+const KINDS = { bars, lines, dots, table, stacked, quotes, note };
 function card(c) {
   const k = el("section", "card");
   k.append(el("h3", null, c.title), el("p", "sub", c.sub));

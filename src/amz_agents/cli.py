@@ -53,7 +53,9 @@ def _market(args: argparse.Namespace) -> int:
     if not snaps:
         print("No market history yet; run without --no-collect first.")
         return 1
-    out = render.write(analyze.build(snaps, market.load_config()), Path(args.out))
+    config = market.load_config()
+    reviews = {k: market.reviews(k) for k, c in config.items() if c.get("judgeme_shop")}
+    out = render.write(analyze.build(snaps, config, reviews), Path(args.out))
     print(f"Market tracker written to {out}")
     return 0
 

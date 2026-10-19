@@ -32,6 +32,6 @@ jobs:
         run: |
           git config user.name "market-tracker[bot]"
           git config user.email "market-tracker@users.noreply.github.com"
-          git add market/history market/index.html
+          git add market/history market/reviews market/index.html
           git diff --cached --quiet || git commit -m "Market snapshot $(date -u +%F)"
           git push

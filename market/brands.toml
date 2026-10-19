@@ -13,6 +13,7 @@ name = "Dagacci"
 role = "self"
 store = "www.dagacci.com"
 reviews = true
+judgeme_shop = "new-dagacci.myshopify.com"  # store reviews, kept in market/reviews/
 amazon = [
   "B00FT739RA",  # Unisex scrub set (classic)
   "B07V39V7SC",  # Unisex super stretch V-neck set

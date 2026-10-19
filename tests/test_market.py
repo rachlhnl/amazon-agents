@@ -1,6 +1,8 @@
+import base64
 import copy
+import json
 
-from amz_agents.market import analyze, render, sources
+from amz_agents.market import analyze, render, sentiment, sources
 
 PAGE = """
 <span id="productTitle" class="a-size-medium">  COZY SCRUBS Women&#39;s Set  </span>
@@ -103,7 +105,8 @@ def test_build_trends_changes_and_carry_forward():
     assert table["rows"][0][2] == 24.99 and "last good" in table["rows"][0][-1]
     assert any(o["priority"] == "Data" for o in tabs["self"]["opportunities"])
     # Every chart has a plain-language read, and trend lines have two points.
-    assert all(c.get("read") for t in tabs.values() for c in t["charts"] if c["type"] != "table")
+    assert all(c.get("read") for t in tabs.values() for c in t["charts"]
+               if c["type"] not in ("table", "note"))
     reviews = next(c for c in tabs["self"]["charts"] if c["title"] == "Reviews on dagacci.com")
     assert len(reviews["series"][0]["points"]) == 2 and "rose" in reviews["read"]
     assert any(o["title"] == "Watch this" for o in tabs["rival"]["opportunities"])
@@ -116,3 +119,32 @@ def test_delta_picks_point_about_a_week_back():
     pts = [["2026-10-01", 1.0], ["2026-10-11", 2.0], ["2026-10-12", 3.0], ["2026-10-19", 5.0]]
     assert analyze.delta(pts, 7) == (5.0, 3.0, 7)
     assert analyze.delta(pts[:1], 7) is None
+
+
+def test_customers_say_topics():
+    blob = {"k-data": {"sentiments": [
+        {"label": "positive", "aspects": [{"label": "quality", "mentions": 100, "sentimentMentions": 90,
+                                           "summary": "Customers like the quality.", "snippets": [
+            {"review": {"url": "/r/1"}, "text": {"fragments": [
+                {"semanticContent": {"content": {"text": "Great quality"}}}, {"text": ", soft."}]}}]}]},
+        {"label": "mixed", "aspects": [{"label": "size", "mentions": 50, "sentimentMentions": 20,
+                                        "summary": "Mixed on size.", "snippets": []}]}]}}
+    page = "k-injected k+b64 " + base64.b64encode(json.dumps(blob).encode()).decode()
+    x = sources.amazon_customers_say(page)
+    assert x["aspects"][0]["snippets"][0]["text"] == "Great quality, soft."
+    t = sentiment.amazon_topics([{"asin": "A", **x}])
+    assert t["quality"]["pos"] == 90 and t["quality"]["mid"] == 10
+    assert t["size"]["mid"] == 50 and t["size"]["worst"]["verdict"] == "mixed"
+
+
+def test_store_sentiment_pinpoints_fit_problem():
+    products = [{"id": 1, "title": "Jogger Set", "url": "https://x/1"}]
+    reviews = [{"id": str(i), "product_id": 1, "score": 5, "date": "2026-05-01", "title": "",
+                "body": "So comfortable and soft"} for i in range(8)]
+    reviews += [{"id": f"n{i}", "product_id": 1, "score": 1, "date": "2026-06-01", "title": "",
+                 "body": "Way too small. It runs small, size up."} for i in range(4)]
+    st = sentiment.store_sentiment(reviews, products, "2026-10-19")
+    pin = st["pinpoints"][0]
+    assert pin["topic"] == "Fit & sizing" and pin["detail"] == "runs small"
+    assert pin["share"] == 1.0 and "too small" in pin["quote"].lower()
+    assert st["topics"]["Stretch & comfort"]["pos"] == 8

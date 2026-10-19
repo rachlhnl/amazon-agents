@@ -15,7 +15,9 @@ Two kinds of source, neither needing the brand's own credentials:
 
 from __future__ import annotations
 
+import base64
 import html
+import json
 import os
 import re
 import time
@@ -66,6 +68,52 @@ def judgeme(http: httpx.Client, url: str) -> tuple[float | None, int]:
     ratings = [float(r) for r in _RATING.findall(page) if float(r) > 0]
     counts = [int(c) for c in _COUNT.findall(page)]
     return (ratings[0] if ratings else None), (counts[0] if counts else 0)
+
+
+_JDGM_REV = re.compile(r"<div class='jdgm-rev jdgm-divider-top'(.*?)(?=<div class='jdgm-rev jdgm-divider-top'|$)",
+                       re.DOTALL)
+
+
+def parse_judgeme_reviews(page: str, product_id: int) -> list[dict[str, Any]]:
+    out = []
+    for block in _JDGM_REV.findall(page):
+        rid = re.search(r"data-review-id='([^']+)'", block)
+        score = re.search(r"data-score='([0-9])'", block)
+        when = re.search(r"datetime='([0-9-]{10})", block)
+        if not (rid and score and when):
+            continue
+        title = re.search(r"class='jdgm-rev__title'>(.*?)</b>", block, re.DOTALL)
+        body = re.search(r"class='jdgm-rev__body'>(.*?)</div>", block, re.DOTALL)
+        out.append({"id": rid.group(1), "product_id": product_id, "score": int(score.group(1)),
+                    "date": when.group(1), "title": _text(title.group(1)) if title else "",
+                    "body": _text(body.group(1))[:1500] if body else ""})
+    return out
+
+
+def judgeme_reviews(http: httpx.Client, shop: str, product_id: int, known: set[str],
+                    max_pages: int = 15, delay: float = 0.5) -> list[dict[str, Any]]:
+    """Newest reviews first, stopping at the first page with nothing new. The author's
+    name is not kept."""
+    out = []
+    for page in range(1, max_pages + 1):
+        params = {"url": shop, "shop_domain": shop, "platform": "shopify", "page": page,
+                  "per_page": 20, "product_id": product_id, "sort_by": "created_at",
+                  "sort_dir": "desc"}
+        for attempt in range(3):
+            try:
+                r = http.get("https://judge.me/reviews/reviews_for_widget", params=params)
+                break
+            except httpx.TransportError:
+                if attempt == 2:
+                    return out  # keep what we have; the next run picks up the rest
+                time.sleep(5 * (attempt + 1))
+        batch = parse_judgeme_reviews(r.json().get("html", ""), product_id)
+        new = [x for x in batch if x["id"] not in known]
+        out += new
+        if len(batch) < 20 or len(new) < len(batch):  # larger pages come back truncated
+            break
+        time.sleep(delay)
+    return out
 
 
 def shopify_product(p: dict[str, Any], store: str) -> dict[str, Any]:
@@ -142,8 +190,44 @@ def parse_amazon_page(asin: str, page: str) -> dict[str, Any]:
         ranks = re.findall(r"#([0-9,]+) in ([^(<#]+)", _text(m.group(1)) + " ")
         out["ranks"] = {cat.strip(): _num(r) for r, cat in ranks}
     out["best_seller_badge"] = "Best Seller<" in page or ">#1 Best Seller" in page
+    out |= amazon_customers_say(page)
     if m := re.search(r'id="bylineInfo"[^>]*>([^<]+)', page):
         out["byline"] = _text(m.group(1))
+    return out
+
+
+def amazon_customers_say(page: str) -> dict[str, Any]:
+    """Amazon's 'Customers say' block: an overall summary and review topics (aspects),
+    each with a verdict (positive / mixed / negative), how many reviews mention it, and
+    example snippets. It ships as base64 JSON inside the page."""
+    out: dict[str, Any] = {}
+    for blob in re.findall(r"k-injected k\+b64 ([A-Za-z0-9+/=]+)", page):
+        try:
+            data = json.loads(base64.b64decode(blob)).get("k-data") or {}
+        except (ValueError, UnicodeDecodeError):
+            continue
+        if "sentiments" in data and "aspects" not in out:
+            aspects = []
+            for group in data["sentiments"]:
+                for a in group.get("aspects", []):
+                    snippets = []
+                    for sn in a.get("snippets", [])[:3]:
+                        text = "".join(f.get("text") or f.get("semanticContent", {})
+                                       .get("content", {}).get("text", "")
+                                       for f in sn.get("text", {}).get("fragments", []))
+                        snippets.append({"text": " ".join(text.split())[:240],
+                                         "url": "https://www.amazon.com" + sn.get("review", {})
+                                         .get("url", "")})
+                    aspects.append({"label": a["label"], "verdict": group.get("label"),
+                                    "mentions": a.get("mentions", 0),
+                                    "agree": a.get("sentimentMentions", 0),
+                                    "summary": a.get("summary", ""), "snippets": snippets})
+            out["aspects"] = aspects
+        frags = data.get("fragments")
+        if frags and "summary" not in out and isinstance(frags, list):
+            text = frags[0].get("inertText", "") if isinstance(frags[0], dict) else ""
+            if text.startswith("Customers"):
+                out["summary"] = text
     return out
 
 

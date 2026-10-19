@@ -13,6 +13,8 @@ from datetime import date, timedelta
 from statistics import median
 from typing import Any
 
+from . import sentiment as sent
+
 APPAREL = ("Scrub sets", "Tops", "Pants", "Underscrubs", "Lab coats & jackets")
 SCRUB_RANK = re.compile(r"scrub", re.IGNORECASE)
 SELF, RIVAL = "s1", "s2"  # categorical slots: our brand blue, the rival orange
@@ -328,7 +330,8 @@ def trend_read(name: str, pts: list[list], fmt: str, noun: str, up_is_good: bool
     return f"{name}'s {noun} {direction} from {f(first)} to {f(last)} over {days} days{rate}{tail}"
 
 
-def self_tab(cfg: dict, days: list[dict], snaps: list[dict], peers: dict) -> dict:
+def self_tab(cfg: dict, days: list[dict], snaps: list[dict], peers: dict,
+             reviews: list[dict] | None = None) -> dict:
     key, name = cfg["key"], cfg["name"]
     cur_snap = snaps[-1]["brands"][key]
     prev_snap = snaps[-2]["brands"][key] if len(snaps) > 1 else None
@@ -455,6 +458,15 @@ def self_tab(cfg: dict, days: list[dict], snaps: list[dict], peers: dict) -> dic
 
     if am:
         charts.append(_amazon_table(m["amazon_listings"], f"{name} on Amazon", "Amazon"))
+
+    s_tiles, s_charts, s_opps = sentiment_self(name, products, reviews or [],
+                                               m.get("amazon_listings", []), days[-1]["date"])
+    tiles += s_tiles
+    charts += s_charts
+    # A review pinpoint names the problem; drop the generic "read the reviews" item for it.
+    pinned = {o.get("url") for o in s_opps}
+    opps = [o for o in opps if not (o["title"].startswith("Fix what buyers dislike")
+                                    and o.get("url") in pinned)] + s_opps
 
     changes = store_changes(prev_snap.get("store") if prev_snap else None, cur_snap.get("store"))
     prev_days = days[-2]["brands"][key] if len(days) > 1 else {}
@@ -702,6 +714,9 @@ def rival_tab(self_cfg: dict, rival_cfg: dict, days: list[dict], snaps: list[dic
             [{"name": sn, "color": SELF, "points": s1}, {"name": rn, "color": RIVAL, "points": s2}],
             fmt))
 
+    s_charts, s_opps = sentiment_rival(sn, rn, sl, rl)
+    charts += s_charts
+    opps += s_opps
     charts.append(_amazon_table(rl, f"{rn} listings", "Listings"))
     charts.append(_amazon_table(sl, f"{sn} listings", "Listings"))
 
@@ -881,7 +896,8 @@ def market_tab(self_cfg: dict, peer_cfgs: list[dict], days: list[dict]) -> dict:
                     "styles and prices."}
 
 
-def build(snaps: list[dict[str, Any]], config: dict[str, dict]) -> dict[str, Any]:
+def build(snaps: list[dict[str, Any]], config: dict[str, dict],
+          reviews: dict[str, list[dict]] | None = None) -> dict[str, Any]:
     cfgs = [{"key": k, **v} for k, v in config.items()]
     days = snapshot_metrics(snaps)
     self_cfg = next(c for c in cfgs if c["role"] == "self")
@@ -889,14 +905,256 @@ def build(snaps: list[dict[str, Any]], config: dict[str, dict]) -> dict[str, Any
     peer_cfgs = [c for c in cfgs if c["role"] == "peer"]
     peers = {c["key"]: days[-1]["brands"][c["key"]]["store"] for c in peer_cfgs
              if days[-1]["brands"].get(c["key"], {}).get("store")}
-    tabs = [self_tab(self_cfg, days, snaps, peers)]
+    tabs = [self_tab(self_cfg, days, snaps, peers, (reviews or {}).get(self_cfg["key"]))]
     if rival:
         tabs.append(rival_tab(self_cfg, rival, days, snaps))
     if peer_cfgs:
         tabs.append(market_tab(self_cfg, peer_cfgs, days))
     order = {"High": 0, "Medium": 1, "Watch": 2, "Data": 3}
+    sections = ["Sentiment", "Head to head", "Catalog", "Market", "Trends", "Amazon", "Brands",
+                "Listings"]
     for t in tabs:
         t["opportunities"].sort(key=lambda o: order.get(o["priority"], 9))
+        t["charts"].sort(key=lambda c: sections.index(c["section"]) if c["section"] in sections
+                         else len(sections))
     errors = [f"{b['name']}: {e}" for b in snaps[-1]["brands"].values() for e in b["errors"]]
     return {"date": snaps[-1]["date"], "collected_at": snaps[-1]["collected_at"],
             "days": len(snaps), "first_date": snaps[0]["date"], "tabs": tabs, "errors": errors}
+
+
+# --- sentiment ---------------------------------------------------------------------
+
+POS, MID, NEG = "pos", "mid", "neg"  # diverging: blue praise, gray mixed, red complaint
+SENT_LEGEND = [{"label": "Happy (4–5★ / positive)", "kind": "bar", "color": POS},
+               {"label": "Mixed (3★)", "kind": "bar", "color": MID},
+               {"label": "Unhappy (1–2★ / negative)", "kind": "bar", "color": NEG}]
+
+
+def _stack_row(name: str, c: dict[str, int], extra: str = "") -> dict[str, Any]:
+    n = sum(c[k] for k in (POS, MID, NEG)) or 1
+    return {"name": name, "label": f"{n:,}",
+            "parts": [{"v": c[POS] / n, "color": POS}, {"v": c[MID] / n, "color": MID},
+                      {"v": c[NEG] / n, "color": NEG}],
+            "tip": [f"{c[POS] / n:.0%} happy · {c[NEG] / n:.0%} unhappy", name,
+                    f"{n:,} mentions{extra}"]}
+
+
+def sentiment_self(name: str, products: list[dict], reviews: list[dict], listings: list[dict],
+                   today: str) -> tuple[list, list, list]:
+    tiles, charts, opps = [], [], []
+    st = sent.store_sentiment(reviews, products, today)
+    if st:
+        d = None
+        if st["recent_unhappy"] is not None and st["prior_unhappy"] is not None:
+            d = (st["recent_unhappy"], st["prior_unhappy"], 365)
+        t = tile("Unhappy store reviews", pct(st["recent_unhappy"]),
+                 f"1–2★, last 12 months ({st['recent']} reviews)", d, "pct", up_is_good=False)
+        if "delta" in t:
+            t["delta"]["text"] = t["delta"]["text"].replace("365d ago", "the year before")
+        tiles.append(t)
+
+        qs = st["quarters"][-16:]
+        done = [q for q in qs if q[0] != st["current_quarter"]]  # partial quarter is noise
+        happy = [[q[0], q[2]] for q in done]
+        unhappy = [[q[0], q[3]] for q in done]
+        vol_change = (st["recent"] / st["prior"] - 1) if st["prior"] else None
+        read = (f"Over the last 12 months {pct(1 - (st['recent_unhappy'] or 0))} of store "
+                f"reviews were 3★ or better and {pct(st['recent_unhappy'])} were 1–2★, vs "
+                f"{pct(st['prior_unhappy'])} the year before. ")
+        if st["recent_unhappy"] is not None and st["prior_unhappy"] is not None:
+            diff = st["recent_unhappy"] - st["prior_unhappy"]
+            read += ("Unhappiness is rising — look at what the newest 1–2★ reviews say (table below)."
+                     if diff > 0.02 else "Unhappiness is falling — recent fixes are landing."
+                     if diff < -0.02 else "Sentiment is steady.")
+        charts.append({"section": "Sentiment"} | lines_chart(
+            "Store review sentiment by quarter", "Share of each full quarter's reviews, last 4 years",
+            read, [{"name": "4–5★", "color": POS, "points": happy},
+                   {"name": "1–2★", "color": NEG, "points": unhappy}], "pct"))
+        vmax = max(q[1] for q in qs)
+        charts.append({
+            "section": "Sentiment", "type": "bars", "title": "Store reviews per quarter",
+            "sub": "New reviews on the brand's site, last 4 years",
+            "read": (f"{st['recent']} reviews in the last 12 months vs {st['prior']} the year before "
+                     f"({pct(vol_change, True)}). " if vol_change is not None else "")
+                    + ("Fewer reviews usually means fewer site orders, or that review requests "
+                       "stopped going out after the store relaunch; check the review-request email "
+                       "is still on." if (vol_change or 0) < -0.2 else
+                       "Review volume is holding up, so the site is still converting buyers."),
+            "rows": [{"name": _quarter(q[0]) + (" (so far)" if q[0] == st["current_quarter"] else ""),
+                      "value": q[1] / vmax, "label": str(q[1]), "color": POS,
+                      "tip": [f"{q[1]} reviews", _quarter(q[0]),
+                              f"{q[2]:.0%} 4–5★ · {q[3]:.0%} 1–2★"]} for q in qs],
+        })
+
+        topics = sorted(st["topics"].items(), key=lambda kv: -sum(kv[1].values()))
+        worst = min(topics, key=lambda kv: sent.net(kv[1]))
+        best = max(topics, key=lambda kv: sent.net(kv[1]))
+        moves = []
+        for t_, c in st["topics_recent"].items():
+            p_ = st["topics_prior"].get(t_)
+            if p_ and sum(c.values()) >= 10 and sum(p_.values()) >= 10:
+                moves.append((sent.net(c) - sent.net(p_), t_))
+        moves.sort()
+        read = (f"Most talked about: {topics[0][0].lower()} ({sum(topics[0][1].values()):,} mentions). "
+                f"Strongest praise: {best[0].lower()} ({sent.net(best[1]):+.0%} net). "
+                f"Weakest: {worst[0].lower()} ({sent.net(worst[1]):+.0%} net). ")
+        if st["runs_small"] + st["runs_large"] >= 10:
+            small = st["runs_small"] > st["runs_large"]
+            read += (f"In 1–3★ reviews, “runs {'small' if small else 'large'}” comes up "
+                     f"{max(st['runs_small'], st['runs_large'])} times vs "
+                     f"{min(st['runs_small'], st['runs_large'])} for the opposite. ")
+        if moves and moves[0][0] < -0.1:
+            read += f"Getting worse this year: {moves[0][1].lower()} ({moves[0][0]:+.0%} net vs last year)."
+        for change, t_ in moves[:2]:
+            c, p_ = st["topics_recent"][t_], st["topics_prior"][t_]
+            if change >= -0.2 or sum(c.values()) < 15 or c["neg"] < 5:
+                continue
+            hits = [r for r in reviews if r["score"] <= 2 and t_ in sent.topics_of(r)
+                    and r["date"] > (date.fromisoformat(today) - timedelta(days=365)).isoformat()]
+            ex = max(hits, key=lambda r: (len(r["body"]) >= 40, r["date"]))["body"][:200] if hits else ""
+            opps.append({"priority": "High", "title": f"{t_} is getting worse",
+                         "text": f"Net sentiment on {t_.lower()} fell from {sent.net(p_):+.0%} to "
+                         f"{sent.net(c):+.0%} in the last 12 months ({c['neg']} unhappy mentions vs "
+                         f"{p_['neg']} the year before)." + (f" Latest: “{ex}”" if ex else "")})
+        charts.append({"section": "Sentiment", "type": "stacked",
+                       "title": "What store reviewers talk about",
+                       "sub": "Reviews mentioning each topic, by star rating (all years)",
+                       "legend": SENT_LEGEND, "read": read,
+                       "rows": [_stack_row(t_, c) for t_, c in topics]})
+
+        pins = st["pinpoints"][:10]
+        if pins:
+            charts.append({
+                "section": "Sentiment", "type": "table", "title": "Where the complaints are",
+                "sub": "Each product's most common topic in its 1–2★ reviews, with a recent example",
+                "read": ("Each row is a specific, fixable problem: the topic most 1–2★ reviewers of that "
+                         "product mention. Fit complaints are fixed in the size chart and listing "
+                         "copy; fabric and durability need the factory."),
+                "columns": [{"label": "Product"}, {"label": "Problem"},
+                            {"label": "Share of 1–2★", "fmt": "pct"},
+                            {"label": "1–2★ reviews", "fmt": "int"},
+                            {"label": "What a buyer said", "wrap": True}],
+                "rows": [[short(p["product"]), p["url"],
+                          p["topic"] + (f" ({p['detail']})" if p["detail"] else ""), p["share"],
+                          p["unhappy"], f"“{p['quote']}” ({p['quote_date']})"] for p in pins],
+                "sort": 3})
+            for p in pins[:3]:
+                fix = {"Fit & sizing": "update the size chart and say how it fits in the first "
+                                       "bullet" + (f" (buyers say it {p['detail']})" if p["detail"]
+                                                   else ""),
+                       "Durability": "raise it with the factory and check recent production lots",
+                       "Fabric & feel": "describe the fabric honestly in the listing, or change it",
+                       "Color": "check dye lots; match top and pant shades",
+                       "See-through": "test opacity in light colors; flag it in the listing",
+                       "Lint & wrinkles": "say how to wash it; consider a lint-resistant finish",
+                       "Length": "add inseam lengths and petite/tall options",
+                       "Shipping & service": "audit fulfilment and the returns flow",
+                       }.get(p["topic"], "read the reviews and fix the root cause")
+                opps.append({"priority": "High", "title": f"{short(p['product'])}: {p['topic'].lower()}"
+                             + (f" — {p['detail']}" if p["detail"] else ""),
+                             "text": f"{p['hits']} of {p['unhappy']} unhappy reviews ({p['share']:.0%}) "
+                             f"mention it. Fix: {fix}. Example: “{p['quote']}”", "url": p["url"]})
+
+    at = sent.amazon_topics(listings)
+    if at:
+        rows = sorted(at.items(), key=lambda kv: -sum(kv[1][k] for k in (POS, MID, NEG)))
+        weak = [(k, v) for k, v in rows if v["worst"] and v["worst"]["mentions"] >= 20]
+        read = (f"Amazon groups {name}'s reviews into {len(rows)} topics across "
+                f"{len({x.get('parent') or x['asin'] for x in listings if x.get('aspects')})} listings. ")
+        if weak:
+            k, v = weak[0]
+            read += (f"Biggest problem topic: {k} — on “{short(v['worst']['listing'])}” it's "
+                     f"{v['worst']['verdict']} across {v['worst']['mentions']} reviews: "
+                     f"{v['worst']['summary']}")
+        charts.append({"section": "Sentiment", "type": "stacked",
+                       "title": "What Amazon customers say",
+                       "sub": "Amazon's review topics, mentions by verdict, summed across listings",
+                       "legend": SENT_LEGEND, "read": read,
+                       "rows": [_stack_row(k, v, f" · {v['listings']} listings") for k, v in rows[:12]]})
+        for k, v in weak[:2]:
+            w = v["worst"]
+            opps.append({"priority": "High", "title": f"Amazon: fix “{k}” on {short(w['listing'])}",
+                         "text": f"Amazon rates this topic {w['verdict']} across {w['mentions']} reviews. "
+                         f"{w['summary']}", "url": f"https://www.amazon.com/dp/{w['asin']}"})
+    elif listings:
+        charts.append({"section": "Sentiment", "type": "note", "title": "What Amazon customers say",
+                       "sub": "Amazon's review topics per listing",
+                       "text": "Amazon blocked the listing pages today, so its review topics couldn't be "
+                               "read. They fill in on the first day the pages load (or use SP-API "
+                               "for prices and ranks, and this for topics)."})
+    return tiles, charts, opps
+
+
+def _quarter(d: str) -> str:
+    return f"Q{(int(d[5:7]) - 1) // 3 + 1} {d[:4]}"
+
+
+def sentiment_rival(sn: str, rn: str, sl: list[dict], rl: list[dict]) -> tuple[list, list]:
+    charts, opps = [], []
+    a, b = sent.amazon_topics(sl), sent.amazon_topics(rl)
+    if not a and not b:
+        charts.append({"section": "Sentiment", "type": "note", "title": "What customers say, side by side",
+                       "sub": "Amazon's review topics for each brand",
+                       "text": "Amazon blocked the listing pages today, so review topics couldn't be "
+                               "read. They fill in on the first day the pages load."})
+        return charts, opps
+    labels = sorted(set(a) | set(b), key=lambda k: -(sum(a.get(k, {}).get(x, 0) for x in (POS, MID, NEG))
+                                                     + sum(b.get(k, {}).get(x, 0) for x in (POS, MID, NEG))))
+    rows = []
+    for k in labels[:10]:
+        for nm, src in ((sn, a), (rn, b)):
+            if k in src:
+                rows.append(_stack_row(f"{k} · {nm}", src[k]))
+
+    def score(src, k):
+        c = src.get(k)
+        n = sum(c[x] for x in (POS, MID, NEG)) if c else 0
+        return (c[POS] - c[NEG]) / n if n else None
+
+    both = [(k, score(a, k), score(b, k)) for k in labels if score(a, k) is not None
+            and score(b, k) is not None]
+    ahead = sorted([t for t in both if t[1] > t[2] + 0.1], key=lambda t: t[2] - t[1])
+    behind = sorted([t for t in both if t[2] > t[1] + 0.1], key=lambda t: t[1] - t[2])
+    read = ""
+    if ahead:
+        read += f"{sn} wins on {', '.join(t[0] for t in ahead[:3])}. "
+    if behind:
+        read += f"{rn} wins on {', '.join(t[0] for t in behind[:3])}. "
+    if not both:
+        missing = sn if not a else rn
+        read = (f"{missing}'s Amazon review topics aren't in yet (Amazon blocked those page reads), "
+                "so this shows only the other brand; the side-by-side fills in as pages load.")
+    weak_r = [(k, v) for k, v in b.items() if v["worst"] and v["worst"]["mentions"] >= 20]
+    charts.append({"section": "Sentiment", "type": "stacked", "title": "What customers say, side by side",
+                   "sub": "Amazon's review topics, mentions by verdict", "legend": SENT_LEGEND,
+                   "read": read or "The two brands get similar verdicts on the topics they share.",
+                   "rows": rows})
+    quotes = []
+    for nm, ls in ((sn, sl), (rn, rl)):
+        for x in ls:
+            if x.get("summary"):
+                quotes.append({"text": x["summary"], "meta": f"{nm} · {short(x.get('title', ''))}",
+                               "url": f"https://www.amazon.com/dp/{x['asin']}"})
+    if quotes:
+        charts.append({"section": "Sentiment", "type": "quotes", "title": "In Amazon's words",
+                       "sub": "Amazon's own summary of each listing's reviews", "items": quotes[:8],
+                       "read": "Read these for the words shoppers use: they're the words to put in "
+                               "titles, bullets and ad copy."})
+    for k, v in weak_r[:2]:
+        w = v["worst"]
+        ours = score(a, k)
+        if ours is not None and ours <= 0:
+            continue
+        opps.append({"priority": "High" if ours is not None else "Watch",
+                     "title": f"{rn}'s weak spot: {k}",
+                     "text": f"Amazon rates “{k}” {w['verdict']} on {rn}'s {short(w['listing'])} "
+                     f"({w['mentions']} reviews): {w['summary']} "
+                     + (f"{sn} does better here, so say it in the listing and in Sponsored Display "
+                        "ads on that listing." if ours is not None else
+                        f"If {sn}'s own reviews hold up on {k}, that's an angle for ads on their "
+                        "listing; it's confirmed once Amazon lets us read both brands' topics."),
+                     "url": f"https://www.amazon.com/dp/{w['asin']}"})
+    for k, s1, s2 in behind[:2]:
+        opps.append({"priority": "Medium", "title": f"Catch up on {k}",
+                     "text": f"Shoppers rate {rn} better on {k} ({s2:+.0%} net vs {sn}'s {s1:+.0%})."})
+    return charts, opps
