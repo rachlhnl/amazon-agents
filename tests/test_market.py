@@ -95,21 +95,26 @@ def test_build_trends_changes_and_carry_forward():
     day2 = snap("2026-10-19", ps2, [{"asin": "B0D1", "error": "captcha"}])
 
     out = analyze.build([day1, day2], CONFIG)
-    tabs = {t["id"]: t for t in out["tabs"]}
-    assert set(tabs) == {"self", "rival", "market"}
+    secs = {s["id"]: s for s in out["sections"]}
+    assert list(secs) == ["sentiment", "catalog", "rival", "market", "trends"]
+    charts = [c for s in out["sections"] for c in s["charts"]]
 
-    kinds = {c["kind"] for c in tabs["self"]["changes"]}
+    kinds = {c["kind"] for c in secs["trends"]["changes"]}
     assert {"Price", "Reviews", "Restocked"} <= kinds
     # Blocked Amazon read: last good values carried forward, flagged as stale.
-    table = next(c for c in tabs["self"]["charts"] if c["type"] == "table")
+    table = next(c for c in secs["catalog"]["charts"] if c["type"] == "table")
     assert table["rows"][0][2] == 24.99 and "last good" in table["rows"][0][-1]
-    assert any(o["priority"] == "Data" for o in tabs["self"]["opportunities"])
-    # Every chart has a plain-language read, and trend lines have two points.
-    assert all(c.get("read") for t in tabs.values() for c in t["charts"]
-               if c["type"] not in ("table", "note"))
-    reviews = next(c for c in tabs["self"]["charts"] if c["title"] == "Reviews on dagacci.com")
+    # Every recommendation says what we see, why, what to do, and when.
+    assert out["recs"] and all(r["see"] and r["why"] and r["do"] and r["when_label"]
+                               for r in out["recs"])
+    assert [r["when"] for r in out["recs"]] == sorted(r["when"] for r in out["recs"])
+    assert any(r["area"] == "Data" for r in out["recs"])
+    assert any(r["title"] == "Watch this" for r in out["recs"])
+    # Every chart has a plain-language read and a width, and trend lines have two points.
+    assert all(c.get("read") for c in charts if c["type"] not in ("table", "note"))
+    assert all(c["span"] in (4, 5, 6, 7, 8, 12) for c in charts)
+    reviews = next(c for c in charts if c["title"] == "Reviews on dagacci.com")
     assert len(reviews["series"][0]["points"]) == 2 and "rose" in reviews["read"]
-    assert any(o["title"] == "Watch this" for o in tabs["rival"]["opportunities"])
 
     html = render.render(out)
     assert "/*ANALYSIS*/" not in html and "Dagacci" in html

@@ -285,6 +285,21 @@ def amazon_changes(prev: list[dict] | None, cur: list[dict]) -> list[dict[str, s
     return out
 
 
+# --- recommendations -----------------------------------------------------------------
+
+WHEN = {1: "Act this week", 2: "This month", 3: "This quarter", 4: "Test"}
+
+
+def rec(when: int, area: str, effort: str, title: str, see: str, why: str, do: list[str],
+        kpi: str | None = None, now: str | None = None, target: str | None = None,
+        url: str | None = None, section: str = "") -> dict[str, Any]:
+    """One recommendation, in the shape the dashboard's insight cards and action plan use:
+    what the data shows, why it matters, what to do, and the KPI that says it worked."""
+    return {"when": when, "when_label": WHEN[when], "area": area, "effort": effort,
+            "title": title, "see": see, "why": why, "do": do, "kpi": kpi, "now": now,
+            "target": target, "url": url, "section": section}
+
+
 # --- tab builders ------------------------------------------------------------------
 
 def tile(label: str, value: str, note: str = "", d: tuple | None = None,
@@ -473,11 +488,18 @@ def self_tab(cfg: dict, days: list[dict], snaps: list[dict], peers: dict,
     changes += [c | {"kind": "Amazon " + c["kind"].lower()} for c in
                 amazon_changes(prev_days.get("amazon_listings"), m.get("amazon_listings", []))]
     if am and (am["stale"] or am["missing"]):
-        opps.append({"priority": "Data", "title": "Connect SP-API for reliable Amazon numbers",
-                     "text": f"{am['stale'] + am['missing']} of {len(m['amazon_listings'])} Amazon "
-                     "pages couldn't be read today (Amazon blocks automated reading), so their "
-                     "figures are carried over from the last good day. Adding SP-API keys to .env "
-                     "gives price and sales rank every day."})
+        n_bad = am["stale"] + am["missing"]
+        opps.append(rec(
+            2, "Data", "Low", "Amazon numbers are partly carried over",
+            f"{n_bad} of {len(m['amazon_listings'])} tracked Amazon pages couldn't be read today "
+            "(Amazon blocks automated reading), so their figures repeat the last good day.",
+            "Rank, price and review moves on Amazon are the fastest signal of a problem; stale "
+            "numbers hide them.",
+            [("Add the SP-API keys as GitHub secrets (SP_API_CLIENT_ID, SP_API_CLIENT_SECRET, "
+              "SP_API_REFRESH_TOKEN) so price and rank come from the API every day.")],
+            "Amazon listings read today", f"{len(m['amazon_listings']) - n_bad} of "
+            f"{len(m['amazon_listings'])}", f"{len(m['amazon_listings'])} of {len(m['amazon_listings'])}",
+            section="amazon"))
     return {"id": "self", "label": name, "tiles": tiles, "charts": charts,
             "opportunities": opps, "changes": changes,
             "note": f"Public data from {cfg['store']} and Amazon product pages."}
@@ -541,39 +563,63 @@ def _self_opportunities(products: list[dict], sm: dict, peers: dict, cfg: dict) 
     gaps = [p for p in products if (p.get("reviews") or 0) >= 20
             and p["variants"] and p["in_stock"] / p["variants"] < 0.5]
     for p in sorted(gaps, key=lambda p: -p["reviews"])[:3]:
-        opps.append({"priority": "High", "title": f"Restock {short(p['title'])}",
-                     "text": f"{p['in_stock']} of {p['variants']} options buyable, despite "
-                     f"{p['reviews']} reviews at {p['rating']:.2f}★. Proven demand that can't "
-                     "currently convert.", "url": p["url"]})
+        share = p["in_stock"] / p["variants"]
+        opps.append(rec(
+            1, "Stock", "Low", f"{short(p['title'])} is {'sold out' if not p['in_stock'] else 'mostly sold out'}",
+            f"{p['in_stock']} of {p['variants']} color/size options can be bought, yet it has "
+            f"{p['reviews']} reviews at {p['rating']:.2f}★.",
+            "Proven demand that can't convert. Every week out of stock loses the sales and the "
+            "search ranking that took years of reviews to build.",
+            ["Reorder the sold-out sizes and colors, best sellers first.",
+             "Pause ads that point at it until stock is back."],
+            "Options in stock", pct(share), "≥ 80%", p["url"], "catalog"))
     winners = sorted([p for p in products if (p.get("reviews") or 0) >= 50 and p["rating"] >= 4.35],
                      key=lambda p: -p["rating"])
     if winners:
         names = ", ".join(short(p["title"]) for p in winners[:3])
         floor = min(p["rating"] for p in winners[:3])
-        opps.append({"priority": "High", "title": "Put spend behind the best-rated sets",
-                     "text": f"{names} rate {floor:.2f}★ or better on 50+ reviews. "
-                     "These are the safest products to feature in ads, the homepage and Amazon "
-                     "Sponsored Brands."})
+        opps.append(rec(
+            2, "Marketing", "Low", "The best-rated sets are ready to be pushed",
+            f"{names} rate {floor:.2f}★ or better on 50+ reviews each.",
+            "High-rated products convert ad clicks into buyers who don't return them; they're "
+            "the cheapest place to spend the next marketing dollar.",
+            ["Feature them on the homepage and in Sponsored Brands creative.",
+             "Use their star rating and review count in the main image."],
+            "Store rating of featured sets", f"{floor:.2f}★", "hold ≥ 4.3★", section="catalog"))
     weak = [p for p in products if (p.get("reviews") or 0) >= 40 and p["rating"] < 3.8]
     for p in weak[:2]:
-        opps.append({"priority": "Medium", "title": f"Fix what buyers dislike in {short(p['title'])}",
-                     "text": f"{p['rating']:.2f}★ on {p['reviews']} reviews. Read the 1–2★ reviews "
-                     "for a recurring fit or fabric issue; fix the product or say it in the listing.",
-                     "url": p["url"]})
+        opps.append(rec(
+            3, "Product", "Medium", f"Fix what buyers dislike in {short(p['title'])}",
+            f"{p['rating']:.2f}★ on {p['reviews']} reviews, below the 3.8★ line.",
+            "Under about 3.8★ shoppers skip a product even when it's the cheapest option.",
+            ["Read its 1–2★ reviews for the recurring complaint.",
+             "Fix the product, or say it plainly in the listing so buyers choose the right one."],
+            "Store rating", f"{p['rating']:.2f}★", "≥ 4.0★", p["url"], "catalog"))
     pm = _med([p["outfit_price"] for p in peers.values()])
     if pm and sm["outfit_price"] and sm["outfit_price"] < 0.6 * pm and (sm["rating"] or 0) >= 4.0:
-        opps.append({"priority": "Medium", "title": "Test a small price increase on top sets",
-                     "text": f"A typical Dagacci set is {usd(sm['outfit_price'])} against a peer median of "
-                     f"{usd(pm)}, with a {sm['rating']:.2f}★ store rating. A +5–10% test on the "
-                     "best-rated sets (within the pricing agent's 10% guardrail) would show "
-                     "how much headroom there is."})
+        opps.append(rec(
+            4, "Pricing", "Low", "There may be room to raise prices on the top sets",
+            f"A typical Dagacci set is {usd(sm['outfit_price'])} against a peer median of "
+            f"{usd(pm)}, with a {sm['rating']:.2f}★ store rating.",
+            "At under 60% of the market price, a small increase on well-rated sets is unlikely "
+            "to lose buyers and goes straight to margin.",
+            [("Raise the best-rated sets 5–10% for two weeks (inside the pricing agent's 10% "
+              "guardrail)."),
+             "Watch store reviews per week and the Amazon rank; roll back if either drops."],
+            "Typical scrub set price", usd(sm["outfit_price"]), usd(sm["outfit_price"] * 1.05),
+            section="market"))
     peer_new = _med([p["new_90d"] for p in peers.values()])
     if peer_new and sm["new_90d"] is not None and sm["new_90d"] < peer_new / 2:
-        opps.append({"priority": "Medium", "title": "Launch more often",
-                     "text": f"{sm['new_90d']} new styles in the last 90 days against a peer median of "
-                     f"{peer_new:.0f}. New colors are the cheapest newness: peers carry a median of "
-                     f"{_med([p['colors_per_style'] for p in peers.values()]):.0f} colors per style "
-                     f"vs Dagacci's {sm['colors_per_style']:.0f}."})
+        opps.append(rec(
+            3, "Product", "High", "Dagacci hasn't launched anything new in 90 days",
+            f"{sm['new_90d']} new styles in the last 90 days; the other brands' median is "
+            f"{peer_new:.0f}.",
+            "New drops give ads and social something new to say and bring past buyers back; "
+            "a range that never changes slowly loses repeat customers.",
+            ["Plan a seasonal color drop on the two best-rated sets.",
+             "Announce it to past buyers by email."],
+            "New styles in the last 90 days", str(sm["new_90d"]), f"≥ {max(2, round(peer_new / 4))}",
+            section="market"))
     return opps
 
 
@@ -723,33 +769,58 @@ def rival_tab(self_cfg: dict, rival_cfg: dict, days: list[dict], snaps: list[dic
     # Opportunities
     rebrand = [x for x in rl if "COZY SCRUBS" in (x.get("title", "") + x.get("byline", "")).upper()]
     if rebrand:
-        opps.append({"priority": "High", "title": f"{rn} is renaming itself “COZY SCRUBS”",
-                     "text": f"{len(rebrand)} tracked {rn} listings now carry the COZY SCRUBS name. "
-                     "A rename splits brand search for a while: bid on both names as Sponsored "
-                     "Products keywords while shoppers relearn it."})
-    for note in rival_cfg.get("notes", []):
-        opps.append({"priority": "Watch", "title": note["title"], "text": note["text"]})
+        opps.append(rec(
+            2, "Search", "Low", f"{rn} is renaming itself “COZY SCRUBS”",
+            f"{len(rebrand)} tracked {rn} listings now carry the COZY SCRUBS name.",
+            "A rename splits brand search for months while shoppers relearn it; that's a cheap "
+            "window to show Dagacci on their brand searches.",
+            [f"Bid on “{rn.lower()} scrubs” and “cozy scrubs” as Sponsored Products keywords.",
+             "Keep bids low and stop if ACoS climbs above target."],
+            section="rival"))
+    else:
+        for note in rival_cfg.get("notes", []):
+            opps.append(rec(2, "Search", "Low", note["title"], note["text"],
+                            "A rename splits brand search for a while.",
+                            ["Bid on both names as Sponsored Products keywords; keep bids low."],
+                            section="rival"))
     if sa and ra and sa.get("rating") and ra.get("rating") and ra["rating"] > sa["rating"] + 0.05:
-        opps.append({"priority": "High", "title": "Close the rating gap",
-                     "text": f"{rn} rates {ra['rating']:.2f}★ vs {sn}'s {sa['rating']:.2f}★. Shoppers "
-                     "see stars before price; the review agent's defect themes for the "
-                     "lowest-rated listing are the place to start."})
+        low = min((x for x in sl if x.get("rating")), key=lambda x: x["rating"], default=None)
+        opps.append(rec(
+            2, "Amazon listing", "Medium", f"{rn} out-rates {sn} on Amazon",
+            f"{rn} rates {ra['rating']:.2f}★ vs {sn}'s {sa['rating']:.2f}★ across the tracked "
+            "listings" + (f"; {sn}'s lowest is {short(low.get('title', ''))} at {low['rating']:.1f}★."
+                          if low else "."),
+            "Shoppers see stars before price. With Cozyfit also cheaper, the rating gap is "
+            "what loses the side-by-side comparison.",
+            ["Fix the top complaint on the lowest-rated listing first (see Sentiment).",
+             "Ask for reviews with Amazon's Request a Review on recent orders."],
+            "Amazon rating (review-weighted)", f"{sa['rating']:.2f}★", f"{ra['rating']:.2f}★",
+            f"https://www.amazon.com/dp/{low['asin']}" if low else None, "rival"))
     elif sa and ra and sa.get("rating") and ra.get("rating"):
-        opps.append({"priority": "Medium", "title": "Lead with the rating",
-                     "text": f"{sn} rates {sa['rating']:.2f}★ vs {rn}'s {ra['rating']:.2f}★. Put the "
-                     "star count and review total in the main image and A+ content."})
+        opps.append(rec(
+            3, "Amazon listing", "Low", f"{sn} out-rates {rn}: say so",
+            f"{sn} rates {sa['rating']:.2f}★ vs {rn}'s {ra['rating']:.2f}★.",
+            "A better rating is the strongest reason to pick Dagacci in a side-by-side.",
+            ["Put the star count and review total in the main image and A+ content."],
+            "Amazon rating gap", f"{sa['rating'] - ra['rating']:+.2f}★", "hold ≥ +0.10★",
+            section="rival"))
     if sp and rp and sp < rp * 0.95:
-        opps.append({"priority": "Medium", "title": "Use the price gap in ads",
-                     "text": f"{sn}'s median listing is {usd(rp - sp)} cheaper than {rn}'s. Target "
-                     f"{rn}'s listings with Sponsored Display product targeting; the ad shows "
-                     "the cheaper, higher-reviewed alternative on their page."})
+        opps.append(rec(
+            3, "Ads", "Low", f"{sn} is cheaper than {rn}: target their listings",
+            f"{sn}'s median tracked listing is {usd(rp - sp)} cheaper than {rn}'s.",
+            "Shoppers on a rival's page are ready to buy; a cheaper option shown there wins "
+            "some of them.",
+            [f"Run Sponsored Display product targeting on {rn}'s top listings."],
+            "Median price gap", usd(rp - sp), "hold", section="rival"))
     rival_kinds = {k for x in rl for k in ("jogger", "cargo", "men") if k in x.get("title", "").lower()}
     self_kinds = {k for x in sl for k in ("jogger", "cargo", "men") if k in x.get("title", "").lower()}
     if missing := rival_kinds - self_kinds:
-        opps.append({"priority": "Medium", "title": "Styles the rival covers and we don't track",
-                     "text": f"{rn} has {', '.join(sorted(missing))} listings with no tracked "
-                     f"{sn} equivalent. Add the matching {sn} ASINs to market/brands.toml, or "
-                     "consider those styles for launch."})
+        opps.append(rec(
+            4, "Data", "Low", "Rival styles with no tracked Dagacci match",
+            f"{rn} has {', '.join(sorted(missing))} listings with no tracked {sn} equivalent.",
+            "Without a matching listing the comparison can't say who wins those shoppers.",
+            [f"Add the matching {sn} ASINs to market/brands.toml, or consider the style for launch."],
+            section="rival"))
     return {"id": "rival", "label": f"vs {rn}", "tiles": tiles, "charts": charts,
             "opportunities": opps,
             "changes": [c | {"kind": f"{rn} " + c["kind"].lower()} for c in amazon_changes(
@@ -879,16 +950,24 @@ def market_tab(self_cfg: dict, peer_cfgs: list[dict], days: list[dict]) -> dict:
                                    for c in peer_cfgs])] for d in days]}], "usd"))
 
     if (pm("colors_per_style") or 0) > (me["colors_per_style"] or 0) * 1.5:
-        opps.append({"priority": "Medium", "title": "Widen colors on the best sellers",
-                     "text": f"Peers offer a median {pm('colors_per_style'):.0f} colors per style vs "
-                     f"Dagacci's {me['colors_per_style']:.0f}. Adding hospital-standard colors to the "
-                     "top-rated sets covers more buyers without new patterns."})
+        opps.append(rec(
+            3, "Product", "Medium", "Widen colors on the best sellers",
+            f"Other brands offer a median {pm('colors_per_style'):.0f} colors per style vs "
+            f"Dagacci's {me['colors_per_style']:.0f}.",
+            "Hospitals assign colors by role, so a missing color is a buyer Dagacci can't serve.",
+            ["Add hospital-standard colors to the top-rated sets before new patterns."],
+            "Colors per style", f"{me['colors_per_style']:.0f}", f"{pm('colors_per_style'):.0f}",
+            section="market"))
     premium = [c["name"] for c, s, m in rows if not s and (m["outfit_price"] or 0) > 2.5 * (me["outfit_price"] or 1e9)]
     if premium:
-        opps.append({"priority": "Medium", "title": "A “premium” line has room",
-                     "text": f"{', '.join(premium)} sell sets at 2.5×+ Dagacci's price. A small "
-                     "premium-fabric line ($40–55) could capture shoppers trading up without "
-                     "touching the value core."})
+        opps.append(rec(
+            4, "Product", "High", "A step-up “premium” line has room",
+            f"{', '.join(premium)} sell sets at 2.5×+ Dagacci's price.",
+            "Dagacci is many nurses' first scrub; when they trade up they leave for a pricier "
+            "brand. A step-up line keeps them.",
+            ["Test a small premium-fabric line at $40–55 with two colors.",
+             "Offer it to past buyers first."],
+            section="market"))
     return {"id": "market", "label": "Scrub market", "tiles": [], "charts": charts,
             "opportunities": opps, "changes": [],
             "note": "From each brand's own online store (Shopify catalog feeds). Product counts "
@@ -910,16 +989,142 @@ def build(snaps: list[dict[str, Any]], config: dict[str, dict],
         tabs.append(rival_tab(self_cfg, rival, days, snaps))
     if peer_cfgs:
         tabs.append(market_tab(self_cfg, peer_cfgs, days))
-    order = {"High": 0, "Medium": 1, "Watch": 2, "Data": 3}
-    sections = ["Sentiment", "Head to head", "Catalog", "Market", "Trends", "Amazon", "Brands",
-                "Listings"]
-    for t in tabs:
-        t["opportunities"].sort(key=lambda o: order.get(o["priority"], 9))
-        t["charts"].sort(key=lambda c: sections.index(c["section"]) if c["section"] in sections
-                         else len(sections))
     errors = [f"{b['name']}: {e}" for b in snaps[-1]["brands"].values() for e in b["errors"]]
+    page = layout(tabs, days, snaps, self_cfg, rival, (reviews or {}).get(self_cfg["key"], []))
     return {"date": snaps[-1]["date"], "collected_at": snaps[-1]["collected_at"],
-            "days": len(snaps), "first_date": snaps[0]["date"], "tabs": tabs, "errors": errors}
+            "days": len(snaps), "first_date": snaps[0]["date"], "errors": errors, **page}
+
+
+# --- page layout ---------------------------------------------------------------------
+
+# Section of the page each chart group goes in: (number, id, title, intro).
+SECTIONS = [
+    ("sentiment", "Customer sentiment",
+     "What buyers say in store reviews and on Amazon: by quarter, by topic and by product."),
+    ("catalog", "Catalog, price & stock",
+     "Dagacci's own store today: what's listed, how it's rated, priced and stocked."),
+    ("rival", "Dagacci vs Cozyfit on Amazon",
+     "Cozyfit sells only on Amazon, so this compares the tracked Amazon listings head to head."),
+    ("market", "The scrub market",
+     "Dagacci's store next to seven other scrub brands' own stores."),
+    ("trends", "Trends & changes",
+     "Day-over-day and week-over-week moves. Lines start after the second daily run."),
+]
+SECTION_OF = {("self", "Sentiment"): "sentiment", ("rival", "Sentiment"): "sentiment",
+              ("self", "Catalog"): "catalog", ("self", "Amazon"): "catalog",
+              ("rival", "Head to head"): "rival", ("rival", "Listings"): "rival",
+              ("market", "Market"): "market", ("market", "Brands"): "market"}
+REC_SECTION = {"amazon": "catalog"}
+
+# Grid width (of 12) by chart title; anything else is 6, tables and long lists 12.
+SPAN = {"Store review sentiment by quarter": 8, "Store reviews per quarter": 4,
+        "Catalog by product line": 4, "Ratings by product": 8,
+        "When today's products were first listed": 6, "What customers say, side by side": 7,
+        "Scrub set prices": 6, "Stock by product": 6, "Reviews per listing": 6,
+        "Best-seller rank in scrubs": 6,
+        "In Amazon's words": 5}
+
+HOW = {
+    "Store review sentiment by quarter":
+        "Each point is one full quarter of reviews on the brand's own site. The blue line is the "
+        "share that gave 4–5★, the red line the share that gave 1–2★. Watch for the red line "
+        "rising: it usually follows a product or fulfilment change by a few weeks.",
+    "Store reviews per quarter":
+        "How many reviews the site collected each quarter. Reviews arrive a few weeks after "
+        "orders, so this is a lagging, public stand-in for site order volume.",
+    "What store reviewers talk about":
+        "Every review is tagged with the topics its text mentions (fit, fabric, color…). Each "
+        "bar splits those reviews by stars: blue 4–5★, gray 3★, red 1–2★. A long red segment "
+        "is a topic buyers complain about; the number is how many reviews mention it.",
+    "Where the complaints are":
+        "For each product with enough reviews, the topic that comes up most in its 1–2★ "
+        "reviews, how much of its bad reviews that topic explains, and a recent example.",
+    "What Amazon customers say":
+        "Amazon's own “Customers say” topics, summed over the tracked listings. Blue is mentions "
+        "agreeing with a positive verdict, red with a negative one, gray everything mixed.",
+    "What customers say, side by side":
+        "The same Amazon topics for both brands, one bar each. Compare the blue share for the "
+        "same topic: the longer one is the brand shoppers are happier with on it.",
+    "Ratings by product":
+        "Average stars on the store for products with 20+ reviews. Under about 3.8★ shoppers "
+        "start to skip a product even when it's the cheapest.",
+    "Scrub set prices":
+        "The bar is today's price; the black tick is the struck-through “compare at” price the "
+        "store shows next to it. A gap between them is a markdown.",
+    "Stock by product":
+        "The pale track is all the color/size options a product has; the bar is the share that "
+        "can be bought today. Short bars on well-reviewed products are lost sales.",
+    "Price per listing":
+        "Each dot is one tracked Amazon listing at today's price; the black line is each brand's "
+        "median. Dots further left are cheaper.",
+    "Reviews per listing":
+        "Review count per listing family (all colors and sizes share one review pool). Review "
+        "count is what keeps a listing on page one of search.",
+    "Best-seller rank in scrubs":
+        "Each listing's best rank in a scrubs category. Shorter bar means a better rank; #1 is "
+        "the category's best seller today.",
+    "Typical outfit price":
+        "What one top-and-pant outfit costs on each brand's own site: the median scrub set, or "
+        "the median top plus the median pant for brands that sell separates.",
+}
+
+
+def layout(tabs: list[dict], days: list[dict], snaps: list[dict], self_cfg: dict,
+           rival: dict | None, reviews: list[dict]) -> dict[str, Any]:
+    by_id = {t["id"]: t for t in tabs}
+    me = by_id["self"]
+    recs = sorted([r for t in tabs for r in t["opportunities"]], key=lambda r: r["when"])
+    for r in recs:
+        r["section"] = REC_SECTION.get(r["section"], r["section"]) or "trends"
+
+    sections = []
+    for i, (sid, title, intro) in enumerate(SECTIONS, 1):
+        charts = []
+        for t in tabs:
+            for c in t["charts"]:
+                if SECTION_OF.get((t["id"], c["section"]), "trends") == sid:
+                    span = SPAN.get(c["title"]) or (
+                        12 if c["type"] == "table" or len(c.get("rows", [])) > 14 else 6)
+                    charts.append(c | {"span": span, "how": HOW.get(c["title"])})
+        sec: dict[str, Any] = {"id": sid, "num": i, "title": title, "intro": intro,
+                               "charts": charts, "tiles": [], "changes": [],
+                               "sowhat": [{"title": r["title"], "fact": r["see"], "action": r["do"][0],
+                                           "when": r["when"]}
+                                          for r in recs if r["section"] == sid][:4]}
+        if sid == "rival" and "rival" in by_id:
+            sec["tiles"] = by_id["rival"]["tiles"]
+        if sid == "trends":
+            sec["changes"] = [c for t in tabs for c in t["changes"]]
+        sections.append(sec)
+
+    # Hero: store review volume, the public stand-in for site orders.
+    hero = None
+    products = snaps[-1]["brands"][self_cfg["key"]].get("store", {}).get("products", [])
+    st = sent.store_sentiment(reviews, products, days[-1]["date"]) if reviews else {}
+    if st:
+        change = st["recent"] / st["prior"] - 1 if st["prior"] else None
+        hero = {"label": "Store reviews, last 12 months", "value": f"{st['recent']:,}",
+                "delta": ({"text": f"{pct(change, True)} vs the 12 months before · "
+                                   f"{pct(st['recent_unhappy'])} were 1–2★",
+                           "good": change >= 0} if change is not None else None),
+                "spark": [[q[0], q[1]] for q in st["quarters"][-12:]
+                          if q[0] != st["current_quarter"]]}
+
+    brands = snaps[-1]["brands"]
+    am_ok = [a for b in brands.values() for a in b.get("amazon", []) if "error" not in a]
+    am_all = [a for b in brands.values() for a in b.get("amazon", [])]
+    peers_ok = [b for b in brands.values() if b["role"] == "peer" and b.get("store")]
+    peers_all = [b for b in brands.values() if b["role"] == "peer"]
+    chips = [
+        {"label": "Dagacci store", "live": bool(brands[self_cfg["key"]].get("store"))},
+        {"label": "Store reviews", "live": bool(reviews)},
+        {"label": f"Amazon pages {len(am_ok)}/{len(am_all)}", "live": len(am_ok) == len(am_all)},
+        {"label": f"Peer stores {len(peers_ok)}/{len(peers_all)}",
+         "live": len(peers_ok) == len(peers_all)},
+        {"label": "SP-API", "live": any(a.get("via") == "sp-api" for a in am_ok)},
+    ]
+    return {"title": f"{self_cfg['name']} market tracker", "chips": chips, "hero": hero,
+            "tiles": me["tiles"], "recs": recs, "sections": sections}
 
 
 # --- sentiment ---------------------------------------------------------------------
@@ -1012,10 +1217,17 @@ def sentiment_self(name: str, products: list[dict], reviews: list[dict], listing
             hits = [r for r in reviews if r["score"] <= 2 and t_ in sent.topics_of(r)
                     and r["date"] > (date.fromisoformat(today) - timedelta(days=365)).isoformat()]
             ex = max(hits, key=lambda r: (len(r["body"]) >= 40, r["date"]))["body"][:200] if hits else ""
-            opps.append({"priority": "High", "title": f"{t_} is getting worse",
-                         "text": f"Net sentiment on {t_.lower()} fell from {sent.net(p_):+.0%} to "
-                         f"{sent.net(c):+.0%} in the last 12 months ({c['neg']} unhappy mentions vs "
-                         f"{p_['neg']} the year before)." + (f" Latest: “{ex}”" if ex else "")})
+            opps.append(rec(
+                2, "Reviews", "Medium", f"Reviews about {t_.lower()} are getting worse",
+                f"Net sentiment on {t_.lower()} fell from {sent.net(p_):+.0%} to "
+                f"{sent.net(c):+.0%} in the last 12 months ({c['neg']} unhappy mentions vs "
+                f"{p_['neg']} the year before)." + (f" Latest: “{ex}”" if ex else ""),
+                "A topic turning negative is usually one fixable process (a carrier, a factory "
+                "lot, the returns flow) that will keep costing reviews until it's found.",
+                [f"Read this year's 1–2★ reviews that mention {t_.lower()} and find the common cause.",
+                 "Reply to each one publicly with the fix."],
+                f"Net sentiment, {t_.lower()}", f"{sent.net(c):+.0%}", f"{sent.net(p_):+.0%}",
+                section="sentiment"))
         charts.append({"section": "Sentiment", "type": "stacked",
                        "title": "What store reviewers talk about",
                        "sub": "Reviews mentioning each topic, by star rating (all years)",
@@ -1050,10 +1262,19 @@ def sentiment_self(name: str, products: list[dict], reviews: list[dict], listing
                        "Length": "add inseam lengths and petite/tall options",
                        "Shipping & service": "audit fulfilment and the returns flow",
                        }.get(p["topic"], "read the reviews and fix the root cause")
-                opps.append({"priority": "High", "title": f"{short(p['product'])}: {p['topic'].lower()}"
-                             + (f" — {p['detail']}" if p["detail"] else ""),
-                             "text": f"{p['hits']} of {p['unhappy']} unhappy reviews ({p['share']:.0%}) "
-                             f"mention it. Fix: {fix}. Example: “{p['quote']}”", "url": p["url"]})
+                fit = p["topic"] in ("Fit & sizing", "Length")
+                opps.append(rec(
+                    1 if fit else 2, "Fit & returns" if fit else "Product", "Low" if fit else "Medium",
+                    f"{short(p['product'])}: buyers complain about {p['topic'].lower()}"
+                    + (f" (it {p['detail']})" if p["detail"] else ""),
+                    f"{p['hits']} of its {p['unhappy']} 1–2★ reviews ({p['share']:.0%}) mention "
+                    f"{p['topic'].lower()}. Latest: “{p['quote']}”",
+                    "One named problem behind most of a product's bad reviews is the cheapest "
+                    "rating gain available: fix it and new reviews stop repeating it.",
+                    [fix[0].upper() + fix[1:] + ".",
+                     "Reply to the recent 1–2★ reviews with what changed."],
+                    f"Share of 1–2★ reviews about {p['topic'].lower()}", f"{p['share']:.0%}",
+                    f"≤ {p['share'] / 2:.0%}", p["url"], "sentiment"))
 
     at = sent.amazon_topics(listings)
     if at:
@@ -1073,9 +1294,15 @@ def sentiment_self(name: str, products: list[dict], reviews: list[dict], listing
                        "rows": [_stack_row(k, v, f" · {v['listings']} listings") for k, v in rows[:12]]})
         for k, v in weak[:2]:
             w = v["worst"]
-            opps.append({"priority": "High", "title": f"Amazon: fix “{k}” on {short(w['listing'])}",
-                         "text": f"Amazon rates this topic {w['verdict']} across {w['mentions']} reviews. "
-                         f"{w['summary']}", "url": f"https://www.amazon.com/dp/{w['asin']}"})
+            opps.append(rec(
+                2, "Amazon listing", "Medium", f"Amazon shoppers are {w['verdict']} on “{k}”",
+                f"On {short(w['listing'])}, Amazon rates “{k}” {w['verdict']} across "
+                f"{w['mentions']} reviews. {w['summary']}",
+                "Amazon shows this summary above the reviews, so every shopper reads it.",
+                [f"Address “{k}” in the title, first bullet and size/fabric chart.",
+                 "Fix the product if the complaint is about quality, not expectations."],
+                f"Amazon verdict on “{k}”", w["verdict"], "positive",
+                f"https://www.amazon.com/dp/{w['asin']}", "sentiment"))
     elif listings:
         charts.append({"section": "Sentiment", "type": "note", "title": "What Amazon customers say",
                        "sub": "Amazon's review topics per listing",
@@ -1145,16 +1372,22 @@ def sentiment_rival(sn: str, rn: str, sl: list[dict], rl: list[dict]) -> tuple[l
         ours = score(a, k)
         if ours is not None and ours <= 0:
             continue
-        opps.append({"priority": "High" if ours is not None else "Watch",
-                     "title": f"{rn}'s weak spot: {k}",
-                     "text": f"Amazon rates “{k}” {w['verdict']} on {rn}'s {short(w['listing'])} "
-                     f"({w['mentions']} reviews): {w['summary']} "
-                     + (f"{sn} does better here, so say it in the listing and in Sponsored Display "
-                        "ads on that listing." if ours is not None else
-                        f"If {sn}'s own reviews hold up on {k}, that's an angle for ads on their "
-                        "listing; it's confirmed once Amazon lets us read both brands' topics."),
-                     "url": f"https://www.amazon.com/dp/{w['asin']}"})
+        opps.append(rec(
+            2 if ours is not None else 4, "Ads", "Low", f"{rn}'s weak spot: {k}",
+            f"Amazon rates “{k}” {w['verdict']} on {rn}'s {short(w['listing'])} "
+            f"({w['mentions']} reviews): {w['summary']}",
+            (f"{sn} does better on {k}, so it's a reason to choose Dagacci that {rn}'s own "
+             "shoppers already care about." if ours is not None else
+             f"If {sn}'s reviews hold up on {k}, it's a ready-made reason to switch; confirm "
+             "once both brands' Amazon topics are in."),
+            [f"Say how {sn} does on {k} in the listing's first bullet.",
+             f"Run Sponsored Display ads on {rn}'s listing with that message."],
+            url=f"https://www.amazon.com/dp/{w['asin']}", section="rival"))
     for k, s1, s2 in behind[:2]:
-        opps.append({"priority": "Medium", "title": f"Catch up on {k}",
-                     "text": f"Shoppers rate {rn} better on {k} ({s2:+.0%} net vs {sn}'s {s1:+.0%})."})
+        opps.append(rec(
+            3, "Product", "Medium", f"{rn} is rated better on {k}",
+            f"Shoppers rate {rn} {s2:+.0%} net on {k} vs {sn}'s {s1:+.0%}.",
+            "It's a known reason shoppers pick the rival.",
+            [f"Read {rn}'s positive reviews on {k} for what they do differently."],
+            f"Net sentiment on {k}", f"{s1:+.0%}", f"{s2:+.0%}", section="rival"))
     return charts, opps

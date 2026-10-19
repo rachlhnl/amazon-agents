@@ -4,11 +4,18 @@ A daily dashboard of public data on Dagacci, its closest Amazon rival (Cozyfit) 
 other scrub brands, with trends, opportunities and a plain-language read under every
 chart. Open `index.html` in a browser.
 
-| Tab | Shows | Source |
+It follows the layout of the Seller Central KPI dashboard: a headline number and KPI
+tiles, "Where to act first" cards (what we see, why it matters, what to do, and the KPI
+to track with a target), the full ranked action plan, then numbered sections, each
+ending with "What this tells us · what to do".
+
+| Section | Shows | Source |
 |---|---|---|
-| Dagacci | sentiment, catalog, prices, stock, ratings, Amazon listings, what changed, trends | dagacci.com, its store reviews, Amazon product pages |
-| vs Cozyfit | what customers say by topic, price, rating, reviews and best-seller rank per listing, head to head | Amazon product pages (Cozyfit sells only on Amazon) |
-| Scrub market | outfit price, markdowns, launches, stock and colors by brand | each brand's own store |
+| 1 · Customer sentiment | store reviews by quarter and topic, complaints by product, Amazon "Customers say" | Dagacci store reviews, Amazon product pages |
+| 2 · Catalog, price & stock | catalog, ratings, prices, stock, tracked Amazon listings | dagacci.com, Amazon product pages |
+| 3 · Dagacci vs Cozyfit on Amazon | price, rating, reviews and best-seller rank per listing | Amazon product pages (Cozyfit sells only on Amazon) |
+| 4 · The scrub market | outfit price, markdowns, launches, stock and colors by brand | each brand's own store |
+| 5 · Trends & changes | daily and weekly moves, what changed since the last run | all of the above, over time |
 
 ## How it runs
 
