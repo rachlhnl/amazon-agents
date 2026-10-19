@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dagacci Market Tracker</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface-0: #f4f3ef;
+  --surface-1: #fcfcfb;
+  --border: #e4e2dc;
+  --grid: #ebe9e4;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #77756f;
+  --s1: #2a78d6;
+  --s2: #eb6834;
+  --muted: #b5b3ab;
+  --track: #cde2fb;
+  --marker: #0b0b0b;
+  --link: #1c5cab;
+  --good: #0a7a3d;
+  --bad: #c2362f;
+  --chip: #ecebe6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface-0: #121211;
+    --surface-1: #1a1a19;
+    --border: #2e2e2c;
+    --grid: #272725;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #96958c;
+    --s1: #3987e5;
+    --s2: #d95926;
+    --muted: #5d5c57;
+    --track: #184f95;
+    --marker: #f0efec;
+    --link: #86b6ef;
+    --good: #4cc27f;
+    --bad: #f07a72;
+    --chip: #262624;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-0: #121211;
+  --surface-1: #1a1a19;
+  --border: #2e2e2c;
+  --grid: #272725;
+  --text-primary: #f0efec;
+  --text-secondary: #c3c2b7;
+  --text-muted: #96958c;
+  --s1: #3987e5;
+  --s2: #d95926;
+  --muted: #5d5c57;
+  --track: #184f95;
+  --marker: #f0efec;
+  --link: #86b6ef;
+  --good: #4cc27f;
+  --bad: #f07a72;
+  --chip: #262624;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--surface-0); color: var(--text-primary);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+}
+a { color: var(--link); }
+main { max-width: 1120px; margin: 0 auto; padding: 28px 16px 64px; }
+header h1 { font-size: 28px; margin: 0 0 2px; font-weight: 650; letter-spacing: -0.01em; }
+header p { margin: 0; color: var(--text-secondary); }
+.meta { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+nav { display: flex; gap: 4px; margin: 20px 0 4px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+nav button {
+  font: inherit; font-weight: 550; background: none; border: 0; padding: 10px 14px; cursor: pointer;
+  color: var(--text-secondary); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap;
+}
+nav button[aria-selected="true"] { color: var(--text-primary); border-bottom-color: var(--s1); }
+nav button:focus-visible { outline: 2px solid var(--s1); outline-offset: -2px; }
+.note { font-size: 13px; color: var(--text-muted); margin: 10px 0 0; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 18px 0; }
+.tile, .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; }
+.tile { padding: 14px 16px; }
+.tile .label { font-size: 13px; color: var(--text-secondary); }
+.tile .value { font-size: 26px; font-weight: 600; margin-top: 2px; line-height: 1.25; }
+.tile .sub { font-size: 12px; color: var(--text-muted); }
+.delta { font-size: 12px; font-weight: 550; }
+.delta.good { color: var(--good); } .delta.bad { color: var(--bad); } .delta.flat { color: var(--text-muted); }
+.pair { display: grid; gap: 4px; margin-top: 4px; }
+.pair div { display: flex; align-items: baseline; gap: 8px; }
+.pair .v { font-size: 20px; font-weight: 600; }
+.pair .b { font-size: 12px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 5px; min-width: 64px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+h2.section { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin: 26px 0 10px; font-weight: 600; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); gap: 16px; align-items: start; }
+.card { padding: 18px 20px; min-width: 0; }
+.card h3 { font-size: 16px; margin: 0 0 2px; font-weight: 600; }
+.card .sub { font-size: 13px; color: var(--text-secondary); margin: 0 0 12px; }
+.read { font-size: 14px; color: var(--text-primary); background: var(--chip); border-radius: 8px; padding: 10px 12px; margin: 14px 0 0; }
+.read b { font-weight: 600; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--text-secondary); margin: -4px 0 10px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.key-bar { width: 12px; height: 10px; border-radius: 2px; display: inline-block; }
+.key-tick { width: 2px; height: 12px; background: var(--marker); display: inline-block; }
+.key-line { width: 14px; height: 2px; display: inline-block; border-radius: 1px; }
+.rows { display: grid; gap: 6px; }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) auto; gap: 10px; align-items: center; font-size: 13px; }
+.row .name { color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .val { font-variant-numeric: tabular-nums; min-width: 4.5em; text-align: right; }
+.plot { position: relative; height: 18px; border-left: 1px solid var(--grid); }
+.bar { position: absolute; left: 0; top: 2px; height: 14px; border-radius: 0 4px 4px 0; }
+.bar.track { background: var(--track); opacity: .55; }
+.tick { position: absolute; top: 0; width: 2px; height: 18px; background: var(--marker); }
+.row:hover .bar:not(.track), .row:focus-visible .bar:not(.track) { filter: brightness(1.15); }
+.row:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; border-radius: 4px; }
+svg text { fill: var(--text-muted); font-size: 11px; }
+svg .gl { stroke: var(--grid); stroke-width: 1; }
+.empty { font-size: 13px; color: var(--text-muted); border: 1px dashed var(--border); border-radius: 8px; padding: 18px; text-align: center; }
+.opps { display: grid; gap: 10px; }
+.opp { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; align-items: baseline; }
+.opp .pri { font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; padding: 2px 7px; border-radius: 999px; background: var(--chip); color: var(--text-secondary); }
+.opp .pri.High { color: var(--bad); }
+.opp h4 { margin: 0; font-size: 14px; font-weight: 600; }
+.opp p { margin: 0; grid-column: 2; font-size: 14px; color: var(--text-secondary); }
+.changes { margin: 0; padding: 0; list-style: none; font-size: 14px; display: grid; gap: 4px; }
+.changes .k { font-size: 12px; color: var(--text-muted); display: inline-block; min-width: 9em; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+td:first-child { white-space: normal; min-width: 200px; }
+th { color: var(--text-secondary); font-weight: 600; cursor: pointer; user-select: none; }
+th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+th[aria-sort="ascending"]::after { content: " ▲"; font-size: 10px; }
+th[aria-sort="descending"]::after { content: " ▼"; font-size: 10px; }
+.errors { font-size: 12px; color: var(--text-muted); }
+#tip {
+  position: fixed; pointer-events: none; z-index: 10; display: none;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.12); max-width: 300px;
+}
+#tip strong { display: block; font-size: 14px; }
+#tip .t { color: var(--text-secondary); }
+@media (max-width: 560px) {
+  .row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 2px; }
+  .row .plot { grid-column: 1 / -1; grid-row: 2; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Dagacci market tracker</h1>
+    <p>Public data on Dagacci, its closest Amazon rival and the wider scrubs market, refreshed daily.</p>
+    <div class="meta" id="meta"></div>
+  </header>
+  <nav role="tablist" id="tabs"></nav>
+  <div id="panels"></div>
+  <p class="errors" id="errors"></p>
+</main>
+<div id="tip" role="tooltip"></div>
+
+<script>
+const A = {"date":"2026-10-19","collected_at":"2026-10-19T16:31:53+00:00","days":1,"first_date":"2026-10-19","tabs":[{"id":"self","label":"Dagacci","tiles":[{"label":"Products listed","value":"36","note":"36 styles"},{"label":"In stock","value":"79%","note":"of 2,467 color/size options"},{"label":"Typical scrub set","value":"$27.99","note":"median scrub set"},{"label":"Store rating","value":"4.15 \u2605","note":"1,810 reviews on www.dagacci.com"},{"label":"Amazon reviews","value":"87,507","note":"4.05 \u2605 across 8 listings"},{"label":"Best scrubs rank","value":"#2","note":"best Amazon listing"}],"charts":[{"section":"Trends","type":"lines","title":"Reviews on dagacci.com","sub":"Total on-site reviews, daily","read":"One day of data so far (2026-10-19). The line appears after the second daily run; week-over-week reads start after seven. Review growth is the best public proxy for order volume: a slowdown usually means fewer orders a few weeks earlier.","series":[{"name":"Dagacci","color":"s1","points":[["2026-10-19",1810]]}],"fmt":"num"},{"section":"Trends","type":"lines","title":"Share of options in stock","sub":"Color/size options that can be bought, daily","read":"One day of data so far (2026-10-19). The line appears after the second daily run; week-over-week reads start after seven. Under ~80% means shoppers are regularly hitting sold-out sizes.","series":[{"name":"Dagacci","color":"s1","points":[["2026-10-19",0.7912]]}],"fmt":"pct"},{"section":"Trends","type":"lines","title":"Amazon reviews","sub":"Reviews across the tracked Amazon listings, daily","read":"One day of data so far (2026-10-19). The line appears after the second daily run; week-over-week reads start after seven.","series":[{"name":"Dagacci","color":"s1","points":[["2026-10-19",87507]]}],"fmt":"num"},{"section":"Trends","type":"bars","title":"When today's products were first listed","sub":"Products still on the site, by year first listed","read":"10 of today's 36 products were first listed in 2018, the busiest year. 8 came in 2025. The range is mostly older styles; newness is a lever not being used.","rows":[{"name":"2018","value":1.0,"label":"10","color":"s1","tip":["10 products","first listed in 2018"]},{"name":"2019","value":0.6,"label":"6","color":"s1","tip":["6 products","first listed in 2019"]},{"name":"2020","value":0.5,"label":"5","color":"s1","tip":["5 products","first listed in 2020"]},{"name":"2022","value":0.5,"label":"5","color":"s1","tip":["5 products","first listed in 2022"]},{"name":"2023","value":0.1,"label":"1","color":"s1","tip":["1 products","first listed in 2023"]},{"name":"2024","value":0.1,"label":"1","color":"s1","tip":["1 products","first listed in 2024"]},{"name":"2025","value":0.8,"label":"8","color":"s1","tip":["8 products","first listed in 2025"]}]},{"section":"Catalog","type":"bars","title":"Catalog by product line","sub":"Products on www.dagacci.com","read":"42% of the catalog is scrub sets (15 of 36). The site carries 36 distinct styles. Peer brands carry a median of 182 styles on their own stores, so Dagacci\u2019s range is narrow: the site is a showroom for the Amazon business rather than a full assortment.","rows":[{"name":"Scrub sets","value":1.0,"label":"15","color":"s1","tip":["15 products","Scrub sets"]},{"name":"Lab coats & jackets","value":0.5333333333333333,"label":"8","color":"s1","tip":["8 products","Lab coats & jackets"]},{"name":"Accessories","value":0.4,"label":"6","color":"s1","tip":["6 products","Accessories"]},{"name":"Pants","value":0.2,"label":"3","color":"s1","tip":["3 products","Pants"]},{"name":"Underscrubs","value":0.13333333333333333,"label":"2","color":"s1","tip":["2 products","Underscrubs"]},{"name":"Tops","value":0.13333333333333333,"label":"2","color":"s1","tip":["2 products","Tops"]}]},{"section":"Catalog","type":"bars","title":"Ratings by product","sub":"Average stars on the store, products with 20+ reviews","read":"Best: Underscrub Top at 4.64\u2605 (22 reviews). Lowest: Unisex Zip Up Fleece Jacket at 3.64\u2605. 2 products sit under 3.8\u2605 \u2014 on Amazon that is roughly where conversion drops off, so read their 1\u20132\u2605 reviews for a fixable fit or fabric complaint.","rows":[{"name":"Underscrub Top","value":0.9279999999999999,"label":"4.64 \u2605","color":"s1","tip":["4.64 \u2605 from 22 reviews","DAGACCI MEDICAL UNIFORM\u00ae Underscrub Top"]},{"name":"4-Way Stretch Y-Neck Scrub Sets","value":0.882,"label":"4.41 \u2605","color":"s1","tip":["4.41 \u2605 from 91 reviews","DAGACCI MEDICAL UNIFORM\u00ae 4-Way Stretch Y-Neck Scrub Sets [FS2103]"]},{"name":"4-Way Stretch Unisex Jogger Scrub Pants","value":0.8800000000000001,"label":"4.40 \u2605","color":"s1","tip":["4.40 \u2605 from 84 reviews","DAGACCI MEDICAL UNIFORM\u00ae 4-Way Stretch Unisex Jogger Scrub Pants"]},{"name":"Natural Stretch\u00ae Women's Y-Neck Scrub Sets","value":0.876,"label":"4.38 \u2605","color":"s1","tip":["4.38 \u2605 from 111 reviews","DAGACCI MEDICAL UNIFORM\u00ae Natural Stretch\u00ae Women's Y-Neck Scrub Sets [NS2102]"]},{"name":"4-Way Stretch Unisex Jogger Scrubs Sets","value":0.876,"label":"4.38 \u2605","color":"s1","tip":["4.38 \u2605 from 112 reviews","DAGACCI MEDICAL UNIFORM\u00ae 4-Way Stretch Unisex Jogger Scrubs Sets [FS2802]"]},{"name":"4-Way Stretch Split V-Neck Scrub Sets","value":0.874,"label":"4.37 \u2605","color":"s1","tip":["4.37 \u2605 from 93 reviews","DAGACCI MEDICAL UNIFORM\u00ae 4-Way Stretch Split V-Neck Scrub Sets [FS2204]"]},{"name":"Natural Stretch\u00ae Women's V-Neck Scrub Sets","value":0.8720000000000001,"label":"4.36 \u2605","color":"s1","tip":["4.36 \u2605 from 106 reviews","DAGACCI MEDICAL UNIFORM\u00ae Natural Stretch\u00ae Women's V-Neck Scrub Sets [NS2100]"]},{"name":"Natural Stretch Women's Contrast Y-Neck Scrub Sets","value":0.8699999999999999,"label":"4.35 \u2605","color":"s1","tip":["4.35 \u2605 from 77 reviews","DAGACCI MEDICAL UNIFORM\u00ae Natural Stretch Women's Contrast Y-Neck Scrub Sets [NS2104]"]},{"name":"4-Way Stretch Women's Wide Y-Neck Scrub Sets","value":0.8640000000000001,"label":"4.32 \u2605","color":"s1","tip":["4.32 \u2605 from 103 reviews","DAGACCI MEDICAL UNIFORM\u00ae 4-Way Stretch Women's Wide Y-Neck Scrub Sets [FS2300]"]},{"name":"UNISEX COMPRESSION SOCKS","value":0.86,"label":"4.30 \u2605","color":"s1","tip":["4.30 \u2605 from 27 reviews","UNISEX COMPRESSION SOCKS"]},{"name":"Best Seller Unisex Scrub Sets","value":0.8460000000000001,"label":"4.23 \u2605","color":"s1","tip":["4.23 \u2605 from 139 reviews","DAGACCI MEDICAL UNIFORM\u00ae Best Seller Unisex Scrub Sets"]},{"name":"Natural Stretch\u00ae Women's Contrast Pocket Scrub Sets","value":0.8380000000000001,"label":"4.19 \u2605","color":"s1","tip":["4.19 \u2605 from 103 reviews","DAGACCI MEDICAL UNIFORM\u00ae Natural Stretch\u00ae Women's Contrast Pocket Scrub Sets [NS2151]"]},{"name":"UNISEX SCRUB CAP","value":0.818,"label":"4.09 \u2605","color":"s1","tip":["4.09 \u2605 from 67 reviews","DAGACCI OFFICIAL UNISEX SCRUB CAP"]},{"name":"Unisex 4-Way Stretch Scrub Sets","value":0.798,"label":"3.99 \u2605","color":"s1","tip":["3.99 \u2605 from 105 reviews","DAGACCI MEDICAL UNIFORM\u00ae Unisex 4-Way Stretch Scrub Sets [FS100500]"]},{"name":"Unisex 35\" Lab Coat","value":0.788,"label":"3.94 \u2605","color":"s1","tip":["3.94 \u2605 from 100 reviews","DAGACCI OFFICIAL Unisex 35\" Lab Coat"]},{"name":"Unisex Natural Stretch\u00ae Scrub Set","value":0.782,"label":"3.91 \u2605","color":"s1","tip":["3.91 \u2605 from 107 reviews","DAGACCI MEDICAL UNIFORM\u00ae Unisex Natural Stretch\u00ae Scrub Set [NS1500]"]},{"name":"UNISEX PANTS (ORGANIC COLORS)","value":0.78,"label":"3.90 \u2605","color":"s1","tip":["3.90 \u2605 from 99 reviews","DAGACCI OFFICIAL UNISEX PANTS (ORGANIC COLORS)"]},{"name":"Unisex Scrub Pants","value":0.76,"label":"3.80 \u2605","color":"s1","tip":["3.80 \u2605 from 105 reviews","DAGACCI OFFICIAL Unisex Scrub Pants"]},{"name":"UNISEX JACKET","value":0.73,"label":"3.65 \u2605","color":"s1","tip":["3.65 \u2605 from 83 reviews","DAGACCI MEDICAL UNIFORM\u00ae UNISEX JACKET"]},{"name":"Unisex Zip Up Fleece Jacket","value":0.728,"label":"3.64 \u2605","color":"s1","tip":["3.64 \u2605 from 44 reviews","DAGACCI MEDICAL UNIFORM\u00ae Unisex Zip Up Fleece Jacket"]}]},{"section":"Catalog","type":"bars","title":"Scrub set prices","sub":"Selling price against the struck-through \u201ccompare at\u201d price","legend":[{"label":"Price","kind":"bar","color":"s1"},{"label":"Compare-at price","kind":"tick"}],"read":"Sets run $24.74\u2013$34.99. 11 of 15 show a markdown from a compare-at price (median 15% off). A typical peer outfit costs $64.50 on their own sites, so Dagacci is priced at 43% of the market \u2014 firmly the value option.","rows":[{"name":"Natural Stretch Contrast V-Neck Scrub Sets","value":1.0,"tick":1.0,"label":"$34.99","color":"s1","tip":["$34.99","DAGACCI OFFICIAL Natural Stretch Contrast V-Neck Scrub Sets","compare at $34.99"]},{"name":"Unisex Cotton Stretch Set","value":1.0,"tick":1.0,"label":"$34.99","color":"s1","tip":["$34.99","DAGACCI MEDICAL UNIFORM\u00ae Unisex Cotton Stretch Set","compare at $34.99"]},{"name":"Unisex Athletic Trim Sets","value":1.0,"tick":1.0,"label":"$34.99","color":"s1","tip":["$34.99","DAGACCI MEDICAL UNIFORM\u00ae Unisex Athletic Trim Sets","compare at $34.99"]},{"name":"4-Way Stretch Women's Wide Y-Neck Scrub Sets","value":0.8571020291511859,"tick":1.0,"label":"$29.99","color":"s1","tip":["$29.99","DAGACCI MEDICAL UNIFORM\u00ae 4-Way Stretch Women's Wide Y-Neck Scrub Sets [FS2300]","compare at $34.99"]},{"name":"4-Way Stretch Y-Neck Scrub Sets","value":0.8571020291511859,"tick":1.0,"label":"$29.99","color":"s1","tip":["$29.99","DAGACCI MEDICAL UNIFORM\u00ae 4-Way Stretch Y-Neck Scrub Sets [FS2103]","compare at $34.99"]},{"name":"4-Way Stretch Split V-Neck Scrub Sets","value":0.8571020291511859,"tick":1.0,"label":"$29.99","color":"s1","tip":["$29.99","DAGACCI MEDICAL UNIFORM\u00ae 4-Way Stretch Split V-Neck Scrub Sets [FS2204]","compare at $34.99"]},{"name":"Unisex 4-Way Stretch Scrub Sets","value":0.8571020291511859,"tick":1.0,"label":"$29.99","color":"s1","tip":["$29.99","DAGACCI MEDICAL UNIFORM\u00ae Unisex 4-Way Stretch Scrub Sets [FS100500]","compare at $34.99"]},{"name":"Natural Stretch\u00ae Women's V-Neck Scrub Sets","value":0.7999428408116603,"tick":0.9428408116604744,"label":"$27.99","color":"s1","tip":["$27.99","DAGACCI MEDICAL UNIFORM\u00ae Natural Stretch\u00ae Women's V-Neck Scrub Sets [NS2100]","compare at $32.99"]},{"name":"Natural Stretch\u00ae Women's Y-Neck Scrub Sets","value":0.7999428408116603,"tick":0.7999428408116603,"label":"$27.99","color":"s1","tip":["$27.99","DAGACCI MEDICAL UNIFORM\u00ae Natural Stretch\u00ae Women's Y-Neck Scrub Sets [NS2102]","compare at $27.99"]},{"name":"4-Way Stretch Unisex Jogger Scrubs Sets","value":0.7999428408116603,"tick":1.0,"label":"$27.99","color":"s1","tip":["$27.99","DAGACCI MEDICAL UNIFORM\u00ae 4-Way Stretch Unisex Jogger Scrubs Sets [FS2802]","compare at $34.99"]},{"name":"Unisex Natural Stretch\u00ae Scrub Set","value":0.7999428408116603,"tick":1.0,"label":"$27.99","color":"s1","tip":["$27.99","DAGACCI MEDICAL UNIFORM\u00ae Unisex Natural Stretch\u00ae Scrub Set [NS1500]","compare at $34.99"]},{"name":"Natural Stretch\u00ae Y-Neck Double Stitch Set","value":0.7999428408116603,"tick":1.0,"label":"$27.99","color":"s1","tip":["$27.99","DAGACCI MEDICAL UNIFORM\u00ae Natural Stretch\u00ae Y-Neck Double Stitch Set [NS2202]","compare at $34.99"]},{"name":"Best Seller Unisex Scrub Sets","value":0.714204058302372,"tick":0.7999428408116603,"label":"$24.99","color":"s1","tip":["$24.99","DAGACCI MEDICAL UNIFORM\u00ae Best Seller Unisex Scrub Sets","compare at $27.99"]},{"name":"Natural Stretch Women's Contrast Y-Neck Scrub Sets","value":0.7070591597599313,"tick":0.9428408116604744,"label":"$24.74","color":"s1","tip":["$24.74","DAGACCI MEDICAL UNIFORM\u00ae Natural Stretch Women's Contrast Y-Neck Scrub Sets [NS2104]","compare at $32.99"]},{"name":"Natural Stretch\u00ae Women's Contrast Pocket Scrub Sets","value":0.7070591597599313,"tick":0.9428408116604744,"label":"$24.74","color":"s1","tip":["$24.74","DAGACCI MEDICAL UNIFORM\u00ae Natural Stretch\u00ae Women's Contrast Pocket Scrub Sets [NS2151]","compare at $32.99"]}]},{"section":"Catalog","type":"bars","title":"Stock by product","sub":"Share of color/size options that can be bought now, lowest first","read":"3 products are fully sold out and 5 more have under half their options available. The ones with proven demand (20+ reviews) are the priority: Underscrub Top.","rows":[{"name":"WOMEN'S 36\" LAB COAT","value":0.0,"track":true,"label":"0%","color":"s1","tip":["0% in stock","DAGACCI OFFICIAL WOMEN'S 36\" LAB COAT","0 of 7 options"]},{"name":"Cherokee Women's Long Sleeve Underscrub Knit Tee","value":0.0,"track":true,"label":"0%","color":"s1","tip":["0% in stock","Cherokee Women's Long Sleeve Underscrub Knit Tee","0 of 18 options"]},{"name":"Underscrub Top","value":0.0,"track":true,"label":"0%","color":"s1","tip":["0% in stock","DAGACCI MEDICAL UNIFORM\u00ae Underscrub Top","0 of 63 options"]},{"name":"Natural Stretch\u00ae Y-Neck Double Stitch Set","value":0.22077922077922077,"track":true,"label":"22%","color":"s1","tip":["22% in stock","DAGACCI MEDICAL UNIFORM\u00ae Natural Stretch\u00ae Y-Neck Double Stitch Set [NS2202]","17 of 77 options"]},{"name":"Unisex Button Up Fleece Jacket","value":0.25,"track":true,"label":"25%","color":"s1","tip":["25% in stock","DAGACCI MEDICAL UNIFORM\u00ae Unisex Button Up Fleece Jacket","6 of 24 options"]},{"name":"Unisex Cotton Stretch Set","value":0.2916666666666667,"track":true,"label":"29%","color":"s1","tip":["29% in stock","DAGACCI MEDICAL UNIFORM\u00ae Unisex Cotton Stretch Set","7 of 24 options"]},{"name":"Natural Stretch Contrast V-Neck Scrub Sets","value":0.35714285714285715,"track":true,"label":"36%","color":"s1","tip":["36% in stock","DAGACCI OFFICIAL Natural Stretch Contrast V-Neck Scrub Sets","10 of 28 options"]},{"name":"WOMEN'S 32\" LAB COAT","value":0.42857142857142855,"track":true,"label":"43%","color":"s1","tip":["43% in stock","DAGACCI OFFCIAL WOMEN'S 32\" LAB COAT","3 of 7 options"]},{"name":"UNISEX COMPRESSION SOCKS","value":0.5,"track":true,"label":"50%","color":"s1","tip":["50% in stock","UNISEX COMPRESSION SOCKS","2 of 4 options"]},{"name":"Barco Essentials Unisex Warmup Jacket","value":0.6666666666666666,"track":true,"label":"67%","color":"s1","tip":["67% in stock","Barco Essentials Unisex Warmup Jacket","24 of 36 options"]},{"name":"UNISEX PANTS (ORGANIC COLORS)","value":0.6666666666666666,"track":true,"label":"67%","color":"s1","tip":["67% in stock","DAGACCI OFFICIAL UNISEX PANTS (ORGANIC COLORS)","66 of 99 options"]},{"name":"UNISEX SCRUB CAP","value":0.7142857142857143,"track":true,"label":"71%","color":"s1","tip":["71% in stock","DAGACCI OFFICIAL UNISEX SCRUB CAP","5 of 7 options"]},{"name":"Unisex Scrub Pants","value":0.7323232323232324,"track":true,"label":"73%","color":"s1","tip":["73% in stock","DAGACCI OFFICIAL Unisex Scrub Pants","145 of 198 options"]},{"name":"Unisex Scrub Top","value":0.7373737373737373,"track":true,"label":"74%","color":"s1","tip":["74% in stock","DAGACCI OFFCIAL Unisex Scrub Top","73 of 99 options"]},{"name":"Best Seller Unisex Scrub Sets","value":0.764,"track":true,"label":"76%","color":"s1","tip":["76% in stock","DAGACCI MEDICAL UNIFORM\u00ae Best Seller Unisex Scrub Sets","191 of 250 options"]},{"name":"UNISEX TOP (ORGANIC COLORS)","value":0.7777777777777778,"track":true,"label":"78%","color":"s1","tip":["78% in stock","DAGACCI OFFICIAL UNISEX TOP (ORGANIC COLORS)","154 of 198 options"]},{"name":"UNISEX JACKET","value":0.7777777777777778,"track":true,"label":"78%","color":"s1","tip":["78% in stock","DAGACCI MEDICAL UNIFORM\u00ae UNISEX JACKET","42 of 54 options"]},{"name":"Natural Stretch\u00ae Women's Contrast Pocket Scrub Sets","value":0.8775510204081632,"track":true,"label":"88%","color":"s1","tip":["88% in stock","DAGACCI MEDICAL UNIFORM\u00ae Natural Stretch\u00ae Women's Contrast Pocket Scrub Sets [NS2151]","86 of 98 options"]},{"name":"Natural Stretch\u00ae Women's Y-Neck Scrub Sets","value":0.8961038961038961,"track":true,"label":"90%","color":"s1","tip":["90% in stock","DAGACCI MEDICAL UNIFORM\u00ae Natural Stretch\u00ae Women's Y-Neck Scrub Sets [NS2102]","138 of 154 options"]},{"name":"Natural Stretch\u00ae Women's V-Neck Scrub Sets","value":0.9025974025974026,"track":true,"label":"90%","color":"s1","tip":["90% in stock","DAGACCI MEDICAL UNIFORM\u00ae Natural Stretch\u00ae Women's V-Neck Scrub Sets [NS2100]","139 of 154 options"]},{"name":"Unisex Zip Up Fleece Jacket","value":0.9047619047619048,"track":true,"label":"90%","color":"s1","tip":["90% in stock","DAGACCI MEDICAL UNIFORM\u00ae Unisex Zip Up Fleece Jacket","38 of 42 options"]},{"name":"4-Way Stretch Unisex Jogger Scrub Pants","value":0.9142857142857143,"track":true,"label":"91%","color":"s1","tip":["91% in stock","DAGACCI MEDICAL UNIFORM\u00ae 4-Way Stretch Unisex Jogger Scrub Pants","32 of 35 options"]},{"name":"Unisex 4-Way Stretch Scrub Sets","value":0.9285714285714286,"track":true,"label":"93%","color":"s1","tip":["93% in stock","DAGACCI MEDICAL UNIFORM\u00ae Unisex 4-Way Stretch Scrub Sets [FS100500]","78 of 84 options"]},{"name":"Unisex Natural Stretch\u00ae Scrub Set","value":0.9387755102040817,"track":true,"label":"94%","color":"s1","tip":["94% in stock","DAGACCI MEDICAL UNIFORM\u00ae Unisex Natural Stretch\u00ae Scrub Set [NS1500]","46 of 49 options"]},{"name":"Natural Stretch Women's Contrast Y-Neck Scrub Sets","value":0.9693877551020408,"track":true,"label":"97%","color":"s1","tip":["97% in stock","DAGACCI MEDICAL UNIFORM\u00ae Natural Stretch Women's Contrast Y-Neck Scrub Sets [NS2104]","95 of 98 options"]},{"name":"4-Way Stretch Unisex Jogger Scrubs Sets","value":0.9795918367346939,"track":true,"label":"98%","color":"s1","tip":["98% in stock","DAGACCI MEDICAL UNIFORM\u00ae 4-Way Stretch Unisex Jogger Scrubs Sets [FS2802]","144 of 147 options"]},{"name":"WOMEN'S SHORT SLEEVE LAB COAT","value":1.0,"track":true,"label":"100%","color":"s1","tip":["100% in stock","DAGACCI OFFICIAL WOMEN'S SHORT SLEEVE LAB COAT","6 of 6 options"]},{"name":"Unisex 35\" Lab Coat","value":1.0,"track":true,"label":"100%","color":"s1","tip":["100% in stock","DAGACCI OFFICIAL Unisex 35\" Lab Coat","7 of 7 options"]},{"name":"4-Way Stretch Women's Wide Y-Neck Scrub Sets","value":1.0,"track":true,"label":"100%","color":"s1","tip":["100% in stock","DAGACCI MEDICAL UNIFORM\u00ae 4-Way Stretch Women's Wide Y-Neck Scrub Sets [FS2300]","119 of 119 options"]},{"name":"4-Way Stretch Y-Neck Scrub Sets","value":1.0,"track":true,"label":"100%","color":"s1","tip":["100% in stock","DAGACCI MEDICAL UNIFORM\u00ae 4-Way Stretch Y-Neck Scrub Sets [FS2103]","119 of 119 options"]},{"name":"4-Way Stretch Split V-Neck Scrub Sets","value":1.0,"track":true,"label":"100%","color":"s1","tip":["100% in stock","DAGACCI MEDICAL UNIFORM\u00ae 4-Way Stretch Split V-Neck Scrub Sets [FS2204]","119 of 119 options"]},{"name":"WOMEN\u2019s SLIP-ON SHOES","value":1.0,"track":true,"label":"100%","color":"s1","tip":["100% in stock","WOMEN\u2019s SLIP-ON SHOES","16 of 16 options"]},{"name":"Unisex Athletic Trim Sets","value":1.0,"track":true,"label":"100%","color":"s1","tip":["100% in stock","DAGACCI MEDICAL UNIFORM\u00ae Unisex Athletic Trim Sets","24 of 24 options"]}]},{"section":"Amazon","type":"table","title":"Dagacci on Amazon","sub":"Tracked listings. Rank is the best rank in a scrubs category (lower is better).","columns":[{"label":"Listing"},{"label":"Price","fmt":"usd"},{"label":"Rating","fmt":"stars"},{"label":"Reviews","fmt":"int"},{"label":"Scrubs rank","fmt":"rank"},{"label":"Category / note"}],"rows":[["Dagacci Scrubs Medical Uniform Women and Man Scrubs Set Medi","https://www.amazon.com/dp/B00FT739RA",24.99,4.0,69281,6,"Women's Medical Scrub Sets"],["Unisex Women and Men\u2019s V-Neck Super Stretch Scrub Set","https://www.amazon.com/dp/B07V39V7SC",27.99,4.1,2174,29,"Men's Medical Scrub Sets"],["Unisex 4-Way Stretch Scrubs Set Top and Pants","https://www.amazon.com/dp/B0D373PCHS",29.99,4.3,835,28,"Men's Medical Scrub Sets"],["Women\u2019s V-Neck Jogger Scrub Set with 8 Pockets","https://www.amazon.com/dp/B09S28VVGW",23.99,4.2,2532,39,"Women's Medical Scrub Sets"],["Scrubs for Women Set \u2013 Natural Stretch Contrast Binding Top ","https://www.amazon.com/dp/B08WTKYK4G",27.99,4.3,2685,117,"Women's Medical Scrub Sets"],["Women's Fitted Y Neck Natural Scrub Set","https://www.amazon.com/dp/B08YRY3TTC",29.99,4.3,1125,189,"Women's Medical Scrub Sets"],["Women's Scrub Set 4-Way Stretch Y-Neck Stitch Tape Top and P","https://www.amazon.com/dp/B0DRPMCLV5",24.98,4.4,1470,137,"Women's Medical Scrub Sets"],["Men\u2019s V-Neck Cargo Scrub Set with 8 Pockets","https://www.amazon.com/dp/B06XYTJM5G",19.99,4.2,7405,2,"Men's Medical Scrub Sets"]],"sort":3}],"opportunities":[{"priority":"High","title":"Restock Underscrub Top","text":"0 of 63 options buyable, despite 22 reviews at 4.64\u2605. Proven demand that can't currently convert.","url":"https://www.dagacci.com/products/long-sleeve-t-shirt-underscrub-tee"},{"priority":"High","title":"Put spend behind the best-rated sets","text":"4-Way Stretch Y-Neck Scrub Sets, 4-Way Stretch Unisex Jogger Scrub Pants, Natural Stretch\u00ae Women's Y-Neck Scrub Sets rate 4.38\u2605 or better on 50+ reviews. These are the safest products to feature in ads, the homepage and Amazon Sponsored Brands."},{"priority":"Medium","title":"Fix what buyers dislike in Unisex Zip Up Fleece Jacket","text":"3.64\u2605 on 44 reviews. Read the 1\u20132\u2605 reviews for a recurring fit or fabric issue; fix the product or say it in the listing.","url":"https://www.dagacci.com/products/unisex-warm-up-zip-up-fleece-jacket"},{"priority":"Medium","title":"Fix what buyers dislike in UNISEX JACKET","text":"3.65\u2605 on 83 reviews. Read the 1\u20132\u2605 reviews for a recurring fit or fabric issue; fix the product or say it in the listing.","url":"https://www.dagacci.com/products/jacket-top"},{"priority":"Medium","title":"Test a small price increase on top sets","text":"A typical Dagacci set is $27.99 against a peer median of $64.50, with a 4.15\u2605 store rating. A +5\u201310% test on the best-rated sets (within the pricing agent's 10% guardrail) would show how much headroom there is."},{"priority":"Medium","title":"Launch more often","text":"0 new styles in the last 90 days against a peer median of 31. New colors are the cheapest newness: peers carry a median of 3 colors per style vs Dagacci's 10."}],"changes":[],"note":"Public data from www.dagacci.com and Amazon product pages."},{"id":"rival","label":"vs Cozyfit","tiles":[{"label":"Median price","pair":[{"brand":"Dagacci","color":"s1","value":"$26.49"},{"brand":"Cozyfit","color":"s2","value":"$19.99"}],"note":"tracked Amazon listings"},{"label":"Rating","pair":[{"brand":"Dagacci","color":"s1","value":"4.05 \u2605"},{"brand":"Cozyfit","color":"s2","value":"4.25 \u2605"}],"note":"review-weighted"},{"label":"Reviews","pair":[{"brand":"Dagacci","color":"s1","value":"87,507"},{"brand":"Cozyfit","color":"s2","value":"25,919"}],"note":"across listing families"},{"label":"Best scrubs rank","pair":[{"brand":"Dagacci","color":"s1","value":"#2"},{"brand":"Cozyfit","color":"s2","value":"#1"}],"note":"lower is better"}],"charts":[{"section":"Head to head","type":"dots","title":"Price per listing","sub":"Current Amazon price of each tracked listing","read":"Dagacci's median tracked listing is $26.49 vs Cozyfit's $19.99 (+33%). Dagacci is not cheaper, so it has to win on reviews and brand history.","series":[{"name":"Dagacci","color":"s1","points":[{"x":24.99,"tip":["$24.99","Dagacci Scrubs Medical Uniform Women and Man Scrubs Set Medi","4.0\u2605 \u00b7 69,281 reviews"]},{"x":27.99,"tip":["$27.99","Unisex Women and Men\u2019s V-Neck Super Stretch Scrub Set","4.1\u2605 \u00b7 2,174 reviews"]},{"x":29.99,"tip":["$29.99","Unisex 4-Way Stretch Scrubs Set Top and Pants","4.3\u2605 \u00b7 835 reviews"]},{"x":23.99,"tip":["$23.99","Women\u2019s V-Neck Jogger Scrub Set with 8 Pockets","4.2\u2605 \u00b7 2,532 reviews"]},{"x":27.99,"tip":["$27.99","Scrubs for Women Set \u2013 Natural Stretch Contrast Binding Top ","4.3\u2605 \u00b7 2,685 reviews"]},{"x":29.99,"tip":["$29.99","Women's Fitted Y Neck Natural Scrub Set","4.3\u2605 \u00b7 1,125 reviews"]},{"x":24.98,"tip":["$24.98","Women's Scrub Set 4-Way Stretch Y-Neck Stitch Tape Top and P","4.4\u2605 \u00b7 1,470 reviews"]},{"x":19.99,"tip":["$19.99","Men\u2019s V-Neck Cargo Scrub Set with 8 Pockets","4.2\u2605 \u00b7 7,405 reviews"]}]},{"name":"Cozyfit","color":"s2","points":[{"x":19.99,"tip":["$19.99","Scrubs for Women Set - Curved V-Neck Top & Jogger Pants 8 Po","4.2\u2605 \u00b7 1,726 reviews"]},{"x":19.99,"tip":["$19.99","Scrubs for Women Set - Stretch V-Neck & Jogger Pant with 9 P","4.2\u2605 \u00b7 14,277 reviews"]},{"x":16.19,"tip":["$16.19","Scrubs for Women - V-Neck Top & Cargo Pants Scrubs Set 10 Po","4.4\u2605 \u00b7 3,148 reviews"]},{"x":34.99,"tip":["$34.99","Scrubs for Women Set","3.8\u2605 \u00b7 79 reviews"]},{"x":35.99,"tip":["$35.99","Scrubs for Women - Mock Wrap Top & Straight Leg Pants 6 Pock","4.1\u2605 \u00b7 1,022 reviews"]},{"x":19.99,"tip":["$19.99","Scrubs for Men","4.4\u2605 \u00b7 1,159 reviews"]},{"x":26.99,"tip":["$26.99","Men Scrubs Set - Stretch V-Neck Top & Jogger Pant with 9 Poc","4.3\u2605 \u00b7 4,508 reviews"]}]}],"fmt":"usd"},{"section":"Head to head","type":"bars","title":"Reviews per listing","sub":"Review count of each listing family (colors and sizes share reviews)","legend":[{"label":"Dagacci","kind":"bar","color":"s1"},{"label":"Cozyfit","kind":"bar","color":"s2"}],"read":"Dagacci leads on social proof: 87,507 reviews vs 25,919 across the tracked listings. Cozyfit's biggest listing has 14,277; Dagacci's has 69,281. Review count is what keeps a listing on page one, so the daily gain (Trends below) matters more than the total.","rows":[{"name":"Dagacci: Dagacci Scrubs Medical Uniform Women and Man Scrubs Set Medi","value":1.0,"label":"69,281","color":"s1","tip":["69,281 reviews","Dagacci Scrubs Medical Uniform Women and Man Scrubs Set Medical Scrubs Top and Pants","4.0\u2605 \u00b7 $24.99"]},{"name":"Cozyfit: Scrubs for Women Set - Stretch V-Neck & Jogger Pant with 9 P","value":0.20607381533176483,"label":"14,277","color":"s2","tip":["14,277 reviews","COZYFIT Scrubs for Women Set - Stretch V-Neck & Jogger Pant with 9 Pockets","4.2\u2605 \u00b7 $19.99"]},{"name":"Dagacci: Men\u2019s V-Neck Cargo Scrub Set with 8 Pockets","value":0.10688356114952151,"label":"7,405","color":"s1","tip":["7,405 reviews","DAGACCI MEDICAL UNIFORM\u00ae Men\u2019s V-Neck Cargo Scrub Set with 8 Pockets","4.2\u2605 \u00b7 $19.99"]},{"name":"Cozyfit: Men Scrubs Set - Stretch V-Neck Top & Jogger Pant with 9 Poc","value":0.06506834485645414,"label":"4,508","color":"s2","tip":["4,508 reviews","COZYFIT Men Scrubs Set - Stretch V-Neck Top & Jogger Pant with 9 Pockets","4.3\u2605 \u00b7 $26.99"]},{"name":"Cozyfit: Scrubs for Women - V-Neck Top & Cargo Pants Scrubs Set 10 Po","value":0.04543814321386816,"label":"3,148","color":"s2","tip":["3,148 reviews","COZYFIT Scrubs for Women - V-Neck Top & Cargo Pants Scrubs Set 10 Pockets","4.4\u2605 \u00b7 $16.19"]},{"name":"Dagacci: Scrubs for Women Set \u2013 Natural Stretch Contrast Binding Top ","value":0.03875521427231131,"label":"2,685","color":"s1","tip":["2,685 reviews","Dagacci Medical Uniform\u00ae Scrubs for Women Set \u2013 Natural Stretch Contrast Binding Top and Pants Sets for Women \u2013 9 Pockets","4.3\u2605 \u00b7 $27.99"]},{"name":"Dagacci: Women\u2019s V-Neck Jogger Scrub Set with 8 Pockets","value":0.03654681658752039,"label":"2,532","color":"s1","tip":["2,532 reviews","DAGACCI MEDICAL UNIFORM\u00ae Women\u2019s V-Neck Jogger Scrub Set with 8 Pockets","4.2\u2605 \u00b7 $23.99"]},{"name":"Dagacci: Unisex Women and Men\u2019s V-Neck Super Stretch Scrub Set","value":0.031379454684545546,"label":"2,174","color":"s1","tip":["2,174 reviews","Dagacci Medical Uniform Unisex Women and Men\u2019s V-Neck Super Stretch Scrub Set","4.1\u2605 \u00b7 $27.99"]},{"name":"Cozyfit: Scrubs for Women Set - Curved V-Neck Top & Jogger Pants 8 Po","value":0.024913035319928986,"label":"1,726","color":"s2","tip":["1,726 reviews","COZYFIT Scrubs for Women Set - Curved V-Neck Top & Jogger Pants 8 Pockets","4.2\u2605 \u00b7 $19.99"]},{"name":"Dagacci: Women's Scrub Set 4-Way Stretch Y-Neck Stitch Tape Top and P","value":0.02121793854014809,"label":"1,470","color":"s1","tip":["1,470 reviews","Dagacci Medical Uniform Women's Scrub Set 4-Way Stretch Y-Neck Stitch Tape Top and Pants","4.4\u2605 \u00b7 $24.98"]},{"name":"Cozyfit: Scrubs for Men","value":0.01672897331158615,"label":"1,159","color":"s2","tip":["1,159 reviews","COZYFIT Scrubs for Men, Top & Jogger Pants","4.4\u2605 \u00b7 $19.99"]},{"name":"Dagacci: Women's Fitted Y Neck Natural Scrub Set","value":0.0162382182705215,"label":"1,125","color":"s1","tip":["1,125 reviews","Dagacci Medical Uniform Women's Fitted Y Neck Natural Scrub Set","4.3\u2605 \u00b7 $29.99"]},{"name":"Cozyfit: Scrubs for Women - Mock Wrap Top & Straight Leg Pants 6 Pock","value":0.014751519175531531,"label":"1,022","color":"s2","tip":["1,022 reviews","COZYFIT Scrubs for Women - Mock Wrap Top & Straight Leg Pants 6 Pockets","4.1\u2605 \u00b7 $35.99"]},{"name":"Dagacci: Unisex 4-Way Stretch Scrubs Set Top and Pants","value":0.012052366449675958,"label":"835","color":"s1","tip":["835 reviews","Dagacci Medical Uniform Unisex 4-Way Stretch Scrubs Set Top and Pants","4.3\u2605 \u00b7 $29.99"]},{"name":"Cozyfit: Scrubs for Women Set","value":0.0011402837718855097,"label":"79","color":"s2","tip":["79 reviews","Scrubs for Women Set, V-Neck Top & Straight Leg Cargo Pants, 9 Pockets","3.8\u2605 \u00b7 $34.99"]}]},{"section":"Head to head","type":"bars","title":"Best-seller rank in scrubs","sub":"Rank in the listing's scrubs category; shorter bar = better rank","legend":[{"label":"Dagacci","kind":"bar","color":"s1"},{"label":"Cozyfit","kind":"bar","color":"s2"}],"read":"Top-10 placements: Dagacci 2, Cozyfit 3. Best overall is Cozyfit's Scrubs for Women Set - Stretch V-Neck & Jogger Pant with 9 P at #1 in Women's Medical Scrub Sets. Rank moves daily with sales, so read it as a trend (below), not a single number.","rows":[{"name":"Cozyfit: Scrubs for Women Set - Stretch V-Neck & Jogger Pant with 9 P","value":0.005291005291005291,"label":"#1","color":"s2","tip":["#1 in Women's Medical Scrub Sets","COZYFIT Scrubs for Women Set - Stretch V-Neck & Jogger Pant with 9 Pockets"]},{"name":"Cozyfit: Men Scrubs Set - Stretch V-Neck Top & Jogger Pant with 9 Poc","value":0.005291005291005291,"label":"#1","color":"s2","tip":["#1 in Men's Medical Scrub Sets","COZYFIT Men Scrubs Set - Stretch V-Neck Top & Jogger Pant with 9 Pockets"]},{"name":"Dagacci: Men\u2019s V-Neck Cargo Scrub Set with 8 Pockets","value":0.010582010582010581,"label":"#2","color":"s1","tip":["#2 in Men's Medical Scrub Sets","DAGACCI MEDICAL UNIFORM\u00ae Men\u2019s V-Neck Cargo Scrub Set with 8 Pockets"]},{"name":"Cozyfit: Scrubs for Men","value":0.026455026455026454,"label":"#5","color":"s2","tip":["#5 in Men's Medical Scrub Sets","COZYFIT Scrubs for Men, Top & Jogger Pants"]},{"name":"Dagacci: Dagacci Scrubs Medical Uniform Women and Man Scrubs Set Medi","value":0.031746031746031744,"label":"#6","color":"s1","tip":["#6 in Women's Medical Scrub Sets","Dagacci Scrubs Medical Uniform Women and Man Scrubs Set Medical Scrubs Top and Pants"]},{"name":"Cozyfit: Scrubs for Women - V-Neck Top & Cargo Pants Scrubs Set 10 Po","value":0.08465608465608465,"label":"#16","color":"s2","tip":["#16 in Women's Medical Scrub Sets","COZYFIT Scrubs for Women - V-Neck Top & Cargo Pants Scrubs Set 10 Pockets"]},{"name":"Cozyfit: Scrubs for Women Set - Curved V-Neck Top & Jogger Pants 8 Po","value":0.1111111111111111,"label":"#21","color":"s2","tip":["#21 in Women's Medical Scrub Sets","COZYFIT Scrubs for Women Set - Curved V-Neck Top & Jogger Pants 8 Pockets"]},{"name":"Cozyfit: Scrubs for Women - Mock Wrap Top & Straight Leg Pants 6 Pock","value":0.13227513227513227,"label":"#25","color":"s2","tip":["#25 in Women's Medical Scrub Sets","COZYFIT Scrubs for Women - Mock Wrap Top & Straight Leg Pants 6 Pockets"]},{"name":"Dagacci: Unisex 4-Way Stretch Scrubs Set Top and Pants","value":0.14814814814814814,"label":"#28","color":"s1","tip":["#28 in Men's Medical Scrub Sets","Dagacci Medical Uniform Unisex 4-Way Stretch Scrubs Set Top and Pants"]},{"name":"Dagacci: Unisex Women and Men\u2019s V-Neck Super Stretch Scrub Set","value":0.15343915343915343,"label":"#29","color":"s1","tip":["#29 in Men's Medical Scrub Sets","Dagacci Medical Uniform Unisex Women and Men\u2019s V-Neck Super Stretch Scrub Set"]},{"name":"Dagacci: Women\u2019s V-Neck Jogger Scrub Set with 8 Pockets","value":0.20634920634920634,"label":"#39","color":"s1","tip":["#39 in Women's Medical Scrub Sets","DAGACCI MEDICAL UNIFORM\u00ae Women\u2019s V-Neck Jogger Scrub Set with 8 Pockets"]},{"name":"Cozyfit: Scrubs for Women Set","value":0.4603174603174603,"label":"#87","color":"s2","tip":["#87 in Women's Medical Scrub Sets","Scrubs for Women Set, V-Neck Top & Straight Leg Cargo Pants, 9 Pockets"]},{"name":"Dagacci: Scrubs for Women Set \u2013 Natural Stretch Contrast Binding Top ","value":0.6190476190476191,"label":"#117","color":"s1","tip":["#117 in Women's Medical Scrub Sets","Dagacci Medical Uniform\u00ae Scrubs for Women Set \u2013 Natural Stretch Contrast Binding Top and Pants Sets for Women \u2013 9 Pockets"]},{"name":"Dagacci: Women's Scrub Set 4-Way Stretch Y-Neck Stitch Tape Top and P","value":0.7248677248677249,"label":"#137","color":"s1","tip":["#137 in Women's Medical Scrub Sets","Dagacci Medical Uniform Women's Scrub Set 4-Way Stretch Y-Neck Stitch Tape Top and Pants"]},{"name":"Dagacci: Women's Fitted Y Neck Natural Scrub Set","value":1.0,"label":"#189","color":"s1","tip":["#189 in Women's Medical Scrub Sets","Dagacci Medical Uniform Women's Fitted Y Neck Natural Scrub Set"]}]},{"section":"Trends","type":"lines","title":"Amazon reviews over time","sub":"Tracked listings, daily","read":"One day of data so far (2026-10-19). The line appears after the second daily run; week-over-week reads start after seven.","series":[{"name":"Dagacci","color":"s1","points":[["2026-10-19",87507]]},{"name":"Cozyfit","color":"s2","points":[["2026-10-19",25919]]}],"fmt":"num"},{"section":"Trends","type":"lines","title":"Median Amazon price over time","sub":"Tracked listings, daily","read":"One day of data so far (2026-10-19). The line appears after the second daily run; week-over-week reads start after seven.","series":[{"name":"Dagacci","color":"s1","points":[["2026-10-19",26.49]]},{"name":"Cozyfit","color":"s2","points":[["2026-10-19",19.99]]}],"fmt":"usd"},{"section":"Trends","type":"lines","title":"Best scrubs rank over time","sub":"Tracked listings, daily","read":"One day of data so far (2026-10-19). The line appears after the second daily run; week-over-week reads start after seven.","series":[{"name":"Dagacci","color":"s1","points":[["2026-10-19",2]]},{"name":"Cozyfit","color":"s2","points":[["2026-10-19",1]]}],"fmt":"rank"},{"section":"Listings","type":"table","title":"Cozyfit listings","sub":"Tracked listings. Rank is the best rank in a scrubs category (lower is better).","columns":[{"label":"Listing"},{"label":"Price","fmt":"usd"},{"label":"Rating","fmt":"stars"},{"label":"Reviews","fmt":"int"},{"label":"Scrubs rank","fmt":"rank"},{"label":"Category / note"}],"rows":[["Scrubs for Women Set - Curved V-Neck Top & Jogger Pants 8 Po","https://www.amazon.com/dp/B0D423PFVC",19.99,4.2,1726,21,"Women's Medical Scrub Sets"],["Scrubs for Women Set - Stretch V-Neck & Jogger Pant with 9 P","https://www.amazon.com/dp/B0CL56RRPN",19.99,4.2,14277,1,"Women's Medical Scrub Sets"],["Scrubs for Women - V-Neck Top & Cargo Pants Scrubs Set 10 Po","https://www.amazon.com/dp/B0CZ3VF1GJ",16.19,4.4,3148,16,"Women's Medical Scrub Sets"],["Scrubs for Women Set","https://www.amazon.com/dp/B0G6Y6LC3M",34.99,3.8,79,87,"Women's Medical Scrub Sets"],["Scrubs for Women - Mock Wrap Top & Straight Leg Pants 6 Pock","https://www.amazon.com/dp/B0DR8G72Z7",35.99,4.1,1022,25,"Women's Medical Scrub Sets"],["Scrubs for Men","https://www.amazon.com/dp/B0DHXMZ66N",19.99,4.4,1159,5,"Men's Medical Scrub Sets"],["Men Scrubs Set - Stretch V-Neck Top & Jogger Pant with 9 Poc","https://www.amazon.com/dp/B0CGR6639D",26.99,4.3,4508,1,"Men's Medical Scrub Sets"]],"sort":3},{"section":"Listings","type":"table","title":"Dagacci listings","sub":"Tracked listings. Rank is the best rank in a scrubs category (lower is better).","columns":[{"label":"Listing"},{"label":"Price","fmt":"usd"},{"label":"Rating","fmt":"stars"},{"label":"Reviews","fmt":"int"},{"label":"Scrubs rank","fmt":"rank"},{"label":"Category / note"}],"rows":[["Dagacci Scrubs Medical Uniform Women and Man Scrubs Set Medi","https://www.amazon.com/dp/B00FT739RA",24.99,4.0,69281,6,"Women's Medical Scrub Sets"],["Unisex Women and Men\u2019s V-Neck Super Stretch Scrub Set","https://www.amazon.com/dp/B07V39V7SC",27.99,4.1,2174,29,"Men's Medical Scrub Sets"],["Unisex 4-Way Stretch Scrubs Set Top and Pants","https://www.amazon.com/dp/B0D373PCHS",29.99,4.3,835,28,"Men's Medical Scrub Sets"],["Women\u2019s V-Neck Jogger Scrub Set with 8 Pockets","https://www.amazon.com/dp/B09S28VVGW",23.99,4.2,2532,39,"Women's Medical Scrub Sets"],["Scrubs for Women Set \u2013 Natural Stretch Contrast Binding Top ","https://www.amazon.com/dp/B08WTKYK4G",27.99,4.3,2685,117,"Women's Medical Scrub Sets"],["Women's Fitted Y Neck Natural Scrub Set","https://www.amazon.com/dp/B08YRY3TTC",29.99,4.3,1125,189,"Women's Medical Scrub Sets"],["Women's Scrub Set 4-Way Stretch Y-Neck Stitch Tape Top and P","https://www.amazon.com/dp/B0DRPMCLV5",24.98,4.4,1470,137,"Women's Medical Scrub Sets"],["Men\u2019s V-Neck Cargo Scrub Set with 8 Pockets","https://www.amazon.com/dp/B06XYTJM5G",19.99,4.2,7405,2,"Men's Medical Scrub Sets"]],"sort":3}],"opportunities":[{"priority":"High","title":"Close the rating gap","text":"Cozyfit rates 4.25\u2605 vs Dagacci's 4.05\u2605. Shoppers see stars before price; the review agent's defect themes for the lowest-rated listing are the place to start."},{"priority":"Watch","title":"Cozyfit is renaming itself \u201cCOZY SCRUBS\u201d","text":"Some Amazon listings now read \u201cCOZY SCRUBS (Previously COZYFIT)\u201d (seen 2026-10-19). A rename splits brand search for a while: bid on \u201ccozyfit scrubs\u201d and \u201ccozy scrubs\u201d as Sponsored Products keywords while shoppers relearn the name."}],"changes":[],"note":"Cozyfit sells only on Amazon, so this tab compares Amazon listings. Amazon blocks some automated reads; blocked listings show their last good values."},{"id":"market","label":"Scrub market","tiles":[],"charts":[{"section":"Market","type":"bars","title":"Typical outfit price","sub":"Median scrub set, or median top + median pant where a brand sells separates","read":"Dagacci is the #1 cheapest of 8 brands at $27.99; the peer median is $64.50. The priciest, Medelita and Healing Hands, charge 2.9\u20133.9\u00d7 Dagacci's price, so shoppers pay up for brand and fabric story. Dagacci owns the value end; the risk is being seen as only cheap.","legend":[{"label":"Dagacci","kind":"bar","color":"s1"},{"label":"Other brands","kind":"bar","color":"muted"}],"rows":[{"name":"Medelita","value":1.0,"label":"$108","color":"muted","tip":["$108","Medelita","www.medelita.com"]},{"name":"Healing Hands","value":0.7453703703703703,"label":"$80.50","color":"muted","tip":["$80.50","Healing Hands","www.healinghandsscrubs.com"]},{"name":"Grey's Anatomy","value":0.610925925925926,"label":"$65.98","color":"muted","tip":["$65.98","Grey's Anatomy","www.greysanatomyscrubs.com"]},{"name":"Jaanuu","value":0.5972222222222222,"label":"$64.50","color":"muted","tip":["$64.50","Jaanuu","www.jaanuu.com"]},{"name":"Cherokee","value":0.5833333333333334,"label":"$63.00","color":"muted","tip":["$63.00","Cherokee","www.cherokeeuniforms.com"]},{"name":"Mandala","value":0.46277777777777773,"label":"$49.98","color":"muted","tip":["$49.98","Mandala","www.mandalascrubs.com"]},{"name":"koi","value":0.44425925925925924,"label":"$47.98","color":"muted","tip":["$47.98","koi","www.koihappiness.com"]},{"name":"Dagacci","value":0.25916666666666666,"label":"$27.99","color":"s1","tip":["$27.99","Dagacci","www.dagacci.com"]}]},{"section":"Market","type":"bars","title":"Share of products marked down","sub":"Apparel showing a lower price than its compare-at price","read":"Dagacci shows a markdown on 37% of apparel vs a peer median of 16%. Heavier markdowns than peers train shoppers to wait for a sale; check that the compare-at prices are real prices the products sold at.","legend":[{"label":"Dagacci","kind":"bar","color":"s1"},{"label":"Other brands","kind":"bar","color":"muted"}],"rows":[{"name":"koi","value":1.0,"label":"55%","color":"muted","tip":["55%","koi","www.koihappiness.com"]},{"name":"Jaanuu","value":0.8611481425488929,"label":"47%","color":"muted","tip":["47%","Jaanuu","www.jaanuu.com"]},{"name":"Dagacci","value":0.6725388601036268,"label":"37%","color":"s1","tip":["37%","Dagacci","www.dagacci.com"]},{"name":"Cherokee","value":0.2907228501888877,"label":"16%","color":"muted","tip":["16%","Cherokee","www.cherokeeuniforms.com"]},{"name":"Healing Hands","value":0.20379965457685661,"label":"11%","color":"muted","tip":["11%","Healing Hands","www.healinghandsscrubs.com"]},{"name":"Mandala","value":0.0012511574974022578,"label":"0%","color":"muted","tip":["0%","Mandala","www.mandalascrubs.com"]},{"name":"Grey's Anatomy","value":0.0,"label":"0%","color":"muted","tip":["0%","Grey's Anatomy","www.greysanatomyscrubs.com"]},{"name":"Medelita","value":0.0,"label":"0%","color":"muted","tip":["0%","Medelita","www.medelita.com"]}]},{"section":"Market","type":"bars","title":"New styles in the last 90 days","sub":"Distinct styles first listed in the last 90 days","read":"Dagacci added 0 new styles; the peer median is 31. Frequent drops (new colors, limited prints) give paid social something new to say and bring repeat buyers back.","legend":[{"label":"Dagacci","kind":"bar","color":"s1"},{"label":"Other brands","kind":"bar","color":"muted"}],"rows":[{"name":"Healing Hands","value":1.0,"label":"53","color":"muted","tip":["53","Healing Hands","www.healinghandsscrubs.com"]},{"name":"Grey's Anatomy","value":0.660377358490566,"label":"35","color":"muted","tip":["35","Grey's Anatomy","www.greysanatomyscrubs.com"]},{"name":"Jaanuu","value":0.6037735849056604,"label":"32","color":"muted","tip":["32","Jaanuu","www.jaanuu.com"]},{"name":"Cherokee","value":0.5660377358490566,"label":"30","color":"muted","tip":["30","Cherokee","www.cherokeeuniforms.com"]},{"name":"Mandala","value":0.5283018867924528,"label":"28","color":"muted","tip":["28","Mandala","www.mandalascrubs.com"]},{"name":"koi","value":0.37735849056603776,"label":"20","color":"muted","tip":["20","koi","www.koihappiness.com"]},{"name":"Dagacci","value":0.0,"label":"0","color":"s1","tip":["0","Dagacci","www.dagacci.com"]}]},{"section":"Market","type":"bars","title":"Share of options in stock","sub":"Color/size options that can be bought now","read":"Dagacci 79% vs peer median 72%. Size availability is the quiet conversion killer in scrubs: buyers often need one exact size in a hospital-mandated color.","legend":[{"label":"Dagacci","kind":"bar","color":"s1"},{"label":"Other brands","kind":"bar","color":"muted"}],"rows":[{"name":"Dagacci","value":1.0,"label":"79%","color":"s1","tip":["79%","Dagacci","www.dagacci.com"]},{"name":"Cherokee","value":0.9771992325304066,"label":"77%","color":"muted","tip":["77%","Cherokee","www.cherokeeuniforms.com"]},{"name":"Jaanuu","value":0.9541733099291404,"label":"75%","color":"muted","tip":["75%","Jaanuu","www.jaanuu.com"]},{"name":"koi","value":0.9294203102519808,"label":"74%","color":"muted","tip":["74%","koi","www.koihappiness.com"]},{"name":"Healing Hands","value":0.9083152633427755,"label":"72%","color":"muted","tip":["72%","Healing Hands","www.healinghandsscrubs.com"]},{"name":"Grey's Anatomy","value":0.8427170314418285,"label":"67%","color":"muted","tip":["67%","Grey's Anatomy","www.greysanatomyscrubs.com"]},{"name":"Medelita","value":0.7205604735136298,"label":"57%","color":"muted","tip":["57%","Medelita","www.medelita.com"]},{"name":"Mandala","value":0.5249206775665679,"label":"42%","color":"muted","tip":["42%","Mandala","www.mandalascrubs.com"]}]},{"section":"Market","type":"bars","title":"Colors per style","sub":"Median colors offered per apparel style","read":"Dagacci offers a median of 10 colors per style vs 3 for peers. Hospitals mandate colors by role, so breadth of color is coverage of buyers, not decoration \u2014 a real Dagacci strength to say out loud in listings and ads.","legend":[{"label":"Dagacci","kind":"bar","color":"s1"},{"label":"Other brands","kind":"bar","color":"muted"}],"rows":[{"name":"Dagacci","value":1.0,"label":"10","color":"s1","tip":["10","Dagacci","www.dagacci.com"]},{"name":"Jaanuu","value":0.7,"label":"7","color":"muted","tip":["7","Jaanuu","www.jaanuu.com"]},{"name":"Grey's Anatomy","value":0.6,"label":"6","color":"muted","tip":["6","Grey's Anatomy","www.greysanatomyscrubs.com"]},{"name":"Mandala","value":0.6,"label":"6","color":"muted","tip":["6","Mandala","www.mandalascrubs.com"]},{"name":"Healing Hands","value":0.3,"label":"3","color":"muted","tip":["3","Healing Hands","www.healinghandsscrubs.com"]},{"name":"koi","value":0.1,"label":"1","color":"muted","tip":["1","koi","www.koihappiness.com"]},{"name":"Cherokee","value":0.1,"label":"1","color":"muted","tip":["1","Cherokee","www.cherokeeuniforms.com"]},{"name":"Medelita","value":0.1,"label":"1","color":"muted","tip":["1","Medelita","www.medelita.com"]}]},{"section":"Brands","type":"table","title":"Brand comparison","sub":"Each brand's own store, today","columns":[{"label":"Brand"},{"label":"Styles","fmt":"int"},{"label":"Products","fmt":"int"},{"label":"Outfit","fmt":"usd"},{"label":"Top","fmt":"usd"},{"label":"Pant","fmt":"usd"},{"label":"Marked down","fmt":"pct"},{"label":"Typical markdown","fmt":"pct"},{"label":"New (90d)","fmt":"int"},{"label":"In stock","fmt":"pct"}],"rows":[["Dagacci","https://www.dagacci.com",36,36,27.99,13.49,13.99,0.36666666666666664,0.15156107911488337,0,0.791244426428861],["Jaanuu","https://www.jaanuu.com",253,1908,64.5,40.0,46.0,0.46949602122015915,0.379367816091954,32,0.7549843133286105],["koi","https://www.koihappiness.com",589,1232,47.98,21.99,25.99,0.5451977401129944,0.38722168441432725,20,0.7353986402966626],["Grey's Anatomy","https://www.greysanatomyscrubs.com",182,1334,65.98,30.99,34.99,0.0,null,35,0.666795154185022],["Cherokee","https://www.cherokeeuniforms.com",339,373,63.0,26.0,31.0,0.1585014409221902,0.3263157894736842,30,0.7732034462502447],["Healing Hands","https://www.healinghandsscrubs.com",155,181,80.5,33.0,41.0,0.1111111111111111,0.5384615384615384,53,0.7186993895602342],["Mandala","https://www.mandalascrubs.com",113,1572,49.98,19.99,29.99,0.0006821282401091405,0.5751437859464867,28,0.4153405604418081],["Medelita","https://www.medelita.com",57,57,108.0,46.0,62.0,0.0,null,null,0.5701394585726005]],"sort":3},{"section":"Trends","type":"table","title":"Week-over-week moves","sub":"Change in typical outfit price and product count vs ~7 days earlier","read":"Changes appear after the second daily run.","columns":[{"label":"Brand"},{"label":"Outfit","fmt":"usd"},{"label":"Price change","fmt":"pct_signed"},{"label":"Products added","fmt":"int_signed"}],"rows":[["Dagacci",null,27.99,null,null],["Jaanuu",null,64.5,null,null],["koi",null,47.98,null,null],["Grey's Anatomy",null,65.98,null,null],["Cherokee",null,63.0,null,null],["Healing Hands",null,80.5,null,null],["Mandala",null,49.98,null,null],["Medelita",null,108.0,null,null]]}],"opportunities":[{"priority":"Medium","title":"A \u201cpremium\u201d line has room","text":"Healing Hands, Medelita sell sets at 2.5\u00d7+ Dagacci's price. A small premium-fabric line ($40\u201355) could capture shoppers trading up without touching the value core."}],"changes":[],"note":"From each brand's own online store (Shopify catalog feeds). Product counts aren't comparable across brands that list each color separately; use styles and prices."}],"errors":[]};
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const svgEl = (tag, attrs) => { const e = document.createElementNS("http://www.w3.org/2000/svg", tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+const color = (c) => `var(--${c || "s1"})`;
+const F = {
+  usd: (v) => v == null ? "–" : "$" + v.toFixed(2),
+  pct: (v) => v == null ? "–" : Math.round(v * 100) + "%",
+  pct_signed: (v) => v == null ? "–" : (v >= 0 ? "+" : "") + (v * 100).toFixed(1) + "%",
+  int: (v) => v == null ? "–" : Math.round(v).toLocaleString(),
+  int_signed: (v) => v == null ? "–" : (v >= 0 ? "+" : "") + Math.round(v).toLocaleString(),
+  stars: (v) => v == null ? "–" : v.toFixed(1) + " ★",
+  rank: (v) => v == null ? "–" : "#" + Math.round(v).toLocaleString(),
+  num: (v) => v == null ? "–" : (Math.abs(v) >= 100 ? Math.round(v).toLocaleString() : (+v.toFixed(2)).toString()),
+};
+
+$("meta").textContent = `Last run ${new Date(A.collected_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}` +
+  ` · ${A.days} day${A.days === 1 ? "" : "s"} of history since ${A.first_date}`;
+if (A.errors.length) $("errors").textContent = "Collection problems today: " + A.errors.join("; ");
+
+// Tooltip
+const tip = $("tip");
+function showTip(e, lines) {
+  tip.replaceChildren(el("strong", null, lines[0]), ...lines.slice(1).filter(Boolean).map((l) => el("div", "t", l)));
+  tip.style.display = "block";
+  const r = e.currentTarget.getBoundingClientRect();
+  const x = e.clientX || r.left + r.width / 2, y = e.clientY || r.top;
+  tip.style.left = Math.max(8, Math.min(x + 14, innerWidth - tip.offsetWidth - 8)) + "px";
+  tip.style.top = Math.max(8, y - tip.offsetHeight - 12) + "px";
+}
+const hideTip = () => { tip.style.display = "none"; };
+function hover(node, lines) {
+  node.addEventListener("pointermove", (e) => showTip(e, lines));
+  node.addEventListener("pointerleave", hideTip);
+  node.addEventListener("focus", (e) => showTip(e, lines));
+  node.addEventListener("blur", hideTip);
+}
+
+function legend(items) {
+  const lg = el("div", "legend");
+  for (const it of items) {
+    const s = el("span");
+    const k = el("i", it.kind === "tick" ? "key-tick" : it.kind === "line" ? "key-line" : "key-bar");
+    if (it.kind !== "tick") k.style.background = color(it.color);
+    s.append(k, document.createTextNode(it.label));
+    lg.append(s);
+  }
+  return lg;
+}
+
+// --- chart types --------------------------------------------------------------
+function bars(c) {
+  const box = el("div", "rows");
+  for (const r of c.rows) {
+    const row = el("div", "row"); row.tabIndex = 0;
+    const plot = el("div", "plot");
+    if (r.track) { const t = el("div", "bar track"); t.style.width = "100%"; plot.append(t); }
+    const b = el("div", "bar"); b.style.width = Math.max(r.value * 100, 0.6) + "%"; b.style.background = color(r.color); plot.append(b);
+    if (r.tick) { const k = el("div", "tick"); k.style.left = `calc(${r.tick * 100}% - 1px)`; plot.append(k); }
+    const n = el("div", "name", r.name); n.title = r.name;
+    row.append(n, plot, el("div", "val", r.label));
+    hover(row, r.tip);
+    box.append(row);
+  }
+  return box;
+}
+
+function lines(c) {
+  const all = c.series.flatMap((s) => s.points);
+  const dates = [...new Set(all.map((p) => p[0]))].sort();
+  if (dates.length < 2) return el("div", "empty", "The line starts after the second daily run. Today's value is in the tiles and charts above.");
+  const W = 640, H = 220, L = 52, R = 90, T = 12, B = 26;
+  const vals = all.map((p) => p[1]);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (c.fmt === "rank" || c.fmt === "usd" || c.fmt === "pct") { const pad = (hi - lo) * 0.15 || Math.abs(hi) * 0.05 || 1; lo -= pad; hi += pad; }
+  else { lo = Math.min(0, lo); hi = hi * 1.05 || 1; }
+  const t0 = Date.parse(dates[0]), t1 = Date.parse(dates[dates.length - 1]);
+  const x = (d) => L + (Date.parse(d) - t0) / (t1 - t0) * (W - L - R);
+  const inv = c.fmt === "rank";
+  const y = (v) => inv ? T + (v - lo) / (hi - lo) * (H - T - B) : H - B - (v - lo) / (hi - lo) * (H - T - B);
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img", "aria-label": c.title });
+  const f = F[c.fmt] || F.num;
+  for (let i = 0; i <= 4; i++) {
+    const v = lo + (hi - lo) * i / 4, yy = y(v);
+    svg.append(svgEl("line", { x1: L, x2: W - R, y1: yy, y2: yy, class: "gl" }));
+    const t = svgEl("text", { x: L - 6, y: yy + 4, "text-anchor": "end" }); t.textContent = f(v); svg.append(t);
+  }
+  for (const d of [dates[0], dates[dates.length - 1]]) {
+    const t = svgEl("text", { x: x(d), y: H - 6, "text-anchor": d === dates[0] ? "start" : "end" });
+    t.textContent = new Date(d + "T12:00").toLocaleDateString(undefined, { month: "short", day: "numeric" }); svg.append(t);
+  }
+  for (const s of c.series) {
+    if (!s.points.length) continue;
+    svg.append(svgEl("path", { d: s.points.map((p, i) => (i ? "L" : "M") + x(p[0]) + " " + y(p[1])).join(""),
+      fill: "none", stroke: color(s.color), "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    const last = s.points[s.points.length - 1];
+    svg.append(svgEl("circle", { cx: x(last[0]), cy: y(last[1]), r: 4, fill: color(s.color), stroke: "var(--surface-1)", "stroke-width": 2 }));
+    const t = svgEl("text", { x: x(last[0]) + 8, y: y(last[1]) + 4 }); t.textContent = f(last[1]) + " " + s.name; t.style.fill = "var(--text-secondary)"; svg.append(t);
+  }
+  // Crosshair: one readout of every series at the hovered date.
+  const hit = svgEl("rect", { x: L, y: T, width: W - L - R, height: H - T - B, fill: "transparent" });
+  const cross = svgEl("line", { y1: T, y2: H - B, stroke: "var(--text-muted)", "stroke-width": 1, visibility: "hidden" });
+  svg.append(cross, hit);
+  hit.addEventListener("pointermove", (e) => {
+    const r = svg.getBoundingClientRect(), px = (e.clientX - r.left) / r.width * W;
+    const d = dates.reduce((a, b) => Math.abs(x(b) - px) < Math.abs(x(a) - px) ? b : a);
+    cross.setAttribute("x1", x(d)); cross.setAttribute("x2", x(d)); cross.setAttribute("visibility", "visible");
+    const lines_ = [d, ...c.series.map((s) => { const p = s.points.find((q) => q[0] === d); return p ? `${s.name}: ${f(p[1])}` : null; })];
+    showTip({ currentTarget: hit, clientX: e.clientX, clientY: e.clientY }, lines_);
+  });
+  hit.addEventListener("pointerleave", () => { cross.setAttribute("visibility", "hidden"); hideTip(); });
+  const wrap = el("div");
+  if (c.series.length > 1) wrap.append(legend(c.series.map((s) => ({ label: s.name, kind: "line", color: s.color }))));
+  wrap.append(svg);
+  return wrap;
+}
+
+function dots(c) {
+  const all = c.series.flatMap((s) => s.points.map((p) => p.x));
+  if (!all.length) return el("div", "empty", "No prices could be read today.");
+  const W = 640, rowH = 44, L = 80, R = 20, T = 8, H = T + rowH * c.series.length + 24;
+  let lo = Math.min(...all), hi = Math.max(...all); const pad = (hi - lo) * 0.08 || 2; lo = Math.max(0, lo - pad); hi += pad;
+  const x = (v) => L + (v - lo) / (hi - lo) * (W - L - R);
+  const f = F[c.fmt] || F.num;
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img", "aria-label": c.title });
+  for (let i = 0; i <= 4; i++) {
+    const v = lo + (hi - lo) * i / 4;
+    svg.append(svgEl("line", { x1: x(v), x2: x(v), y1: T, y2: H - 22, class: "gl" }));
+    const t = svgEl("text", { x: x(v), y: H - 6, "text-anchor": "middle" }); t.textContent = f(v); svg.append(t);
+  }
+  c.series.forEach((s, i) => {
+    const cy = T + rowH * i + rowH / 2;
+    const name = svgEl("text", { x: 0, y: cy + 4 }); name.textContent = s.name; name.style.fill = "var(--text-secondary)"; name.style.fontSize = "12px"; svg.append(name);
+    const xs = s.points.map((p) => p.x).sort((a, b) => a - b);
+    if (xs.length) {
+      const m = xs[Math.floor((xs.length - 1) / 2)] / 2 + xs[Math.ceil((xs.length - 1) / 2)] / 2;
+      svg.append(svgEl("line", { x1: x(m), x2: x(m), y1: cy - 14, y2: cy + 14, stroke: "var(--marker)", "stroke-width": 2 }));
+    }
+    s.points.forEach((p, j) => {
+      const g = svgEl("circle", { cx: x(p.x), cy: cy + ((j % 3) - 1) * 6, r: 5, fill: color(s.color), stroke: "var(--surface-1)", "stroke-width": 2, tabindex: 0 });
+      hover(g, p.tip); svg.append(g);
+    });
+  });
+  const wrap = el("div");
+  wrap.append(legend([...c.series.map((s) => ({ label: s.name, kind: "bar", color: s.color })), { label: "Median", kind: "tick" }]), svg);
+  return wrap;
+}
+
+function table(c) {
+  const t = el("table");
+  let sortCol = c.sort ?? 0, dir = -1;
+  const isNum = (col) => !!col.fmt;
+  function draw() {
+    const head = el("tr");
+    c.columns.forEach((col, i) => {
+      const th = el("th", isNum(col) ? "num" : null, col.label); th.tabIndex = 0;
+      th.setAttribute("aria-sort", i === sortCol ? (dir > 0 ? "ascending" : "descending") : "none");
+      const go = () => { dir = i === sortCol ? -dir : (isNum(col) ? -1 : 1); sortCol = i; draw(); t.tHead.rows[0].cells[i].focus({ preventScroll: true }); };
+      th.addEventListener("click", go);
+      th.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+      head.append(th);
+    });
+    // Rows are [name, url, ...values]; url may be null.
+    const val = (r, i) => i === 0 ? r[0] : r[i + 1];
+    const rows = [...c.rows].sort((a, b) => {
+      const x = val(a, sortCol), y = val(b, sortCol);
+      if (x == null) return 1; if (y == null) return -1;
+      return (x > y ? 1 : x < y ? -1 : 0) * dir;
+    });
+    const body = rows.map((r) => {
+      const tr = el("tr");
+      c.columns.forEach((col, i) => {
+        const td = el("td", isNum(col) ? "num" : null);
+        if (i === 0 && r[1]) { const a = el("a", null, r[0]); a.href = r[1]; td.append(a); }
+        else { const v = val(r, i); td.textContent = col.fmt ? F[col.fmt](v) : (v ?? ""); }
+        tr.append(td);
+      });
+      return tr;
+    });
+    t.replaceChildren(el("thead"), el("tbody"));
+    t.tHead.append(head); t.tBodies[0].append(...body);
+  }
+  draw();
+  const w = el("div", "table-wrap"); w.append(t); return w;
+}
+
+const KINDS = { bars, lines, dots, table };
+function card(c) {
+  const k = el("section", "card");
+  k.append(el("h3", null, c.title), el("p", "sub", c.sub));
+  if (c.legend) k.append(legend(c.legend));
+  k.append(KINDS[c.type](c));
+  if (c.read) { const r = el("p", "read"); r.append(el("b", null, "What it means: "), document.createTextNode(c.read)); k.append(r); }
+  return k;
+}
+
+function tileEl(t) {
+  const k = el("div", "tile");
+  k.append(el("div", "label", t.label));
+  const d = (x) => el("span", "delta " + (x.good === true ? "good" : x.good === false ? "bad" : "flat"), (x.good === true ? "▲ " : x.good === false ? "▼ " : "") + x.text);
+  if (t.pair) {
+    const p = el("div", "pair");
+    for (const s of t.pair) {
+      const r = el("div"); const b = el("span", "b"); const dt = el("i", "dot"); dt.style.background = color(s.color);
+      b.append(dt, document.createTextNode(s.brand)); r.append(b, el("span", "v", s.value));
+      if (s.delta) r.append(d(s.delta));
+      p.append(r);
+    }
+    k.append(p);
+  } else {
+    k.append(el("div", "value", t.value));
+  }
+  if (t.note) k.append(el("div", "sub", t.note));
+  if (t.delta) k.append(d(t.delta));
+  return k;
+}
+
+function panel(tab) {
+  const p = el("div"); p.id = "panel-" + tab.id; p.setAttribute("role", "tabpanel");
+  if (tab.note) p.append(el("p", "note", tab.note));
+  if (tab.tiles.length) { const ts = el("div", "tiles"); tab.tiles.forEach((t) => ts.append(tileEl(t))); p.append(ts); }
+  const top = el("div", "grid2");
+  if (tab.opportunities.length) {
+    const k = el("section", "card"); k.append(el("h3", null, "Opportunities"), el("p", "sub", "Ranked from today's data"));
+    const list = el("div", "opps");
+    for (const o of tab.opportunities) {
+      const row = el("div", "opp"); const h = el("h4");
+      if (o.url) { const a = el("a", null, o.title); a.href = o.url; h.append(a); } else h.textContent = o.title;
+      row.append(el("span", "pri " + o.priority, o.priority), h, el("p", null, o.text));
+      list.append(row);
+    }
+    k.append(list); top.append(k);
+  }
+  if (tab.id !== "market") {
+    const k = el("section", "card"); k.append(el("h3", null, "What changed since the last run"));
+    if (tab.changes.length) {
+      const ul = el("ul", "changes");
+      for (const c of tab.changes.slice(0, 40)) { const li = el("li"); li.append(el("span", "k", c.kind), document.createTextNode(c.text)); ul.append(li); }
+      k.append(ul);
+      if (tab.changes.length > 40) k.append(el("p", "note", `…and ${tab.changes.length - 40} more`));
+    } else {
+      k.append(el("p", "sub", A.days < 2 ? "Changes appear after the second daily run." : "Nothing changed in prices, stock, reviews or ranks."));
+    }
+    top.append(k);
+  }
+  if (top.children.length) p.append(top);
+  const sections = [...new Set(tab.charts.map((c) => c.section))];
+  for (const s of sections) {
+    p.append(el("h2", "section", s));
+    const g = el("div", "grid2");
+    tab.charts.filter((c) => c.section === s).forEach((c) => {
+      const k = card(c);
+      if (c.type === "table" || (c.rows && c.rows.length > 14)) k.style.gridColumn = "1 / -1";
+      g.append(k);
+    });
+    p.append(g);
+  }
+  return p;
+}
+
+// Tabs
+const nav = $("tabs"), panels = $("panels");
+const buttons = A.tabs.map((tab) => {
+  const b = el("button", null, tab.label); b.setAttribute("role", "tab"); b.id = "tab-" + tab.id;
+  b.addEventListener("click", () => select(tab.id));
+  nav.append(b); panels.append(panel(tab));
+  return b;
+});
+nav.addEventListener("keydown", (e) => {
+  const i = buttons.indexOf(document.activeElement); if (i < 0) return;
+  const j = e.key === "ArrowRight" ? (i + 1) % buttons.length : e.key === "ArrowLeft" ? (i - 1 + buttons.length) % buttons.length : -1;
+  if (j >= 0) { buttons[j].focus(); select(A.tabs[j].id); }
+});
+function select(id) {
+  A.tabs.forEach((t, i) => {
+    const on = t.id === id;
+    buttons[i].setAttribute("aria-selected", on); buttons[i].tabIndex = on ? 0 : -1;
+    $("panel-" + t.id).hidden = !on;
+  });
+  history.replaceState(null, "", "#" + id);
+}
+select(A.tabs.some((t) => "#" + t.id === location.hash) ? location.hash.slice(1) : A.tabs[0].id);
+</script>
+</body>
+</html>

@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dagacci Market Tracker</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface-0: #f4f3ef;
+  --surface-1: #fcfcfb;
+  --border: #e4e2dc;
+  --grid: #ebe9e4;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #77756f;
+  --s1: #2a78d6;
+  --s2: #eb6834;
+  --muted: #b5b3ab;
+  --track: #cde2fb;
+  --marker: #0b0b0b;
+  --link: #1c5cab;
+  --good: #0a7a3d;
+  --bad: #c2362f;
+  --chip: #ecebe6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface-0: #121211;
+    --surface-1: #1a1a19;
+    --border: #2e2e2c;
+    --grid: #272725;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #96958c;
+    --s1: #3987e5;
+    --s2: #d95926;
+    --muted: #5d5c57;
+    --track: #184f95;
+    --marker: #f0efec;
+    --link: #86b6ef;
+    --good: #4cc27f;
+    --bad: #f07a72;
+    --chip: #262624;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-0: #121211;
+  --surface-1: #1a1a19;
+  --border: #2e2e2c;
+  --grid: #272725;
+  --text-primary: #f0efec;
+  --text-secondary: #c3c2b7;
+  --text-muted: #96958c;
+  --s1: #3987e5;
+  --s2: #d95926;
+  --muted: #5d5c57;
+  --track: #184f95;
+  --marker: #f0efec;
+  --link: #86b6ef;
+  --good: #4cc27f;
+  --bad: #f07a72;
+  --chip: #262624;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--surface-0); color: var(--text-primary);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+}
+a { color: var(--link); }
+main { max-width: 1120px; margin: 0 auto; padding: 28px 16px 64px; }
+header h1 { font-size: 28px; margin: 0 0 2px; font-weight: 650; letter-spacing: -0.01em; }
+header p { margin: 0; color: var(--text-secondary); }
+.meta { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+nav { display: flex; gap: 4px; margin: 20px 0 4px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+nav button {
+  font: inherit; font-weight: 550; background: none; border: 0; padding: 10px 14px; cursor: pointer;
+  color: var(--text-secondary); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap;
+}
+nav button[aria-selected="true"] { color: var(--text-primary); border-bottom-color: var(--s1); }
+nav button:focus-visible { outline: 2px solid var(--s1); outline-offset: -2px; }
+.note { font-size: 13px; color: var(--text-muted); margin: 10px 0 0; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 18px 0; }
+.tile, .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; }
+.tile { padding: 14px 16px; }
+.tile .label { font-size: 13px; color: var(--text-secondary); }
+.tile .value { font-size: 26px; font-weight: 600; margin-top: 2px; line-height: 1.25; }
+.tile .sub { font-size: 12px; color: var(--text-muted); }
+.delta { font-size: 12px; font-weight: 550; }
+.delta.good { color: var(--good); } .delta.bad { color: var(--bad); } .delta.flat { color: var(--text-muted); }
+.pair { display: grid; gap: 4px; margin-top: 4px; }
+.pair div { display: flex; align-items: baseline; gap: 8px; }
+.pair .v { font-size: 20px; font-weight: 600; }
+.pair .b { font-size: 12px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 5px; min-width: 64px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+h2.section { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin: 26px 0 10px; font-weight: 600; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); gap: 16px; align-items: start; }
+.card { padding: 18px 20px; min-width: 0; }
+.card h3 { font-size: 16px; margin: 0 0 2px; font-weight: 600; }
+.card .sub { font-size: 13px; color: var(--text-secondary); margin: 0 0 12px; }
+.read { font-size: 14px; color: var(--text-primary); background: var(--chip); border-radius: 8px; padding: 10px 12px; margin: 14px 0 0; }
+.read b { font-weight: 600; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--text-secondary); margin: -4px 0 10px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.key-bar { width: 12px; height: 10px; border-radius: 2px; display: inline-block; }
+.key-tick { width: 2px; height: 12px; background: var(--marker); display: inline-block; }
+.key-line { width: 14px; height: 2px; display: inline-block; border-radius: 1px; }
+.rows { display: grid; gap: 6px; }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) auto; gap: 10px; align-items: center; font-size: 13px; }
+.row .name { color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .val { font-variant-numeric: tabular-nums; min-width: 4.5em; text-align: right; }
+.plot { position: relative; height: 18px; border-left: 1px solid var(--grid); }
+.bar { position: absolute; left: 0; top: 2px; height: 14px; border-radius: 0 4px 4px 0; }
+.bar.track { background: var(--track); opacity: .55; }
+.tick { position: absolute; top: 0; width: 2px; height: 18px; background: var(--marker); }
+.row:hover .bar:not(.track), .row:focus-visible .bar:not(.track) { filter: brightness(1.15); }
+.row:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; border-radius: 4px; }
+svg text { fill: var(--text-muted); font-size: 11px; }
+svg .gl { stroke: var(--grid); stroke-width: 1; }
+.empty { font-size: 13px; color: var(--text-muted); border: 1px dashed var(--border); border-radius: 8px; padding: 18px; text-align: center; }
+.opps { display: grid; gap: 10px; }
+.opp { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; align-items: baseline; }
+.opp .pri { font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; padding: 2px 7px; border-radius: 999px; background: var(--chip); color: var(--text-secondary); }
+.opp .pri.High { color: var(--bad); }
+.opp h4 { margin: 0; font-size: 14px; font-weight: 600; }
+.opp p { margin: 0; grid-column: 2; font-size: 14px; color: var(--text-secondary); }
+.changes { margin: 0; padding: 0; list-style: none; font-size: 14px; display: grid; gap: 4px; }
+.changes .k { font-size: 12px; color: var(--text-muted); display: inline-block; min-width: 9em; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+td:first-child { white-space: normal; min-width: 200px; }
+th { color: var(--text-secondary); font-weight: 600; cursor: pointer; user-select: none; }
+th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+th[aria-sort="ascending"]::after { content: " ▲"; font-size: 10px; }
+th[aria-sort="descending"]::after { content: " ▼"; font-size: 10px; }
+.errors { font-size: 12px; color: var(--text-muted); }
+#tip {
+  position: fixed; pointer-events: none; z-index: 10; display: none;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.12); max-width: 300px;
+}
+#tip strong { display: block; font-size: 14px; }
+#tip .t { color: var(--text-secondary); }
+@media (max-width: 560px) {
+  .row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 2px; }
+  .row .plot { grid-column: 1 / -1; grid-row: 2; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Dagacci market tracker</h1>
+    <p>Public data on Dagacci, its closest Amazon rival and the wider scrubs market, refreshed daily.</p>
+    <div class="meta" id="meta"></div>
+  </header>
+  <nav role="tablist" id="tabs"></nav>
+  <div id="panels"></div>
+  <p class="errors" id="errors"></p>
+</main>
+<div id="tip" role="tooltip"></div>
+
+<script>
+const A = /*ANALYSIS*/null;
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const svgEl = (tag, attrs) => { const e = document.createElementNS("http://www.w3.org/2000/svg", tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+const color = (c) => `var(--${c || "s1"})`;
+const F = {
+  usd: (v) => v == null ? "–" : "$" + v.toFixed(2),
+  pct: (v) => v == null ? "–" : Math.round(v * 100) + "%",
+  pct_signed: (v) => v == null ? "–" : (v >= 0 ? "+" : "") + (v * 100).toFixed(1) + "%",
+  int: (v) => v == null ? "–" : Math.round(v).toLocaleString(),
+  int_signed: (v) => v == null ? "–" : (v >= 0 ? "+" : "") + Math.round(v).toLocaleString(),
+  stars: (v) => v == null ? "–" : v.toFixed(1) + " ★",
+  rank: (v) => v == null ? "–" : "#" + Math.round(v).toLocaleString(),
+  num: (v) => v == null ? "–" : (Math.abs(v) >= 100 ? Math.round(v).toLocaleString() : (+v.toFixed(2)).toString()),
+};
+
+$("meta").textContent = `Last run ${new Date(A.collected_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}` +
+  ` · ${A.days} day${A.days === 1 ? "" : "s"} of history since ${A.first_date}`;
+if (A.errors.length) $("errors").textContent = "Collection problems today: " + A.errors.join("; ");
+
+// Tooltip
+const tip = $("tip");
+function showTip(e, lines) {
+  tip.replaceChildren(el("strong", null, lines[0]), ...lines.slice(1).filter(Boolean).map((l) => el("div", "t", l)));
+  tip.style.display = "block";
+  const r = e.currentTarget.getBoundingClientRect();
+  const x = e.clientX || r.left + r.width / 2, y = e.clientY || r.top;
+  tip.style.left = Math.max(8, Math.min(x + 14, innerWidth - tip.offsetWidth - 8)) + "px";
+  tip.style.top = Math.max(8, y - tip.offsetHeight - 12) + "px";
+}
+const hideTip = () => { tip.style.display = "none"; };
+function hover(node, lines) {
+  node.addEventListener("pointermove", (e) => showTip(e, lines));
+  node.addEventListener("pointerleave", hideTip);
+  node.addEventListener("focus", (e) => showTip(e, lines));
+  node.addEventListener("blur", hideTip);
+}
+
+function legend(items) {
+  const lg = el("div", "legend");
+  for (const it of items) {
+    const s = el("span");
+    const k = el("i", it.kind === "tick" ? "key-tick" : it.kind === "line" ? "key-line" : "key-bar");
+    if (it.kind !== "tick") k.style.background = color(it.color);
+    s.append(k, document.createTextNode(it.label));
+    lg.append(s);
+  }
+  return lg;
+}
+
+// --- chart types --------------------------------------------------------------
+function bars(c) {
+  const box = el("div", "rows");
+  for (const r of c.rows) {
+    const row = el("div", "row"); row.tabIndex = 0;
+    const plot = el("div", "plot");
+    if (r.track) { const t = el("div", "bar track"); t.style.width = "100%"; plot.append(t); }
+    const b = el("div", "bar"); b.style.width = Math.max(r.value * 100, 0.6) + "%"; b.style.background = color(r.color); plot.append(b);
+    if (r.tick) { const k = el("div", "tick"); k.style.left = `calc(${r.tick * 100}% - 1px)`; plot.append(k); }
+    const n = el("div", "name", r.name); n.title = r.name;
+    row.append(n, plot, el("div", "val", r.label));
+    hover(row, r.tip);
+    box.append(row);
+  }
+  return box;
+}
+
+function lines(c) {
+  const all = c.series.flatMap((s) => s.points);
+  const dates = [...new Set(all.map((p) => p[0]))].sort();
+  if (dates.length < 2) return el("div", "empty", "The line starts after the second daily run. Today's value is in the tiles and charts above.");
+  const W = 640, H = 220, L = 52, R = 90, T = 12, B = 26;
+  const vals = all.map((p) => p[1]);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (c.fmt === "rank" || c.fmt === "usd" || c.fmt === "pct") { const pad = (hi - lo) * 0.15 || Math.abs(hi) * 0.05 || 1; lo -= pad; hi += pad; }
+  else { lo = Math.min(0, lo); hi = hi * 1.05 || 1; }
+  const t0 = Date.parse(dates[0]), t1 = Date.parse(dates[dates.length - 1]);
+  const x = (d) => L + (Date.parse(d) - t0) / (t1 - t0) * (W - L - R);
+  const inv = c.fmt === "rank";
+  const y = (v) => inv ? T + (v - lo) / (hi - lo) * (H - T - B) : H - B - (v - lo) / (hi - lo) * (H - T - B);
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img", "aria-label": c.title });
+  const f = F[c.fmt] || F.num;
+  for (let i = 0; i <= 4; i++) {
+    const v = lo + (hi - lo) * i / 4, yy = y(v);
+    svg.append(svgEl("line", { x1: L, x2: W - R, y1: yy, y2: yy, class: "gl" }));
+    const t = svgEl("text", { x: L - 6, y: yy + 4, "text-anchor": "end" }); t.textContent = f(v); svg.append(t);
+  }
+  for (const d of [dates[0], dates[dates.length - 1]]) {
+    const t = svgEl("text", { x: x(d), y: H - 6, "text-anchor": d === dates[0] ? "start" : "end" });
+    t.textContent = new Date(d + "T12:00").toLocaleDateString(undefined, { month: "short", day: "numeric" }); svg.append(t);
+  }
+  for (const s of c.series) {
+    if (!s.points.length) continue;
+    svg.append(svgEl("path", { d: s.points.map((p, i) => (i ? "L" : "M") + x(p[0]) + " " + y(p[1])).join(""),
+      fill: "none", stroke: color(s.color), "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    const last = s.points[s.points.length - 1];
+    svg.append(svgEl("circle", { cx: x(last[0]), cy: y(last[1]), r: 4, fill: color(s.color), stroke: "var(--surface-1)", "stroke-width": 2 }));
+    const t = svgEl("text", { x: x(last[0]) + 8, y: y(last[1]) + 4 }); t.textContent = f(last[1]) + " " + s.name; t.style.fill = "var(--text-secondary)"; svg.append(t);
+  }
+  // Crosshair: one readout of every series at the hovered date.
+  const hit = svgEl("rect", { x: L, y: T, width: W - L - R, height: H - T - B, fill: "transparent" });
+  const cross = svgEl("line", { y1: T, y2: H - B, stroke: "var(--text-muted)", "stroke-width": 1, visibility: "hidden" });
+  svg.append(cross, hit);
+  hit.addEventListener("pointermove", (e) => {
+    const r = svg.getBoundingClientRect(), px = (e.clientX - r.left) / r.width * W;
+    const d = dates.reduce((a, b) => Math.abs(x(b) - px) < Math.abs(x(a) - px) ? b : a);
+    cross.setAttribute("x1", x(d)); cross.setAttribute("x2", x(d)); cross.setAttribute("visibility", "visible");
+    const lines_ = [d, ...c.series.map((s) => { const p = s.points.find((q) => q[0] === d); return p ? `${s.name}: ${f(p[1])}` : null; })];
+    showTip({ currentTarget: hit, clientX: e.clientX, clientY: e.clientY }, lines_);
+  });
+  hit.addEventListener("pointerleave", () => { cross.setAttribute("visibility", "hidden"); hideTip(); });
+  const wrap = el("div");
+  if (c.series.length > 1) wrap.append(legend(c.series.map((s) => ({ label: s.name, kind: "line", color: s.color }))));
+  wrap.append(svg);
+  return wrap;
+}
+
+function dots(c) {
+  const all = c.series.flatMap((s) => s.points.map((p) => p.x));
+  if (!all.length) return el("div", "empty", "No prices could be read today.");
+  const W = 640, rowH = 44, L = 80, R = 20, T = 8, H = T + rowH * c.series.length + 24;
+  let lo = Math.min(...all), hi = Math.max(...all); const pad = (hi - lo) * 0.08 || 2; lo = Math.max(0, lo - pad); hi += pad;
+  const x = (v) => L + (v - lo) / (hi - lo) * (W - L - R);
+  const f = F[c.fmt] || F.num;
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img", "aria-label": c.title });
+  for (let i = 0; i <= 4; i++) {
+    const v = lo + (hi - lo) * i / 4;
+    svg.append(svgEl("line", { x1: x(v), x2: x(v), y1: T, y2: H - 22, class: "gl" }));
+    const t = svgEl("text", { x: x(v), y: H - 6, "text-anchor": "middle" }); t.textContent = f(v); svg.append(t);
+  }
+  c.series.forEach((s, i) => {
+    const cy = T + rowH * i + rowH / 2;
+    const name = svgEl("text", { x: 0, y: cy + 4 }); name.textContent = s.name; name.style.fill = "var(--text-secondary)"; name.style.fontSize = "12px"; svg.append(name);
+    const xs = s.points.map((p) => p.x).sort((a, b) => a - b);
+    if (xs.length) {
+      const m = xs[Math.floor((xs.length - 1) / 2)] / 2 + xs[Math.ceil((xs.length - 1) / 2)] / 2;
+      svg.append(svgEl("line", { x1: x(m), x2: x(m), y1: cy - 14, y2: cy + 14, stroke: "var(--marker)", "stroke-width": 2 }));
+    }
+    s.points.forEach((p, j) => {
+      const g = svgEl("circle", { cx: x(p.x), cy: cy + ((j % 3) - 1) * 6, r: 5, fill: color(s.color), stroke: "var(--surface-1)", "stroke-width": 2, tabindex: 0 });
+      hover(g, p.tip); svg.append(g);
+    });
+  });
+  const wrap = el("div");
+  wrap.append(legend([...c.series.map((s) => ({ label: s.name, kind: "bar", color: s.color })), { label: "Median", kind: "tick" }]), svg);
+  return wrap;
+}
+
+function table(c) {
+  const t = el("table");
+  let sortCol = c.sort ?? 0, dir = -1;
+  const isNum = (col) => !!col.fmt;
+  function draw() {
+    const head = el("tr");
+    c.columns.forEach((col, i) => {
+      const th = el("th", isNum(col) ? "num" : null, col.label); th.tabIndex = 0;
+      th.setAttribute("aria-sort", i === sortCol ? (dir > 0 ? "ascending" : "descending") : "none");
+      const go = () => { dir = i === sortCol ? -dir : (isNum(col) ? -1 : 1); sortCol = i; draw(); t.tHead.rows[0].cells[i].focus({ preventScroll: true }); };
+      th.addEventListener("click", go);
+      th.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+      head.append(th);
+    });
+    // Rows are [name, url, ...values]; url may be null.
+    const val = (r, i) => i === 0 ? r[0] : r[i + 1];
+    const rows = [...c.rows].sort((a, b) => {
+      const x = val(a, sortCol), y = val(b, sortCol);
+      if (x == null) return 1; if (y == null) return -1;
+      return (x > y ? 1 : x < y ? -1 : 0) * dir;
+    });
+    const body = rows.map((r) => {
+      const tr = el("tr");
+      c.columns.forEach((col, i) => {
+        const td = el("td", isNum(col) ? "num" : null);
+        if (i === 0 && r[1]) { const a = el("a", null, r[0]); a.href = r[1]; td.append(a); }
+        else { const v = val(r, i); td.textContent = col.fmt ? F[col.fmt](v) : (v ?? ""); }
+        tr.append(td);
+      });
+      return tr;
+    });
+    t.replaceChildren(el("thead"), el("tbody"));
+    t.tHead.append(head); t.tBodies[0].append(...body);
+  }
+  draw();
+  const w = el("div", "table-wrap"); w.append(t); return w;
+}
+
+const KINDS = { bars, lines, dots, table };
+function card(c) {
+  const k = el("section", "card");
+  k.append(el("h3", null, c.title), el("p", "sub", c.sub));
+  if (c.legend) k.append(legend(c.legend));
+  k.append(KINDS[c.type](c));
+  if (c.read) { const r = el("p", "read"); r.append(el("b", null, "What it means: "), document.createTextNode(c.read)); k.append(r); }
+  return k;
+}
+
+function tileEl(t) {
+  const k = el("div", "tile");
+  k.append(el("div", "label", t.label));
+  const d = (x) => el("span", "delta " + (x.good === true ? "good" : x.good === false ? "bad" : "flat"), (x.good === true ? "▲ " : x.good === false ? "▼ " : "") + x.text);
+  if (t.pair) {
+    const p = el("div", "pair");
+    for (const s of t.pair) {
+      const r = el("div"); const b = el("span", "b"); const dt = el("i", "dot"); dt.style.background = color(s.color);
+      b.append(dt, document.createTextNode(s.brand)); r.append(b, el("span", "v", s.value));
+      if (s.delta) r.append(d(s.delta));
+      p.append(r);
+    }
+    k.append(p);
+  } else {
+    k.append(el("div", "value", t.value));
+  }
+  if (t.note) k.append(el("div", "sub", t.note));
+  if (t.delta) k.append(d(t.delta));
+  return k;
+}
+
+function panel(tab) {
+  const p = el("div"); p.id = "panel-" + tab.id; p.setAttribute("role", "tabpanel");
+  if (tab.note) p.append(el("p", "note", tab.note));
+  if (tab.tiles.length) { const ts = el("div", "tiles"); tab.tiles.forEach((t) => ts.append(tileEl(t))); p.append(ts); }
+  const top = el("div", "grid2");
+  if (tab.opportunities.length) {
+    const k = el("section", "card"); k.append(el("h3", null, "Opportunities"), el("p", "sub", "Ranked from today's data"));
+    const list = el("div", "opps");
+    for (const o of tab.opportunities) {
+      const row = el("div", "opp"); const h = el("h4");
+      if (o.url) { const a = el("a", null, o.title); a.href = o.url; h.append(a); } else h.textContent = o.title;
+      row.append(el("span", "pri " + o.priority, o.priority), h, el("p", null, o.text));
+      list.append(row);
+    }
+    k.append(list); top.append(k);
+  }
+  if (tab.id !== "market") {
+    const k = el("section", "card"); k.append(el("h3", null, "What changed since the last run"));
+    if (tab.changes.length) {
+      const ul = el("ul", "changes");
+      for (const c of tab.changes.slice(0, 40)) { const li = el("li"); li.append(el("span", "k", c.kind), document.createTextNode(c.text)); ul.append(li); }
+      k.append(ul);
+      if (tab.changes.length > 40) k.append(el("p", "note", `…and ${tab.changes.length - 40} more`));
+    } else {
+      k.append(el("p", "sub", A.days < 2 ? "Changes appear after the second daily run." : "Nothing changed in prices, stock, reviews or ranks."));
+    }
+    top.append(k);
+  }
+  if (top.children.length) p.append(top);
+  const sections = [...new Set(tab.charts.map((c) => c.section))];
+  for (const s of sections) {
+    p.append(el("h2", "section", s));
+    const g = el("div", "grid2");
+    tab.charts.filter((c) => c.section === s).forEach((c) => {
+      const k = card(c);
+      if (c.type === "table" || (c.rows && c.rows.length > 14)) k.style.gridColumn = "1 / -1";
+      g.append(k);
+    });
+    p.append(g);
+  }
+  return p;
+}
+
+// Tabs
+const nav = $("tabs"), panels = $("panels");
+const buttons = A.tabs.map((tab) => {
+  const b = el("button", null, tab.label); b.setAttribute("role", "tab"); b.id = "tab-" + tab.id;
+  b.addEventListener("click", () => select(tab.id));
+  nav.append(b); panels.append(panel(tab));
+  return b;
+});
+nav.addEventListener("keydown", (e) => {
+  const i = buttons.indexOf(document.activeElement); if (i < 0) return;
+  const j = e.key === "ArrowRight" ? (i + 1) % buttons.length : e.key === "ArrowLeft" ? (i - 1 + buttons.length) % buttons.length : -1;
+  if (j >= 0) { buttons[j].focus(); select(A.tabs[j].id); }
+});
+function select(id) {
+  A.tabs.forEach((t, i) => {
+    const on = t.id === id;
+    buttons[i].setAttribute("aria-selected", on); buttons[i].tabIndex = on ? 0 : -1;
+    $("panel-" + t.id).hidden = !on;
+  });
+  history.replaceState(null, "", "#" + id);
+}
+select(A.tabs.some((t) => "#" + t.id === location.hash) ? location.hash.slice(1) : A.tabs[0].id);
+</script>
+</body>
+</html>

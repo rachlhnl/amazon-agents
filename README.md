@@ -21,6 +21,12 @@ human-approval workflow.
    `auto` once logs show the agents are right. Customer-facing and real-world
    actions (listing copy, purchase orders, defect flags) always need a human.
 
+## Market tracker
+
+`amz-agents market` collects public data on our brand, an Amazon rival and peer scrub
+brands every day (GitHub Actions) and builds a tabbed dashboard with trends,
+opportunities and a plain-language read of each chart. See `market/README.md`.
+
 ## Agents
 
 | Agent | Reads | Proposes | Executes via |

@@ -12,6 +12,9 @@
   amz-agents done ID [ID ...]     mark approved human-only work as done
   amz-agents dashboard [--serve [--allow-actions] [--port N]] [--out FILE]
                                   the agent tracker (also written by run/demo)
+  amz-agents market [--no-collect] [--out FILE]
+                                  collect public data on the brands in market/brands.toml
+                                  and write the market tracker dashboard
 """
 
 from __future__ import annotations
@@ -36,6 +39,23 @@ def _log(wh: Warehouse, settings: Settings, executors: bool = True) -> ActionLog
 
         ex = from_env(wh)
     return ActionLog(wh, settings.mode, ex)
+
+
+def _market(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from . import market
+    from .market import analyze, render
+
+    if not args.no_collect:
+        print(f"Snapshot saved to {market.save(market.collect())}")
+    snaps = market.history()
+    if not snaps:
+        print("No market history yet; run without --no-collect first.")
+        return 1
+    out = render.write(analyze.build(snaps, market.load_config()), Path(args.out))
+    print(f"Market tracker written to {out}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -63,7 +83,13 @@ def main(argv: list[str] | None = None) -> int:
     p_dash.add_argument("--port", type=int, default=8765)
     p_dash.add_argument("--allow-actions", action="store_true",
                         help="show Approve / Reject / Mark done buttons (server mode)")
+    p_mkt = sub.add_parser("market")
+    p_mkt.add_argument("--no-collect", action="store_true",
+                       help="rebuild the dashboard from saved history only")
+    p_mkt.add_argument("--out", default="market/index.html")
     args = ap.parse_args(argv)
+    if args.cmd == "market":
+        return _market(args)
 
     settings = Settings.from_env()
     if args.cmd == "demo":

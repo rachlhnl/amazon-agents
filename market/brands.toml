@@ -1,0 +1,79 @@
+# Brands the market tracker follows. `amz-agents market` collects them daily.
+#
+# role:    self  -> the brand we run (Dagacci tab)
+#          rival -> head-to-head comparison tab, on Amazon
+#          peer  -> "Scrub market" tab, from their own stores
+# store:   Shopify domain whose public /products.json catalog is read
+# reviews: also read each product page's Judge.me rating (slow; self only)
+# amazon:  ASINs to follow (one per listing family is enough: reviews are shared
+#          across a listing's colors and sizes)
+
+[brand.dagacci]
+name = "Dagacci"
+role = "self"
+store = "www.dagacci.com"
+reviews = true
+amazon = [
+  "B00FT739RA",  # Unisex scrub set (classic)
+  "B07V39V7SC",  # Unisex super stretch V-neck set
+  "B0D373PCHS",  # Unisex 4-way stretch set
+  "B09S28VVGW",  # Jogger set
+  "B08WTKYK4G",  # Women's natural stretch contrast set
+  "B08YRY3TTC",  # Women's fitted Y-neck set
+  "B0DRPMCLV5",  # Women's 4-way stretch Y-neck set
+  "B06XYTJM5G",  # Men's V-neck cargo set
+]
+
+[brand.cozyfit]
+name = "Cozyfit"
+role = "rival"
+amazon = [
+  "B0D423PFVC",  # Women's curved V-neck jogger set
+  "B0CL56RRPN",  # Women's V-neck jogger set
+  "B0CZ3VF1GJ",  # Women's V-neck cargo set
+  "B0G6Y6LC3M",  # Women's straight leg cargo set
+  "B0DR8G72Z7",  # Women's mock wrap set
+  "B0DHXMZ66N",  # Men's jogger set
+  "B0CGR6639D",  # Men's stretch jogger set
+]
+# Facts found by hand, shown on the comparison tab until they're no longer true.
+[[brand.cozyfit.notes]]
+title = "Cozyfit is renaming itself “COZY SCRUBS”"
+text = """Some Amazon listings now read “COZY SCRUBS (Previously COZYFIT)” (seen 2026-10-19). \
+A rename splits brand search for a while: bid on “cozyfit scrubs” and “cozy scrubs” as \
+Sponsored Products keywords while shoppers relearn the name."""
+
+[brand.jaanuu]
+name = "Jaanuu"
+role = "peer"
+store = "www.jaanuu.com"
+
+[brand.koi]
+name = "koi"
+role = "peer"
+store = "www.koihappiness.com"
+
+[brand.greys]
+name = "Grey's Anatomy"
+role = "peer"
+store = "www.greysanatomyscrubs.com"
+
+[brand.cherokee]
+name = "Cherokee"
+role = "peer"
+store = "www.cherokeeuniforms.com"
+
+[brand.healinghands]
+name = "Healing Hands"
+role = "peer"
+store = "www.healinghandsscrubs.com"
+
+[brand.mandala]
+name = "Mandala"
+role = "peer"
+store = "www.mandalascrubs.com"
+
+[brand.medelita]
+name = "Medelita"
+role = "peer"
+store = "www.medelita.com"
