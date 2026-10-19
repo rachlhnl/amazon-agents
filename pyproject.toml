@@ -12,6 +12,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
+ga4 = ["google-auth>=2.20", "requests>=2.31"]
 
 [project.scripts]
 amz-agents = "amz_agents.cli:main"

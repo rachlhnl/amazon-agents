@@ -1,0 +1,11 @@
+# Own-store pages the UX agent checks (PageSpeed runs on these, plus every
+# landing page found in ad creatives). Edit for the store.
+
+[[page]]
+url = "https://yourstore.example/"
+type = "home"
+
+[[page]]
+url = "https://yourstore.example/products/insulated-bottle-32oz"
+type = "product"
+sku = "BTL-32-BLK"

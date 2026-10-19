@@ -41,7 +41,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("demo")
     p_ing = sub.add_parser("ingest")
     p_ing.add_argument("--only", help="comma-separated: products,metrics,inventory,ads,"
-                       "costs,shopify,meta")
+                       "listing_assets,asin_traffic,costs,shopify,meta,ga4,pagespeed")
     p_ing.add_argument("--costs", help="CSV with sku, landed_cost, lead_time_days")
     p_imp = sub.add_parser("import")
     p_imp.add_argument("table")

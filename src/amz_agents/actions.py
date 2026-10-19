@@ -46,6 +46,10 @@ class Executor(Protocol):
 HUMAN_ONLY = {
     "update_listing_copy", "reorder", "flag_defect", "escalation",
     "list_on_channel", "send_outreach", "email_campaign", "opportunity",
+    # creative and UX work is done by designers, copywriters and developers
+    "refresh_creative", "new_creative_variants", "improve_listing_assets", "fix_listing_title",
+    "fix_funnel_step", "improve_page_speed", "fix_accessibility", "fix_landing_page",
+    "improve_listing_conversion",
 }
 
 # Statuses that mean an action is still waiting, or was carried out recently

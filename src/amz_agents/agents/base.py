@@ -24,6 +24,8 @@ TEAMS = {
     "amazon_ops": "Amazon operations",
     "marketing": "Marketing",
     "sales": "Sales & wholesale",
+    "creative": "Creative",
+    "ux": "UX & web",
     "data": "Data & insights",
 }
 

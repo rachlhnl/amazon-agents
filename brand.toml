@@ -1,0 +1,32 @@
+# Brand rules the creative agent checks drafts and listing titles against.
+# Edit for the company. Every field is optional.
+
+name = "Your Brand"
+
+# How the brand sounds. Given to Claude when it reviews drafts (with an API key).
+voice = """
+Plain, warm and specific. Talk about what the product does, not how amazing it is.
+No hype, no false urgency, no exclamation-mark stacks.
+"""
+
+# Words that never appear in our copy (case-insensitive, whole words).
+banned_words = ["amazing", "revolutionary", "best-in-class", "game-changer", "cheap"]
+
+# Claims we can't make without substantiation (regular expressions).
+banned_claims = [
+  "\\b(best|#1|number one)\\b",
+  "\\bguarantee(d)?\\b",
+  "\\b(cures?|prevents?|treats?)\\b",
+  "\\b(BPA|lead)[- ]free\\b",   # only with a current lab certificate on file
+  "\\bFDA\\b",
+]
+
+# Competitors never named in our copy.
+competitors = ["Hydro Flask", "Yeti", "Stanley", "Owala"]
+
+[limits]
+email_subject_chars = 60
+email_body_words = 150
+outreach_words = 150
+listing_title_chars = 200
+max_exclamations = 1

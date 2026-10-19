@@ -145,6 +145,74 @@ CREATE TABLE IF NOT EXISTS leads (
     sku_interest      TEXT,     -- comma-separated SKUs
     notes             TEXT
 );
+
+-- ---- Creative and UX -------------------------------------------------------
+
+-- Ad-level results outside Amazon. Two windows so fatigue shows up: the last
+-- 7 days vs. days 8-28 before that.
+CREATE TABLE IF NOT EXISTS creatives (
+    ad_id             TEXT PRIMARY KEY,
+    platform          TEXT,
+    campaign_id       TEXT,     -- external_campaigns.campaign_id (Meta: the ad set)
+    name              TEXT,
+    sku               TEXT,
+    status            TEXT,     -- enabled | paused
+    landing_url       TEXT,
+    impressions_7d    INTEGER,
+    clicks_7d         INTEGER,
+    spend_7d          REAL,
+    frequency_7d      REAL,     -- average times each person saw it
+    purchases_7d      INTEGER,
+    impressions_prior INTEGER,  -- days 8-28
+    clicks_prior      INTEGER,
+    spend_prior       REAL
+);
+
+-- What's on each Amazon detail page.
+CREATE TABLE IF NOT EXISTS listing_assets (
+    sku           TEXT PRIMARY KEY,
+    image_count   INTEGER,
+    has_video     INTEGER,    -- 1/0, NULL if unknown
+    has_aplus     INTEGER,
+    bullet_count  INTEGER,
+    title_length  INTEGER
+);
+
+-- Amazon detail-page traffic and conversion, trailing 30 days (Sales & Traffic).
+CREATE TABLE IF NOT EXISTS asin_traffic (
+    sku               TEXT PRIMARY KEY,
+    sessions_30d      INTEGER,
+    page_views_30d    INTEGER,
+    units_30d         INTEGER,
+    buy_box_pct       REAL     -- 0-1
+);
+
+-- Own store, daily funnel by device (GA4 or a Shopify analytics export).
+CREATE TABLE IF NOT EXISTS web_funnel (
+    date         TEXT,
+    device       TEXT,       -- mobile | desktop | tablet
+    sessions     INTEGER,
+    add_to_cart  INTEGER,
+    checkout     INTEGER,
+    purchases    INTEGER,
+    revenue      REAL,
+    PRIMARY KEY (date, device)
+);
+
+-- Own-store pages: speed/accessibility (PageSpeed) and landing-page results (GA4).
+CREATE TABLE IF NOT EXISTS web_pages (
+    url              TEXT PRIMARY KEY,   -- no query string
+    page_type        TEXT,               -- home | product | collection | landing
+    sku              TEXT,
+    perf_mobile      INTEGER,            -- Lighthouse performance 0-100
+    perf_desktop     INTEGER,
+    accessibility    INTEGER,            -- Lighthouse accessibility 0-100
+    lcp_ms_mobile    REAL,               -- largest contentful paint
+    cls_mobile       REAL,               -- cumulative layout shift
+    sessions_30d     INTEGER,            -- as a landing page
+    purchases_30d    INTEGER,
+    checked          TEXT                -- date PageSpeed last ran
+);
 """
 
 
@@ -159,12 +227,16 @@ class Warehouse:
 
     def _migrate(self) -> None:
         """Add columns introduced after a warehouse was first created."""
-        have = {r["name"] for r in self.conn.execute("PRAGMA table_info(actions)")}
-        for col, typ in [("sku", "TEXT"), ("impact_usd", "REAL"), ("confidence", "TEXT"),
-                         ("goal", "TEXT"), ("executed_at", "TEXT"), ("team", "TEXT"),
-                         ("effort", "TEXT"), ("roi", "REAL"), ("priority", "TEXT")]:
-            if col not in have:
-                self.conn.execute(f"ALTER TABLE actions ADD COLUMN {col} {typ}")
+        added = {
+            "actions": [("sku", "TEXT"), ("impact_usd", "REAL"), ("confidence", "TEXT"),
+                        ("goal", "TEXT"), ("executed_at", "TEXT"), ("team", "TEXT"),
+                        ("effort", "TEXT"), ("roi", "REAL"), ("priority", "TEXT")],
+        }
+        for table, cols in added.items():
+            have = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
+            for col, typ in cols:
+                if col not in have:
+                    self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
         self.conn.commit()
 
     def query(self, sql: str, params: tuple | dict = ()) -> list[dict[str, Any]]:

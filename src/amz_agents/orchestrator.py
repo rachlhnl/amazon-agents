@@ -9,6 +9,7 @@ from pathlib import Path
 from .actions import Action, ActionLog
 from .agents import (
     AdsAgent,
+    CreativeAgent,
     DataAgent,
     InventoryAgent,
     ListingAgent,
@@ -16,6 +17,7 @@ from .agents import (
     PricingAgent,
     ReviewsAgent,
     SalesAgent,
+    UXAgent,
 )
 from .agents.base import TEAMS, Agent, Context
 from .agents.chief_of_staff import ChiefOfStaff
@@ -26,6 +28,8 @@ from .agents.chief_of_staff import ChiefOfStaff
 DEFAULT_AGENTS: list[type[Agent]] = [
     InventoryAgent, ReviewsAgent, PricingAgent, AdsAgent, ListingAgent,
     MarketingAgent, SalesAgent,
+    CreativeAgent,  # reviews the drafts above against brand.toml
+    UXAgent,  # annotates marketing's budget proposals when the landing page is the problem
     DataAgent,  # last: reviews everyone's proposals
 ]
 

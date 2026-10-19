@@ -122,7 +122,16 @@ def _external(
         wh.execute("UPDATE channel_listings SET price=? WHERE channel=? AND sku=?",
                    (a["after"]["price"], channel, sku))
 
+    def pause_creative(a: dict[str, Any]) -> None:
+        ad = wh.query("SELECT platform FROM creatives WHERE ad_id=?", (a["target"],))
+        if not ad or ad[0]["platform"] != "meta" or meta is None:
+            platform = ad[0]["platform"] if ad else "unknown platform"
+            raise RuntimeError(f"no API executor for {platform}: pause the ad there by hand")
+        meta.pause(a["target"])
+        wh.execute("UPDATE creatives SET status='paused' WHERE ad_id=?", (a["target"],))
+
     return {
+        "pause_creative": pause_creative,
         "update_campaign_budget": update_campaign_budget,
         "pause_campaign": pause_campaign,
         "update_channel_price": update_channel_price,

@@ -15,14 +15,24 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import os
 import re
+import tomllib
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
-from .data.clients import AdsClient, MetaAdsClient, ShopifyClient, SPAPIClient
+from .data.clients import (
+    AdsClient,
+    GA4Client,
+    MetaAdsClient,
+    PageSpeedClient,
+    ShopifyClient,
+    SPAPIClient,
+)
 from .data.warehouse import Warehouse
 
 VELOCITY_DAYS = 30
@@ -374,10 +384,202 @@ def ingest_leads(wh: Warehouse) -> None:
     raise NotImplementedError(__doc__)
 
 
+# ------------------------------------------------------------ creative and UX
+
+
+def ingest_listing_assets(wh: Warehouse, sp: SPAPIClient) -> int:
+    """listing_assets: image count, bullets, title length -> Catalog Items API 2022-04-01;
+    A+ content -> A+ Content API (searchContentPublishRecords). Video isn't exposed by
+    either; it's left as is (set it with a CSV import: sku, has_video)."""
+    n = 0
+    for p in wh.query("SELECT sku, asin FROM products WHERE asin IS NOT NULL"):
+        item = sp.get(f"/catalog/2022-04-01/items/{p['asin']}",
+                      marketplaceIds=sp.marketplace_id, includedData="images,attributes")
+        images = {img.get("variant") for m in item.get("images", [])
+                  if m.get("marketplaceId") == sp.marketplace_id for img in m.get("images", [])}
+        attrs = item.get("attributes", {})
+        title = ((attrs.get("item_name") or [{}])[0]).get("value", "")
+        aplus = sp.get("/aplus/2020-11-01/contentPublishRecords",
+                       marketplaceId=sp.marketplace_id, asin=p["asin"])
+        old = wh.query("SELECT has_video FROM listing_assets WHERE sku=?", (p["sku"],))
+        wh.insert_many("listing_assets", [{
+            "sku": p["sku"], "image_count": len(images - {None}),
+            "has_video": old[0]["has_video"] if old else None,
+            "has_aplus": 1 if aplus.get("publishRecordList") else 0,
+            "bullet_count": len(attrs.get("bullet_point") or []), "title_length": len(title),
+        }])
+        n += 1
+    return n
+
+
+def ingest_asin_traffic(wh: Warehouse, sp: SPAPIClient, today: date | None = None) -> int:
+    """asin_traffic -> GET_SALES_AND_TRAFFIC_REPORT, trailing 30 days, by SKU (the
+    by-ASIN section covers the whole range)."""
+    today = today or date.today()
+    start, end = today - timedelta(days=30), today - timedelta(days=1)
+    raw = sp.report("GET_SALES_AND_TRAFFIC_REPORT", f"{start.isoformat()}T00:00:00Z",
+                    f"{end.isoformat()}T23:59:59Z",
+                    {"dateGranularity": "DAY", "asinGranularity": "SKU"})
+    rows = []
+    for r in json.loads(_decode(raw)).get("salesAndTrafficByAsin", []):
+        if not r.get("sku"):
+            continue
+        t, s = r.get("trafficByAsin", {}), r.get("salesByAsin", {})
+        bb = t.get("buyBoxPercentage")
+        rows.append({
+            "sku": r["sku"], "sessions_30d": int(t.get("sessions") or 0),
+            "page_views_30d": int(t.get("pageViews") or 0),
+            "units_30d": int(s.get("unitsOrdered") or 0),
+            "buy_box_pct": float(bb) / 100 if bb is not None else None,
+        })
+    wh.insert_many("asin_traffic", rows)
+    return len(rows)
+
+
+def _ad_tags(name: str) -> dict[str, str]:
+    return dict(_TAG.findall(name or ""))
+
+
+def ingest_meta_creatives(wh: Warehouse, meta: MetaAdsClient, today: date | None = None) -> int:
+    """creatives for Meta: ads with their ad set (= external_campaigns row), landing URL
+    from the creative, and two insight windows: last 7 days and days 8-28."""
+    today = today or date.today()
+
+    def window(start_ago: int, end_ago: int) -> dict[str, dict]:
+        rng = json.dumps({"since": (today - timedelta(days=start_ago)).isoformat(),
+                          "until": (today - timedelta(days=end_ago)).isoformat()})
+        return {i["ad_id"]: i for i in meta.list(
+            "insights", level="ad", time_range=rng, limit=500,
+            fields="ad_id,impressions,clicks,spend,frequency,actions")}
+
+    recent, prior = window(7, 1), window(28, 8)
+    adsets = {r["campaign_id"]: r for r in wh.query(
+        "SELECT campaign_id, sku FROM external_campaigns WHERE platform='meta'")}
+    rows = []
+    for ad in meta.list("ads", fields="id,name,status,adset_id,creative{link_url,"
+                                      "object_story_spec}", limit=200):
+        parent = adsets.get(ad.get("adset_id"))
+        sku = (parent or {}).get("sku") or _ad_tags(ad["name"]).get("sku")
+        if not sku:
+            continue
+        cr = ad.get("creative") or {}
+        link = cr.get("link_url") or (
+            ((cr.get("object_story_spec") or {}).get("link_data") or {}).get("link"))
+        r, p = recent.get(ad["id"], {}), prior.get(ad["id"], {})
+        rows.append({
+            "ad_id": ad["id"], "platform": "meta", "campaign_id": ad.get("adset_id"),
+            "name": ad["name"], "sku": sku, "landing_url": link,
+            "status": "enabled" if ad["status"] == "ACTIVE" else "paused",
+            "impressions_7d": int(r.get("impressions") or 0),
+            "clicks_7d": int(r.get("clicks") or 0), "spend_7d": float(r.get("spend") or 0),
+            "frequency_7d": float(r.get("frequency") or 0),
+            "purchases_7d": int(_action(r.get("actions"), "purchase")),
+            "impressions_prior": int(p.get("impressions") or 0),
+            "clicks_prior": int(p.get("clicks") or 0), "spend_prior": float(p.get("spend") or 0),
+        })
+    wh.insert_many("creatives", rows)
+    return len(rows)
+
+
+def _url(u: str) -> str:
+    s = urlsplit(u)
+    return f"{s.scheme}://{s.netloc}{s.path}".rstrip("/")
+
+
+def load_site(path: str | Path | None = None) -> list[dict[str, Any]]:
+    path = Path(path or os.getenv("SITE_PATH", "site.toml"))
+    if not path.exists():
+        return []
+    with path.open("rb") as f:
+        return tomllib.load(f).get("page", [])
+
+
+def ingest_pagespeed(wh: Warehouse, ps: PageSpeedClient, pages: list[dict[str, Any]] | None = None,
+                     today: date | None = None) -> int:
+    """web_pages speed/accessibility -> PageSpeed Insights, mobile and desktop, for the
+    pages in site.toml plus every own-store landing page found in ad creatives."""
+    today = today or date.today()
+    pages = pages if pages is not None else load_site()
+    targets = {_url(p["url"]): {"page_type": p.get("type"), "sku": p.get("sku")} for p in pages}
+    store_hosts = {urlsplit(u).netloc for u in targets}
+    for c in wh.query("SELECT DISTINCT landing_url, sku FROM creatives "
+                      "WHERE landing_url IS NOT NULL"):
+        u = _url(c["landing_url"])
+        if urlsplit(u).netloc in store_hosts and u not in targets:
+            targets[u] = {"page_type": "landing", "sku": c["sku"]}
+    for url, meta in targets.items():
+        mobile, desktop = ps.run(url, "mobile"), ps.run(url, "desktop")
+        audits = mobile.get("audits", {})
+        wh.conn.execute(
+            "INSERT INTO web_pages (url, page_type, sku, perf_mobile, perf_desktop, "
+            "accessibility, lcp_ms_mobile, cls_mobile, checked) VALUES (?,?,?,?,?,?,?,?,?) "
+            "ON CONFLICT(url) DO UPDATE SET page_type=excluded.page_type, sku=excluded.sku, "
+            "perf_mobile=excluded.perf_mobile, perf_desktop=excluded.perf_desktop, "
+            "accessibility=excluded.accessibility, lcp_ms_mobile=excluded.lcp_ms_mobile, "
+            "cls_mobile=excluded.cls_mobile, checked=excluded.checked",
+            (url, meta["page_type"], meta["sku"], _score(mobile, "performance"),
+             _score(desktop, "performance"), _score(mobile, "accessibility"),
+             (audits.get("largest-contentful-paint") or {}).get("numericValue"),
+             (audits.get("cumulative-layout-shift") or {}).get("numericValue"),
+             today.isoformat()),
+        )
+    wh.conn.commit()
+    return len(targets)
+
+
+def _score(lighthouse: dict, category: str) -> int | None:
+    s = (lighthouse.get("categories", {}).get(category) or {}).get("score")
+    return round(s * 100) if s is not None else None
+
+
+_DEVICES = {"mobile": "mobile", "desktop": "desktop", "tablet": "tablet"}
+
+
+def ingest_ga4(wh: Warehouse, ga: GA4Client, store_url: str, days: int = 28,
+               today: date | None = None) -> tuple[int, int]:
+    """web_funnel (daily, by device) and landing-page results for web_pages, from GA4
+    ecommerce events. store_url (e.g. https://yourstore.example) turns GA4's landing-page
+    paths into the URLs PageSpeed uses."""
+    today = today or date.today()
+    start = (today - timedelta(days=days)).isoformat()
+    end = (today - timedelta(days=1)).isoformat()
+    funnel = []
+    for r in ga.report(["date", "deviceCategory"],
+                       ["sessions", "addToCarts", "checkouts", "ecommercePurchases",
+                        "purchaseRevenue"], start, end):
+        d = r["date"]
+        funnel.append({
+            "date": f"{d[:4]}-{d[4:6]}-{d[6:]}", "device": _DEVICES.get(r["deviceCategory"],
+                                                                         "other"),
+            "sessions": int(r["sessions"]), "add_to_cart": int(r["addToCarts"]),
+            "checkout": int(r["checkouts"]), "purchases": int(r["ecommercePurchases"]),
+            "revenue": float(r["purchaseRevenue"]),
+        })
+    wh.insert_many("web_funnel", funnel)
+
+    since = (today - timedelta(days=30)).isoformat()
+    base = store_url.rstrip("/")
+    pages: dict[str, dict[str, int]] = defaultdict(lambda: {"s": 0, "p": 0})
+    for r in ga.report(["landingPage"], ["sessions", "ecommercePurchases"], since, end):
+        if not r["landingPage"].startswith("/"):
+            continue  # "(not set)"
+        u = _url(base + r["landingPage"])
+        pages[u]["s"] += int(r["sessions"])
+        pages[u]["p"] += int(r["ecommercePurchases"])
+    for u, v in pages.items():
+        wh.conn.execute(
+            "INSERT INTO web_pages (url, sessions_30d, purchases_30d) VALUES (?,?,?) "
+            "ON CONFLICT(url) DO UPDATE SET sessions_30d=excluded.sessions_30d, "
+            "purchases_30d=excluded.purchases_30d", (u, v["s"], v["p"]))
+    wh.conn.commit()
+    return len(funnel), len(pages)
+
+
 # ------------------------------------------------------------ CSV imports
 
 IMPORTABLE = {"products", "reviews", "channel_listings", "external_campaigns", "leads",
-              "metrics_daily"}
+              "metrics_daily", "creatives", "listing_assets", "asin_traffic", "web_funnel",
+              "web_pages"}
 
 
 def import_csv(wh: Warehouse, table: str, path: str | Path) -> int:
@@ -433,11 +635,22 @@ def run_all(wh: Warehouse, only: set[str] | None = None) -> dict[str, Any]:
             run("inventory", lambda: ingest_inventory(wh, sp))
         if want("ads"):
             run("ads", lambda: ingest_ads(wh, ads))
+        if want("listing_assets"):
+            run("listing_assets", lambda: ingest_listing_assets(wh, sp))
+        if want("asin_traffic"):
+            run("asin_traffic", lambda: ingest_asin_traffic(wh, sp))
     if os.getenv("COSTS_CSV") and want("costs"):
         run("costs", lambda: ingest_costs_csv(wh, os.environ["COSTS_CSV"]))
     if os.getenv("SHOPIFY_ACCESS_TOKEN") and want("shopify"):
         run("shopify", lambda: ingest_shopify(wh, ShopifyClient.from_env()))
     if os.getenv("META_ACCESS_TOKEN") and want("meta"):
-        run("meta", lambda: ingest_meta(wh, MetaAdsClient.from_env()))
+        meta = MetaAdsClient.from_env()
+        run("meta", lambda: ingest_meta(wh, meta))
+        run("meta_creatives", lambda: ingest_meta_creatives(wh, meta))
+    if os.getenv("GA4_PROPERTY_ID") and os.getenv("STORE_URL") and want("ga4"):
+        run("ga4", lambda: ingest_ga4(wh, GA4Client.from_env(), os.environ["STORE_URL"]))
+    # After meta_creatives and ga4, so new landing pages get checked too.
+    if os.getenv("PAGESPEED_API_KEY") and want("pagespeed"):
+        run("pagespeed", lambda: ingest_pagespeed(wh, PageSpeedClient.from_env()))
     results["finished"] = datetime.now(UTC).isoformat(timespec="seconds")
     return results

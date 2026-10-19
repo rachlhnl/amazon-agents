@@ -12,7 +12,7 @@ PRODUCTS = [
     ("BTL-32-BLK", "B0SAMPLE01", "Insulated Water Bottle 32oz Black", 29.99, 7.10, 9.40, 420, 600, 18.0, 45, 27.49),
     ("BTL-32-SGE", "B0SAMPLE02", "Insulated Water Bottle 32oz Sage", 29.99, 7.10, 9.40, 95, 0, 11.0, 45, None),
     ("LID-STRAW", "B0SAMPLE03", "Replacement Straw Lid", 12.99, 1.80, 5.20, 1600, 0, 6.5, 30, 12.99),
-    ("BTL-64-BLK", "B0SAMPLE04", "Insulated Water Bottle 64oz Black", 39.99, 10.20, 11.80, 60, 300, 4.0, 45, 36.00),
+    ("BTL-64-BLK", "B0SAMPLE04", "Insulated Water Bottle 64oz Black - The BEST Leakproof Jug", 39.99, 10.20, 11.80, 60, 300, 4.0, 45, 36.00),
 ]
 
 KEYWORDS = [
@@ -76,6 +76,67 @@ LEADS = [
      20, "LID-STRAW", "Reorders quarterly"),
 ]
 
+# ---- Creative and UX ----
+
+STORE = "https://yourstore.example"
+
+CREATIVES = [
+    # ad_id, platform, campaign, name, sku, landing, imp7, clk7, spend7, freq7, buy7,
+    # imp_prior, clk_prior, spend_prior
+    ("m1-a1", "meta", "m1", "Cold for 24h - video", "BTL-32-BLK",
+     "https://www.amazon.com/dp/B0SAMPLE01", 30000, 210, 120.0, 3.4, 6, 70000, 840, 260.0),
+    ("m1-a2", "meta", "m1", "Fits the gym bag - static", "BTL-32-BLK",
+     "https://www.amazon.com/dp/B0SAMPLE01", 20000, 330, 80.0, 1.8, 9, 50000, 700, 200.0),
+    ("m1-a3", "meta", "m1", "20% off banner", "BTL-32-BLK",
+     "https://www.amazon.com/dp/B0SAMPLE01", 15000, 45, 40.0, 2.0, 0, 30000, 100, 90.0),
+    ("g1-a1", "google", "g1", "Search - insulated bottle", "BTL-32-BLK",
+     f"{STORE}/products/insulated-bottle-32oz?utm_source=google", 9000, 400, 140.0, 1.0, 14,
+     27000, 1150, 420.0),
+    ("t1-a1", "tiktok", "t1", "Creator unboxing", "BTL-32-BLK",
+     f"{STORE}/pages/creators?utm_source=tiktok", 40000, 380, 70.0, 1.6, 0,
+     80000, 720, 160.0),
+]
+
+LISTING_ASSETS = [
+    # sku, images, video, A+, bullets, title length
+    ("BTL-32-BLK", 9, 1, 1, 5, 33),
+    ("BTL-32-SGE", 5, 0, 1, 5, 32),
+    ("LID-STRAW", 4, 0, 0, 3, 21),
+    ("BTL-64-BLK", 7, None, 1, 5, 58),
+]
+
+ASIN_TRAFFIC = [
+    # sku, sessions, page views, units, Buy Box share
+    ("BTL-32-BLK", 4200, 6100, 540, 0.95),
+    ("BTL-32-SGE", 2400, 3300, 330, 1.00),
+    ("LID-STRAW", 1500, 1900, 195, 0.98),
+    ("BTL-64-BLK", 2000, 2600, 120, 0.55),
+]
+
+WEB_PAGES = [
+    # url, type, sku, perf mobile, perf desktop, a11y, LCP ms, CLS, sessions, purchases
+    (f"{STORE}", "home", None, 38, 82, 74, 5200, 0.05, 3000, 45),
+    (f"{STORE}/products/insulated-bottle-32oz", "product", "BTL-32-BLK", 71, 93, 92, 2600, 0.04,
+     2200, 60),
+    (f"{STORE}/pages/creators", "landing", "BTL-32-BLK", 55, 88, 88, 3800, 0.31, 400, 0),
+]
+
+
+def _web_funnel(today: date) -> list[dict]:
+    """28 days by device. Mobile converts at a fraction of desktop, and mobile
+    checkout -> purchase broke two weeks ago."""
+    rows = []
+    for ago in range(28, 0, -1):
+        d = (today - timedelta(days=ago)).isoformat()
+        mobile_buys = 4 if ago <= 14 else 8
+        rows += [
+            {"date": d, "device": "mobile", "sessions": 600, "add_to_cart": 27, "checkout": 11,
+             "purchases": mobile_buys, "revenue": mobile_buys * 31.0},
+            {"date": d, "device": "desktop", "sessions": 250, "add_to_cart": 20, "checkout": 11,
+             "purchases": 7, "revenue": 7 * 31.0},
+        ]
+    return rows
+
 
 def _history(today: date) -> list[dict]:
     """28 days of per-SKU history ending yesterday, shaped to exercise the chief
@@ -129,7 +190,8 @@ def seed(wh: Warehouse, today: date | None = None) -> None:
               "clicks", "spend", "sales", "orders"]
     cols_r = ["asin", "rating", "body", "created"]
     for table in ("search_terms", "reviews", "metrics_daily", "actions", "outcomes",
-                  "channel_listings", "external_campaigns", "leads"):
+                  "channel_listings", "external_campaigns", "leads", "creatives",
+                  "listing_assets", "asin_traffic", "web_funnel", "web_pages"):
         wh.execute(f"DELETE FROM {table}")
     wh.execute("DELETE FROM sqlite_sequence WHERE name='actions'")  # restart action IDs at 1
     wh.insert_many("metrics_daily", _history(today))
@@ -152,3 +214,18 @@ def seed(wh: Warehouse, today: date | None = None) -> None:
          "last_contact": (today - timedelta(days=d)).isoformat() if d is not None else None}
         for i, co, n, e, st, v, d, s, nt in LEADS
     ])
+
+    def rows(cols: str, data: list[tuple]) -> list[dict]:
+        return [dict(zip(cols.split(), r)) for r in data]
+
+    wh.insert_many("creatives", [{**r, "status": "enabled"} for r in rows(
+        "ad_id platform campaign_id name sku landing_url impressions_7d clicks_7d spend_7d "
+        "frequency_7d purchases_7d impressions_prior clicks_prior spend_prior", CREATIVES)])
+    wh.insert_many("listing_assets", rows(
+        "sku image_count has_video has_aplus bullet_count title_length", LISTING_ASSETS))
+    wh.insert_many("asin_traffic", rows(
+        "sku sessions_30d page_views_30d units_30d buy_box_pct", ASIN_TRAFFIC))
+    wh.insert_many("web_pages", [{**r, "checked": today.isoformat()} for r in rows(
+        "url page_type sku perf_mobile perf_desktop accessibility lcp_ms_mobile cls_mobile "
+        "sessions_30d purchases_30d", WEB_PAGES)])
+    wh.insert_many("web_funnel", _web_funnel(today))

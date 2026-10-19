@@ -32,11 +32,13 @@ human-approval workflow.
 | Listing | search terms, review themes | `update_listing_copy` (+ LLM draft) | human |
 | Marketing | external campaigns, stock | `update_campaign_budget`, `pause_campaign`, `email_campaign` (+ LLM draft) | Meta Marketing API; human for Google/TikTok and email |
 | Sales | other channels' prices, CRM leads | `update_channel_price`, `list_on_channel`, `send_outreach` (+ LLM draft) | Shopify Admin API; human otherwise |
+| Creative | ad-level results, listing assets, brand.toml, other agents' drafts | `refresh_creative`, `pause_creative`, `new_creative_variants`, `improve_listing_assets`, `fix_listing_title` | Meta API (pause); human otherwise |
+| UX | store funnel, page speed, landing pages, Amazon conversion | `fix_funnel_step`, `improve_page_speed`, `fix_accessibility`, `fix_landing_page`, `improve_listing_conversion` | human |
 | Data | everything, plus the other agents' proposals | `opportunity` (finding, recommendation, owner, impact, effort) | human |
 
 Each agent declares a **role** (`agents/base.py`: `Role`): its mission, the team
-that owns its work (Amazon operations, Marketing, Sales & wholesale, Data &
-insights), the action types it proposes with the level of effort each takes a
+that owns its work (Amazon operations, Marketing, Sales & wholesale, Creative,
+UX & web, Data & insights), the action types it proposes with the level of effort each takes a
 person (XS–XL), and the warehouse tables it needs. The chief of staff reads the
 roles to route, prioritize and check on the agents; adding an agent means
 declaring its role, not editing the chief of staff.
@@ -50,6 +52,42 @@ Amazon price the pricing agent is about to set.
 
 An action already awaiting approval, or carried out in the last 30 days, isn't
 proposed again.
+
+### Creative agent
+
+- **Ad creative** (from Meta ad-level results, last 7 days vs. days 8–28):
+  refresh ads whose click rate fell 30%+ while people see them 2.5+ times a week
+  (fatigue); pause ads that spent $100+ with no purchases this week and a click
+  rate under half their campaign's (the platform moves the budget to the ads
+  that sell); brief variants of clear winners before they fatigue.
+- **Amazon detail pages:** fewer than 7 images, no video, no A+ content, fewer
+  than 5 bullets; titles that break `brand.toml` or Amazon's rules on promotional
+  claims.
+- **Brand review of drafts.** Every draft another agent wrote this run (marketing
+  emails, wholesale outreach, listing copy) is checked against `brand.toml`
+  (banned words and claims, competitor names, exclamation marks, all-caps,
+  length limits) and, with an API key, against the brand voice by Claude. It
+  reaches the brief marked "creative review: ok" or "needs changes" with what to fix.
+
+Edit `brand.toml` for the company.
+
+### UX agent
+
+- **Store funnel** (sessions → add to cart → checkout → purchase, by device, from
+  GA4 or a Shopify analytics export): a step that suddenly fell 25%+ (usually
+  something broke; it says which device), the step furthest below benchmark, and
+  mobile converting under half as well as desktop.
+- **Page speed and accessibility** (PageSpeed Insights) for the pages in
+  `site.toml` plus every store page an ad sends people to.
+- **Campaign landing pages** converting under half the store rate. It adds a note
+  to the marketing agent's budget or pause proposal for that campaign ("the ad
+  works, the page doesn't") so a good ad isn't cut for a bad page.
+- **Amazon conversion** (units per session, from the Sales & Traffic report) well
+  below the catalog median, saying whether lost Buy Box share or the page itself
+  is the likely cause, and linking the pricing or listing work already proposed.
+
+Creative and UX work goes to people; their team briefs go to
+`BRIEF_TO_CREATIVE` and `BRIEF_TO_UX`.
 
 ### Data agent
 
@@ -171,14 +209,20 @@ and the narrative in the daily brief. Everything else runs without it.
    | inventory | FBA Inventory; velocity from `metrics_daily` | `products` stock |
    | ads | Ads `spTargeting`, `spSearchTerm` (30 days) | `keywords`, `search_terms` |
    | costs | your CSV: `sku,landed_cost,lead_time_days` | `products` |
+   | listing_assets | Catalog Items (images, bullets, title), A+ Content | `listing_assets` |
+   | asin_traffic | Sales & Traffic report by SKU | `asin_traffic` |
    | shopify | Shopify Admin GraphQL | `channel_listings` |
-   | meta | Meta Marketing API ad sets + insights | `external_campaigns` |
+   | meta | Meta Marketing API ad sets, ads + insights | `external_campaigns`, `creatives` |
+   | ga4 | GA4 Data API: funnel by device, landing pages | `web_funnel`, `web_pages` |
+   | pagespeed | PageSpeed Insights, pages in `site.toml` + ad landing pages | `web_pages` |
 
    Everything else comes in as a CSV export with `amz-agents import TABLE FILE`
    (header = column names; existing rows update only the columns given):
    reviews from a licensed vendor, `leads` from the CRM, Google Ads/TikTok
    campaigns and Amazon Attribution results into `external_campaigns`, other
-   marketplaces into `channel_listings`.
+   marketplaces into `channel_listings`, a Shopify analytics funnel export into
+   `web_funnel` if you don't use GA4, Google/TikTok ad results into `creatives`,
+   and `has_video` into `listing_assets` (no API exposes it).
 
    **Meta naming convention:** put `sku=<SKU> dest=amazon` (or `dest=shopify`) in
    each ad set's name. That's how the agent knows what an ad set sells; ad sets
@@ -199,6 +243,8 @@ current docs and check a first ingest against Seller Central before going live:
 - https://advertising.amazon.com/API/docs/
 - https://shopify.dev/docs/api/admin-graphql
 - https://developers.facebook.com/docs/marketing-api/
+- https://developers.google.com/analytics/devguides/reporting/data/v1
+- https://developers.google.com/speed/docs/insights/v5/get-started
 
 ## Layout
 
@@ -213,9 +259,12 @@ src/amz_agents/
   llm.py             optional Claude calls
   ingest.py          API -> warehouse jobs, CSV imports
   agents/            inventory, reviews, pricing, ads, listing, marketing, sales,
-                     data, chief_of_staff; base.py holds roles, teams, effort scale
+                     creative, ux, data, chief_of_staff; base.py holds roles,
+                     teams, effort scale
   data/              warehouse (SQLite), API clients, sample data
 goals.toml           goals the chief of staff steers toward
+brand.toml           brand rules the creative agent reviews copy against
+site.toml            store pages the UX agent checks
 tests/               guardrail, agent and chief-of-staff tests
 ```
 

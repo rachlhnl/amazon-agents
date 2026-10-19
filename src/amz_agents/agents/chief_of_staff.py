@@ -53,7 +53,10 @@ GROW, EFFICIENCY, SHRINK = "grow", "efficiency", "shrink"
 
 # Spend outside Amazon doesn't count toward TACoS (Amazon ad spend / Amazon revenue).
 EXTERNAL_KINDS = {"update_campaign_budget", "pause_campaign", "email_campaign",
-                  "update_channel_price", "list_on_channel", "send_outreach"}
+                  "update_channel_price", "list_on_channel", "send_outreach",
+                  "refresh_creative", "pause_creative", "new_creative_variants",
+                  "fix_funnel_step", "improve_page_speed", "fix_accessibility",
+                  "fix_landing_page"}
 
 
 @dataclass
@@ -213,7 +216,8 @@ class ChiefOfStaff:
                 note = "if you've lost the Buy Box, matching likely pays more than estimated"
             return round(impact, 2), "low", note
 
-        if a.kind == "opportunity":
+        # Agents that size their own work (data, creative, UX) put it on the action.
+        if isinstance(a.after, dict) and "impact_usd" in a.after:
             return a.after.get("impact_usd"), a.after.get("confidence", "low"), ""
 
         if a.kind in ("update_campaign_budget", "pause_campaign"):
@@ -476,7 +480,7 @@ class ChiefOfStaff:
 
         L += ["", "## Top priorities across teams", ""]
         if top:
-            L += _table(top, team=True)
+            L += _table(top, team=True, ids=ids)
             if self.ctx.settings.mode.value == "approve":
                 approvable = " ".join(str(i) for i, _ in top)
                 L += ["", f"Approve all {len(top)}: `amz-agents approve {approvable}`"]
@@ -492,7 +496,7 @@ class ChiefOfStaff:
             rest = [(i, a) for i, a in acts if a.team == team and i not in shown]
             if rest:
                 L += ["", f"## {label}", ""]
-                L += self._team_queue(rest)
+                L += self._team_queue(rest, ids)
 
         L += ["", "## Did past changes work?", ""]
         if outcomes:
@@ -552,7 +556,7 @@ class ChiefOfStaff:
             L += [f"- **[{i}]** {self._link(a, ids)}" for i, a in esc]
             L += [""]
         if acts:
-            L += ["## Your queue, by priority", ""] + self._team_queue(acts) + [""]
+            L += ["## Your queue, by priority", ""] + self._team_queue(acts, ids) + [""]
         if opps:
             L += ["## Opportunities for your team", ""]
             L += self._opportunities(opps, ids, owner=False) + [""]
@@ -575,26 +579,27 @@ class ChiefOfStaff:
             return a.reason.replace(ref, f"(see action [{ids[('update_price', a.sku)]}])")
         return a.reason
 
-    def _team_queue(self, items: list[tuple[int, Action]]) -> list[str]:
+    def _team_queue(self, items: list[tuple[int, Action]],
+                    ids: dict[tuple[str, str], int] | None = None) -> list[str]:
         ranked = [(i, a) for i, a in items if a.priority in ("high", "medium")]
         negative = [(i, a) for i, a in items if a.impact_usd is not None and a.impact_usd < 0]
         judgment = [(i, a) for i, a in items if a.priority == "judgment"]
         low = [(i, a) for i, a in items if a.priority == "low" and (i, a) not in negative]
         L: list[str] = []
         if ranked:
-            L += _table(ranked)
+            L += _table(ranked, ids=ids)
         if low:
             L += ["", "### Low priority", ""]
             L += [f"- [{i}] {_describe(a)}: {_usd(a.impact_usd)}, effort {a.effort}"
-                  f"{_roi(a.roi, ', ROI ')}. {a.reason}" for i, a in low]
+                  f"{_roi(a.roi, ', ROI ')}. {_why(a, ids)}" for i, a in low]
         if negative:
             L += ["", "### Consider rejecting", "",
                   "Estimated to cost profit. Approve only if the reason outweighs it.", ""]
-            L += [f"- **[{i}]** {_describe(a)}: est. {_usd(a.impact_usd)}. {a.reason}"
-                  + (f" ({a.notes})" if a.notes else "") for i, a in negative]
+            L += [f"- **[{i}]** {_describe(a)}: est. {_usd(a.impact_usd)}. {_why(a, ids)}"
+                  for i, a in negative]
         if judgment:
             L += ["", "### Needs your judgment", ""]
-            L += [f"- **[{i}]** {_describe(a)} (effort {a.effort or '?'}): {a.reason}"
+            L += [f"- **[{i}]** {_describe(a)} (effort {a.effort or '?'}): {_why(a, ids)}"
                   for i, a in judgment]
         while L and L[0] == "":
             L.pop(0)
@@ -712,11 +717,24 @@ def _roi(v: float | None, prefix: str = "") -> str:
     return f"{prefix}{v:g}x" if v is not None else ""
 
 
-def _table(items: list[tuple[int, Action]], team: bool = False) -> list[str]:
+def _why(a: Action, ids: dict[tuple[str, str], int] | None = None) -> str:
+    why = a.reason + (f" ({a.notes})" if a.notes else "")
+    if isinstance(a.after, dict):
+        if a.after.get("recommendation") and a.kind != "opportunity":
+            why += f" → {a.after['recommendation']}"
+        linked = [f"[{ids[tuple(r)]}]" for r in a.after.get("related") or []
+                  if ids and tuple(r) in ids]
+        if linked and a.kind != "opportunity":
+            why += f" Related: {', '.join(linked)}."
+    return why
+
+
+def _table(items: list[tuple[int, Action]], team: bool = False,
+           ids: dict[tuple[str, str], int] | None = None) -> list[str]:
     head = "| # | Action | " + ("Team | " if team else "") +         "Priority | Est. impact | Effort | ROI | Goal | Why |"
     L = [head, "|" + "---|" * (head.count("|") - 1)]
     for i, a in items:
-        why = a.reason + (f" ({a.notes})" if a.notes else "")
+        why = _why(a, ids)
         L.append(f"| {i} | {_describe(a)} | "
                  + (f"{TEAMS.get(a.team, a.team or '—')} | " if team else "")
                  + f"{a.priority} | {_usd(a.impact_usd)} | {a.effort or '?'} | "
@@ -761,6 +779,6 @@ def _describe(a: Action) -> str:
         return f"List {a.sku} on {a.after['channel']}"
     if a.kind == "send_outreach":
         return f"Follow up with {a.after['company']}"
-    if a.kind == "opportunity":
-        return a.after["title"]
+    if isinstance(a.after, dict) and a.after.get("title"):
+        return a.after["title"]  # opportunities, creative and UX work
     return f"{a.kind} {a.target}"

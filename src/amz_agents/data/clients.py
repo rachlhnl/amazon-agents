@@ -386,3 +386,88 @@ class MetaAdsClient:
 
     def pause(self, object_id: str) -> None:
         self._req("POST", object_id, status="PAUSED")
+
+
+class PageSpeedClient:
+    """Google PageSpeed Insights v5 (Lighthouse). An API key raises the quota."""
+
+    URL = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
+
+    def __init__(self, api_key: str | None = None, http: httpx.Client | None = None):
+        self.api_key = api_key
+        self.http = http or httpx.Client(timeout=120)  # a Lighthouse run takes a while
+
+    @classmethod
+    def from_env(cls) -> PageSpeedClient:
+        return cls(os.getenv("PAGESPEED_API_KEY"))
+
+    def run(self, url: str, strategy: str) -> dict[str, Any]:
+        params: list[tuple[str, str]] = [("url", url), ("strategy", strategy),
+                                         ("category", "performance"),
+                                         ("category", "accessibility")]
+        if self.api_key:
+            params.append(("key", self.api_key))
+        for attempt in range(4):
+            r = self.http.get(self.URL, params=params)
+            if r.status_code in (429, 500, 502, 503, 504) and attempt < 3:
+                time.sleep(min(2**attempt, 30))
+                continue
+            r.raise_for_status()
+            return r.json()["lighthouseResult"]
+        raise RuntimeError("unreachable")
+
+
+class GA4Client:
+    """Google Analytics 4 Data API (runReport).
+
+    Auth: GA4_ACCESS_TOKEN, or a service account JSON in GA4_CREDENTIALS (needs the
+    optional google-auth package: pip install -e ".[ga4]"). Add the service account's
+    email as a Viewer on the GA4 property.
+    """
+
+    def __init__(self, property_id: str, token: Callable[[], str],
+                 http: httpx.Client | None = None):
+        self.url = f"https://analyticsdata.googleapis.com/v1beta/properties/{property_id}:runReport"
+        self.token = token
+        self.http = http or httpx.Client(timeout=60)
+
+    @classmethod
+    def from_env(cls) -> GA4Client:
+        if os.getenv("GA4_ACCESS_TOKEN"):
+            static = os.environ["GA4_ACCESS_TOKEN"]
+            return cls(os.environ["GA4_PROPERTY_ID"], lambda: static)
+        from google.auth.transport.requests import Request
+        from google.oauth2 import service_account
+
+        creds = service_account.Credentials.from_service_account_file(
+            os.environ["GA4_CREDENTIALS"],
+            scopes=["https://www.googleapis.com/auth/analytics.readonly"],
+        )
+
+        def token() -> str:
+            if not creds.valid:
+                creds.refresh(Request())
+            return creds.token
+
+        return cls(os.environ["GA4_PROPERTY_ID"], token)
+
+    def report(self, dimensions: list[str], metrics: list[str], start: str, end: str
+               ) -> list[dict[str, str]]:
+        """Rows as {dimension or metric name: value}, all pages."""
+        out, offset = [], 0
+        while True:
+            body = {"dimensions": [{"name": d} for d in dimensions],
+                    "metrics": [{"name": m} for m in metrics],
+                    "dateRanges": [{"startDate": start, "endDate": end}],
+                    "limit": 10000, "offset": offset}
+            r = self.http.post(self.url, json=body,
+                               headers={"Authorization": f"Bearer {self.token()}"})
+            r.raise_for_status()
+            data = r.json()
+            for row in data.get("rows", []):
+                vals = [v["value"] for v in row.get("dimensionValues", [])]
+                vals += [v["value"] for v in row.get("metricValues", [])]
+                out.append(dict(zip(dimensions + metrics, vals)))
+            offset += 10000
+            if offset >= int(data.get("rowCount", 0)):
+                return out

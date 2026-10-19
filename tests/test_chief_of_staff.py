@@ -52,7 +52,9 @@ def test_actions_ranked_by_priority_then_impact(ctx):
 def test_every_action_has_sku_and_goal_tags_make_sense(ctx):
     _, submitted = run(ctx)
     for _, a in submitted:
-        assert a.sku or (a.kind == "opportunity" and a.target.endswith("/all")), a
+        site_wide = (a.kind == "opportunity" and a.target.endswith("/all")) or \
+            a.kind in ("fix_funnel_step", "improve_page_speed", "fix_accessibility")
+        assert a.sku or site_wide, a
     tags = {(a.kind, a.target): a.goal for _, a in submitted}
     assert tags[("add_negative", "c3/ag3")] == "serves: Keep TACoS under 12%"
     assert tags[("update_price", "BTL-32-SGE")] == "works against: Grow Sage bottle sales"
