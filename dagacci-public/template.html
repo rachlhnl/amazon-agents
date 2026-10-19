@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dagacci Public Snapshot</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface-0: #f4f3ef;
+  --surface-1: #fcfcfb;
+  --border: #e4e2dc;
+  --grid: #ebe9e4;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #77756f;
+  --series-1: #2a78d6;
+  --series-1-hover: #5598e7;
+  --track: #cde2fb;
+  --marker: #0b0b0b;
+  --link: #1c5cab;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface-0: #121211;
+    --surface-1: #1a1a19;
+    --border: #2e2e2c;
+    --grid: #272725;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #96958c;
+    --series-1: #3987e5;
+    --series-1-hover: #6da7ec;
+    --track: #184f95;
+    --marker: #f0efec;
+    --link: #86b6ef;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-0: #121211;
+  --surface-1: #1a1a19;
+  --border: #2e2e2c;
+  --grid: #272725;
+  --text-primary: #f0efec;
+  --text-secondary: #c3c2b7;
+  --text-muted: #96958c;
+  --series-1: #3987e5;
+  --series-1-hover: #6da7ec;
+  --track: #184f95;
+  --marker: #f0efec;
+  --link: #86b6ef;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--surface-0);
+  color: var(--text-primary);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+}
+a { color: var(--link); }
+main { max-width: 1120px; margin: 0 auto; padding: 32px 16px 64px; }
+header h1 { font-size: 28px; margin: 0 0 4px; font-weight: 650; letter-spacing: -0.01em; }
+header p { margin: 0; color: var(--text-secondary); }
+.meta { font-size: 13px; color: var(--text-muted); margin-top: 6px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 24px 0; }
+.tile, .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; }
+.tile { padding: 14px 16px; }
+.tile .label { font-size: 13px; color: var(--text-secondary); }
+.tile .value { font-size: 26px; font-weight: 600; margin-top: 2px; }
+.tile .note { font-size: 12px; color: var(--text-muted); }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); gap: 16px; }
+.card { padding: 18px 20px; margin-bottom: 16px; min-width: 0; }
+.card h2 { font-size: 16px; margin: 0 0 2px; font-weight: 600; }
+.card .sub { font-size: 13px; color: var(--text-secondary); margin: 0 0 14px; }
+.legend { display: flex; gap: 16px; font-size: 12px; color: var(--text-secondary); margin: -6px 0 12px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.key-bar { width: 12px; height: 10px; border-radius: 2px; background: var(--series-1); }
+.key-tick { width: 2px; height: 12px; background: var(--marker); }
+.rows { display: grid; gap: 6px; }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) auto; gap: 10px; align-items: center; font-size: 13px; }
+.row .name { color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .val { color: var(--text-primary); font-variant-numeric: tabular-nums; min-width: 4.5em; text-align: right; }
+.plot { position: relative; height: 18px; border-left: 1px solid var(--grid); }
+.bar { position: absolute; left: 0; top: 2px; height: 14px; background: var(--series-1); border-radius: 0 4px 4px 0; }
+.bar.track { background: var(--track); opacity: .55; }
+.tick { position: absolute; top: 0; width: 2px; height: 18px; background: var(--marker); }
+.row:hover .bar:not(.track), .row:focus-visible .bar:not(.track) { background: var(--series-1-hover); }
+.row:focus-visible { outline: 2px solid var(--series-1); outline-offset: 2px; border-radius: 4px; }
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 14px; margin: 0; }
+.facts dt { color: var(--text-secondary); }
+.facts dd { margin: 0; }
+.flag { font-size: 12px; color: var(--text-muted); }
+ul.plain { margin: 0; padding-left: 18px; font-size: 14px; }
+ul.plain li { margin: 3px 0; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+td.title { white-space: normal; min-width: 240px; }
+th { color: var(--text-secondary); font-weight: 600; cursor: pointer; user-select: none; }
+th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+th[aria-sort="ascending"]::after { content: " ▲"; font-size: 10px; }
+th[aria-sort="descending"]::after { content: " ▼"; font-size: 10px; }
+#tip {
+  position: fixed; pointer-events: none; z-index: 10; display: none;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.12); max-width: 280px;
+}
+#tip strong { display: block; font-size: 14px; }
+#tip .t { color: var(--text-secondary); }
+@media (max-width: 560px) {
+  .row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 2px; }
+  .row .plot { grid-column: 1 / -1; grid-row: 2; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Dagacci public snapshot</h1>
+    <p>What anyone can see about Dagacci Medical Uniform online: catalog, prices, stock, and on-site reviews.</p>
+    <div class="meta" id="meta"></div>
+  </header>
+
+  <section class="tiles" id="tiles"></section>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>Brand profile</h2>
+      <p class="sub">From dagacci.com and its linked profiles</p>
+      <dl class="facts">
+        <dt>Sells</dt><dd>Scrubs, lab coats, jackets and medical accessories for healthcare workers</dd>
+        <dt>Address</dt><dd>1113 1/2 S. Los Angeles St., Los Angeles, CA 90015</dd>
+        <dt>Website</dt><dd><a href="https://www.dagacci.com">dagacci.com</a> (Shopify store, free shipping over $50, wholesale program)</dd>
+        <dt>Social</dt><dd><a href="https://www.instagram.com/dagaccimedical">Instagram</a> · <a href="https://www.tiktok.com/@dagaccimedical">TikTok</a> · <a href="https://www.facebook.com/dagacci">Facebook</a></dd>
+        <dt>Claims</dt><dd>“#1 Bestseller on Amazon for 10 Years”, “Trusted by 10+ Million Healthcare Heroes” <span class="flag">(the brand’s own claims, not verified)</span></dd>
+      </dl>
+    </section>
+    <section class="card">
+      <h2>Where it sells</h2>
+      <p class="sub">Channels with public Dagacci listings found by search</p>
+      <ul class="plain">
+        <li><a href="https://www.dagacci.com">dagacci.com</a>: own store, source of every number on this page</li>
+        <li><a href="https://www.amazon.com/s?k=dagacci+scrubs">Amazon</a>: “Dagacci Medical Uniform” brand store, the main channel</li>
+        <li><a href="https://www.walmart.com/search?q=dagacci">Walmart</a>: scrub sets in many colors and sizes</li>
+        <li>eBay, plus cross-border resellers (Desertcart, Pacifiko)</li>
+      </ul>
+      <p class="flag" style="margin-top:12px">Amazon and Walmart block automated reading, so their ratings, ranks and prices aren’t here. Pull those from Seller Central instead.</p>
+    </section>
+  </div>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>Catalog by product line</h2>
+      <p class="sub">Number of products listed on dagacci.com</p>
+      <div class="rows" id="lines"></div>
+    </section>
+    <section class="card">
+      <h2>Best-reviewed products</h2>
+      <p class="sub">Average star rating, products with 20+ reviews on dagacci.com</p>
+      <div class="rows" id="ratings"></div>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>Scrub set prices</h2>
+    <p class="sub">Lowest price on dagacci.com, against the struck-through “compare at” price</p>
+    <div class="legend"><span><i class="key-bar"></i>Price</span><span><i class="key-tick"></i>Compare-at price</span></div>
+    <div class="rows" id="prices"></div>
+  </section>
+
+  <section class="card">
+    <h2>Stock by product</h2>
+    <p class="sub">Share of color/size options that can be bought now, lowest first (shaded track = all options)</p>
+    <div class="rows" id="stock"></div>
+  </section>
+
+  <section class="card">
+    <h2>Full catalog</h2>
+    <p class="sub">Every product in the public feed. Click a column to sort.</p>
+    <div class="table-wrap"><table id="catalog"></table></div>
+  </section>
+
+  <p class="meta">Built by <code>dagacci-public/build.py</code> from <code>snapshot.json</code>. Ratings are the store’s own review widget (Judge.me), which may include imported reviews.</p>
+</main>
+<div id="tip" role="tooltip"></div>
+
+<script>
+const DATA = /*SNAPSHOT*/null;
+const P = DATA.products;
+const $ = (id) => document.getElementById(id);
+const usd = (n) => "$" + n.toFixed(2);
+const pct = (n) => Math.round(n * 100) + "%";
+const short = (t) => t.replace(/^DAGACCI (MEDICAL UNIFORM®|OFFICIAL|OFFCIAL)\s*/i, "").replace(/\s*\[[^\]]*\]$/, "");
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+$("meta").textContent = "Collected " + new Date(DATA.collected_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) + " from " + DATA.source.replace("https://www.", "");
+
+// Tiles
+const own = P.filter((p) => p.line !== "Other brands");
+const variants = P.reduce((s, p) => s + p.variants, 0);
+const inStock = P.reduce((s, p) => s + p.in_stock, 0);
+const rated = P.filter((p) => p.reviews > 0);
+const reviews = rated.reduce((s, p) => s + p.reviews, 0);
+const avg = rated.reduce((s, p) => s + p.rating * p.reviews, 0) / reviews;
+const sets = P.filter((p) => p.line === "Scrub sets");
+const setPrices = sets.map((p) => p.price);
+[
+  ["Products listed", P.length, own.length + " Dagacci-branded"],
+  ["Color/size options", variants.toLocaleString(), pct(inStock / variants) + " in stock"],
+  ["Scrub set price", "$" + Math.round(Math.min(...setPrices)) + "–" + Math.round(Math.max(...setPrices)), sets.length + " styles, from " + usd(Math.min(...setPrices))],
+  ["Average rating", avg.toFixed(2) + " ★", "weighted by review count"],
+  ["On-site reviews", reviews.toLocaleString(), "across " + rated.length + " products"],
+].forEach(([label, value, note]) => {
+  const t = el("div", "tile");
+  t.append(el("div", "label", label), el("div", "value", value), el("div", "note", note));
+  $("tiles").append(t);
+});
+
+// Tooltip
+const tip = $("tip");
+function showTip(e, lines) {
+  tip.replaceChildren(el("strong", null, lines[0]), ...lines.slice(1).map((l) => el("div", "t", l)));
+  tip.style.display = "block";
+  const r = e.currentTarget.getBoundingClientRect();
+  const x = e.clientX ?? r.left + r.width / 2, y = e.clientY ?? r.top;
+  tip.style.left = Math.min(x + 14, innerWidth - tip.offsetWidth - 8) + "px";
+  tip.style.top = Math.max(8, y - tip.offsetHeight - 10) + "px";
+}
+const hideTip = () => { tip.style.display = "none"; };
+
+// One horizontal bar row: label | plot | value
+function row(container, { name, value, frac, track, tickFrac, tipLines }) {
+  const r = el("div", "row");
+  r.tabIndex = 0;
+  const plot = el("div", "plot");
+  if (track) { const t = el("div", "bar track"); t.style.width = "100%"; plot.append(t); }
+  const b = el("div", "bar"); b.style.width = Math.max(frac * 100, 0.6) + "%"; plot.append(b);
+  if (tickFrac != null) { const k = el("div", "tick"); k.style.left = "calc(" + tickFrac * 100 + "% - 1px)"; plot.append(k); }
+  const n = el("div", "name", name); n.title = name;
+  r.append(n, plot, el("div", "val", value));
+  r.addEventListener("pointermove", (e) => showTip(e, tipLines));
+  r.addEventListener("pointerleave", hideTip);
+  r.addEventListener("focus", (e) => showTip(e, tipLines));
+  r.addEventListener("blur", hideTip);
+  container.append(r);
+}
+
+// Catalog by line
+const byLine = {};
+P.forEach((p) => { (byLine[p.line] ||= []).push(p); });
+const lineMax = Math.max(...Object.values(byLine).map((a) => a.length));
+Object.entries(byLine).sort((a, b) => b[1].length - a[1].length).forEach(([line, items]) => {
+  const opts = items.reduce((s, p) => s + p.variants, 0);
+  row($("lines"), { name: line, value: items.length, frac: items.length / lineMax,
+    tipLines: [items.length + " products", line, opts.toLocaleString() + " color/size options"] });
+});
+
+// Ratings
+P.filter((p) => p.reviews >= 20).sort((a, b) => b.rating - a.rating).forEach((p) => {
+  row($("ratings"), { name: short(p.title), value: p.rating.toFixed(2) + " ★", frac: p.rating / 5,
+    tipLines: [p.rating.toFixed(2) + " ★ from " + p.reviews + " reviews", p.title] });
+});
+
+// Prices (scrub sets)
+const priceMax = Math.max(...sets.map((p) => Math.max(p.price, p.compare_at || 0)));
+[...sets].sort((a, b) => b.price - a.price).forEach((p) => {
+  const disc = p.compare_at && p.compare_at > p.price ? 1 - p.price / p.compare_at : 0;
+  row($("prices"), { name: short(p.title), value: usd(p.price), frac: p.price / priceMax,
+    tickFrac: p.compare_at ? p.compare_at / priceMax : null,
+    tipLines: [usd(p.price), p.title, p.compare_at ? "Compare at " + usd(p.compare_at) + (disc ? " (" + pct(disc) + " off)" : "") : "No compare-at price"] });
+});
+
+// Stock
+[...P].filter((p) => p.variants > 1).sort((a, b) => a.in_stock / a.variants - b.in_stock / b.variants).forEach((p) => {
+  const f = p.in_stock / p.variants;
+  row($("stock"), { name: short(p.title), value: pct(f), frac: f, track: true,
+    tipLines: [pct(f) + " in stock", p.title, p.in_stock + " of " + p.variants + " options available"] });
+});
+
+// Catalog table
+const cols = [
+  ["Product", (p) => p.title, "title"],
+  ["Line", (p) => p.line],
+  ["Price", (p) => p.price, "num", usd],
+  ["Compare at", (p) => p.compare_at || 0, "num", (v) => v ? usd(v) : "–"],
+  ["Rating", (p) => p.rating || 0, "num", (v) => v ? v.toFixed(2) : "–"],
+  ["Reviews", (p) => p.reviews, "num"],
+  ["Colors", (p) => p.colors, "num"],
+  ["In stock", (p) => p.in_stock / p.variants, "num", pct],
+  ["Listed since", (p) => p.created],
+];
+const table = $("catalog");
+let sortCol = 5, sortDir = -1;
+function renderTable() {
+  const head = el("tr");
+  cols.forEach(([label, , cls], i) => {
+    const th = el("th", cls === "num" ? "num" : null, label);
+    th.setAttribute("aria-sort", i === sortCol ? (sortDir > 0 ? "ascending" : "descending") : "none");
+    th.tabIndex = 0;
+    const go = () => {
+      sortDir = i === sortCol ? -sortDir : (cls === "num" ? -1 : 1); sortCol = i; renderTable();
+      table.tHead.rows[0].cells[i].focus({ preventScroll: true });
+    };
+    th.addEventListener("click", go);
+    th.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+    head.append(th);
+  });
+  const get = cols[sortCol][1];
+  const rows = [...P].sort((a, b) => { const x = get(a), y = get(b); return (x > y ? 1 : x < y ? -1 : 0) * sortDir; });
+  const body = rows.map((p) => {
+    const tr = el("tr");
+    cols.forEach(([, f, cls, fmt], i) => {
+      const td = el("td", cls || null);
+      if (i === 0) { const a = el("a", null, p.title); a.href = p.url; td.append(a); }
+      else { const v = f(p); td.textContent = fmt ? fmt(v) : v; }
+      tr.append(td);
+    });
+    return tr;
+  });
+  table.replaceChildren(el("thead"), el("tbody"));
+  table.tHead.append(head);
+  table.tBodies[0].append(...body);
+}
+renderTable();
+</script>
+</body>
+</html>
