@@ -33,6 +33,31 @@ The orchestrator runs them in that order. Inventory and reviews publish findings
 to a shared context that later agents use: the ads agent won't raise bids and the
 pricing agent won't cut prices on a SKU that is about to stock out.
 
+## Chief of staff
+
+The agents propose; the chief of staff turns their proposals into a plan a busy
+person can act on in five minutes. It doesn't make changes itself. Each run it:
+
+1. **Tracks goals** from `goals.toml` (unit or revenue growth per SKU, a TACoS
+   ceiling), comparing the last 7 days with a baseline of days 15–28 ago.
+2. **Estimates the 30-day profit impact** of every proposed action and ranks the
+   approval queue by it. The assumptions (price elasticity, how much sales move
+   with bids) are constants at the top of `agents/chief_of_staff.py`. Tune them
+   once you have the company's own results.
+3. **Tags each action** with the goal it serves or works against.
+4. **Escalates** what needs a person: goals that can't be met (e.g. a growth goal
+   on a SKU about to stock out) and anomalies (a sudden sales drop, with likely
+   causes such as a lost Buy Box; an ad-spend spike).
+5. **Checks past changes.** A week after an action executes, it compares the
+   SKU's daily profit before and after, records a verdict, and says which action
+   types have earned more autonomy and which need tighter guardrails.
+6. **Writes the brief**: needs your attention, goals, top actions by impact,
+   actions to consider rejecting, judgment calls, and whether past changes worked.
+   With SMTP settings in `.env`, `amz-agents run` also emails it to the team.
+
+The before/after checks need daily per-SKU history in `metrics_daily`
+(Sales & Traffic report plus Ads reports; see `ingest.py`).
+
 ## Quick start
 
 ```bash
@@ -77,12 +102,14 @@ src/amz_agents/
   guardrails.py      hard limits on bids, budgets, prices
   actions.py         action log, modes, approval flow
   executors.py       approved actions -> API calls
-  orchestrator.py    runs agents, writes the daily brief
+  orchestrator.py    runs agents, hands proposals to the chief of staff
+  notify.py          emails the brief (optional)
   llm.py             optional Claude calls
   ingest.py          API -> warehouse jobs (stubs to implement)
-  agents/            inventory, reviews, pricing, ads, listing
+  agents/            inventory, reviews, pricing, ads, listing, chief_of_staff
   data/              warehouse (SQLite), API clients, sample data
-tests/               guardrail and agent behavior tests
+goals.toml           goals the chief of staff steers toward
+tests/               guardrail, agent and chief-of-staff tests
 ```
 
 ## Compliance notes

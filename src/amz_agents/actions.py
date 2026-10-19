@@ -27,6 +27,11 @@ class Action:
     after: Any
     reason: str
     notes: str = ""
+    # Filled in by the chief of staff before submission.
+    sku: str | None = None
+    impact_usd: float | None = None
+    confidence: str = ""
+    goal: str = ""
 
 
 class Executor(Protocol):
@@ -34,7 +39,7 @@ class Executor(Protocol):
 
 
 # Customer-facing or real-world actions that always need a human, even in auto mode.
-HUMAN_ONLY = {"update_listing_copy", "reorder", "flag_defect"}
+HUMAN_ONLY = {"update_listing_copy", "reorder", "flag_defect", "escalation"}
 
 
 class ActionLog:
@@ -52,8 +57,8 @@ class ActionLog:
         if self.mode is Mode.AUTO and action.kind in HUMAN_ONLY:
             status = "pending_approval"
         action_id = self.wh.execute(
-            "INSERT INTO actions (agent, kind, target, before, after, reason, status, notes) "
-            "VALUES (?,?,?,?,?,?,?,?)",
+            "INSERT INTO actions (agent, kind, target, before, after, reason, status, notes, "
+            "sku, impact_usd, confidence, goal) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 action.agent,
                 action.kind,
@@ -63,6 +68,10 @@ class ActionLog:
                 action.reason,
                 status,
                 action.notes,
+                action.sku,
+                action.impact_usd,
+                action.confidence,
+                action.goal,
             ),
         )
         if status == "approved":
@@ -106,7 +115,10 @@ class ActionLog:
             return
         try:
             executor(row)
-            self.wh.execute("UPDATE actions SET status='executed' WHERE id=?", (action_id,))
+            self.wh.execute(
+                "UPDATE actions SET status='executed', executed_at=date('now') WHERE id=?",
+                (action_id,),
+            )
         except Exception as e:  # noqa: BLE001 - log the failure, don't crash the run
             self.wh.execute(
                 "UPDATE actions SET status='failed', notes=? WHERE id=?", (repr(e), action_id)

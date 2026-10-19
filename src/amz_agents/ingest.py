@@ -31,6 +31,14 @@ def ingest_ads(wh: Warehouse, ads: AdsClient) -> None:
     raise NotImplementedError
 
 
+def ingest_metrics_daily(wh: Warehouse, sp: SPAPIClient, ads: AdsClient) -> None:
+    """metrics_daily (date, sku, units, revenue, ad_spend, ad_sales) -> Reports API
+    GET_SALES_AND_TRAFFIC_REPORT (daily, by child ASIN; map ASIN -> SKU) joined with Ads
+    Reporting v3 spAdvertisedProduct (daily, by advertisedSku). Backfill 60 days on first
+    run so the chief of staff has a baseline."""
+    raise NotImplementedError
+
+
 def ingest_reviews(wh: Warehouse) -> None:
     """reviews -> no general review API exists for sellers. Options: Customer Feedback API
     (brand-registered, topic-level), Brand Analytics, or a licensed data vendor. Do not

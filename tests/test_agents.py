@@ -1,19 +1,8 @@
 import pytest
 
 from amz_agents.actions import ActionLog
-from amz_agents.agents.base import Context
-from amz_agents.config import Mode, Settings
-from amz_agents.data.sample import seed
-from amz_agents.data.warehouse import Warehouse
+from amz_agents.config import Mode
 from amz_agents.orchestrator import Orchestrator
-
-
-@pytest.fixture
-def ctx(monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    wh = Warehouse()
-    seed(wh)
-    return Context(wh, Settings())
 
 
 def run(ctx, mode=Mode.RECOMMEND, executors=None):
@@ -67,7 +56,8 @@ def test_recommend_mode_never_executes(ctx):
     calls = []
     _submitted, log = run(ctx, Mode.RECOMMEND, {"update_bid": calls.append})
     assert not calls
-    assert {a["status"] for a in log.list()} == {"proposed"}
+    new = [a for a in log.list() if a["status"] != "executed"]  # seeded history is executed
+    assert {a["status"] for a in new} == {"proposed"}
 
 
 def test_auto_mode_executes_but_holds_human_only(ctx):

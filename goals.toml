@@ -1,0 +1,27 @@
+# Goals the chief of staff steers toward. Edit these for the company.
+#
+# metric:
+#   units    -> grow daily units by `change` (0.15 = +15%) vs. the baseline window
+#   revenue  -> grow daily revenue by `change`
+#   tacos    -> keep total ad spend / total revenue at or below `target`
+# scope: a SKU, or "all"
+#
+# Progress compares the last 7 days with a baseline of days 15-28 ago.
+
+[[goal]]
+name = "Grow Sage bottle sales"
+metric = "units"
+scope = "BTL-32-SGE"
+change = 0.15
+
+[[goal]]
+name = "Keep TACoS under 12%"
+metric = "tacos"
+scope = "all"
+target = 0.12
+
+[[goal]]
+name = "Grow 32oz Black revenue"
+metric = "revenue"
+scope = "BTL-32-BLK"
+change = 0.10

@@ -68,8 +68,34 @@ CREATE TABLE IF NOT EXISTS actions (
     before      TEXT,
     after       TEXT,
     reason      TEXT,
-    status      TEXT NOT NULL,     -- proposed | pending_approval | approved | rejected | executed | failed
-    notes       TEXT
+    status      TEXT NOT NULL,     -- proposed | pending_approval | approved | rejected | executed | failed | acknowledged
+    notes       TEXT,
+    sku         TEXT,              -- product the action affects, for outcome tracking
+    impact_usd  REAL,              -- chief of staff's estimate of 30-day profit impact
+    confidence  TEXT,              -- low | medium | high
+    goal        TEXT,              -- goal this action serves, if any
+    executed_at TEXT
+);
+
+-- Daily per-SKU history (Sales & Traffic + Ads reports). The chief of staff
+-- uses it for goal progress, anomaly detection, and judging past actions.
+CREATE TABLE IF NOT EXISTS metrics_daily (
+    date       TEXT,
+    sku        TEXT,
+    units      INTEGER,
+    revenue    REAL,
+    ad_spend   REAL,
+    ad_sales   REAL,
+    PRIMARY KEY (date, sku)
+);
+
+CREATE TABLE IF NOT EXISTS outcomes (
+    action_id  INTEGER PRIMARY KEY,
+    evaluated  TEXT DEFAULT (datetime('now')),
+    metric     TEXT,
+    before     REAL,
+    after      REAL,
+    verdict    TEXT                -- helped | hurt | neutral
 );
 """
 
@@ -81,6 +107,16 @@ class Warehouse:
         self.conn = sqlite3.connect(str(path))
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """Add columns introduced after a warehouse was first created."""
+        have = {r["name"] for r in self.conn.execute("PRAGMA table_info(actions)")}
+        for col, typ in [("sku", "TEXT"), ("impact_usd", "REAL"), ("confidence", "TEXT"),
+                         ("goal", "TEXT"), ("executed_at", "TEXT")]:
+            if col not in have:
+                self.conn.execute(f"ALTER TABLE actions ADD COLUMN {col} {typ}")
+        self.conn.commit()
 
     def query(self, sql: str, params: tuple | dict = ()) -> list[dict[str, Any]]:
         return [dict(r) for r in self.conn.execute(sql, params).fetchall()]

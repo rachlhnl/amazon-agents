@@ -1,7 +1,7 @@
 """Command line entry point.
 
   amz-agents demo                 seed sample data and run all agents
-  amz-agents run                  run all agents against the warehouse
+  amz-agents run [--no-email]     run all agents, write the brief, email it if SMTP is set
   amz-agents actions [--status S] list logged actions
   amz-agents approve ID [ID ...]  approve and execute pending actions
   amz-agents reject ID [ID ...]   reject pending actions
@@ -35,7 +35,9 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="amz-agents")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("demo")
-    sub.add_parser("run")
+    sub.add_parser("run").add_argument(
+        "--no-email", action="store_true", help="don't email the brief even if SMTP is set"
+    )
     p_list = sub.add_parser("actions")
     p_list.add_argument("--status")
     for name in ("approve", "reject"):
@@ -54,13 +56,18 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd in ("demo", "run"):
         if args.cmd == "demo":
-            wh.execute("DELETE FROM actions")
             seed(wh)
         orch = Orchestrator(Context(wh, settings), _log(wh, settings))
         submitted = orch.run()
         path = orch.brief(submitted)
-        print(path.read_text())
+        text = path.read_text()
+        print(text)
         print(f"Brief written to {path}")
+        if args.cmd == "run" and not args.no_email:
+            from .notify import send_brief
+
+            if send_brief(text, f"Amazon brief: {path.stem.removeprefix('brief-')}"):
+                print("Brief emailed.")
     elif args.cmd == "actions":
         for a in _log(wh, settings).list(args.status):
             print(json.dumps(a))

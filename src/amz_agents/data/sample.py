@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from datetime import date, timedelta
+
 from .warehouse import Warehouse
 
 PRODUCTS = [
@@ -40,7 +43,50 @@ REVIEWS = [
 ]
 
 
-def seed(wh: Warehouse) -> None:
+def _history(today: date) -> list[dict]:
+    """28 days of per-SKU history ending yesterday, shaped to exercise the chief
+    of staff: a bid cut 10 days ago and a price cut 12 days ago that both helped,
+    flat Sage sales against a growth goal, and a sudden drop on the 64oz yesterday."""
+    rows = []
+    for ago in range(28, 0, -1):
+        d = (today - timedelta(days=ago)).isoformat()
+        wobble = (ago % 3) - 1  # deterministic -1/0/+1
+        blk_units = 19 + wobble if ago <= 7 else 18 + wobble
+        lid_units = (6 if ago % 2 else 7) if ago <= 11 else 5
+        lid_price = 12.99 if ago <= 11 else 13.99
+        big_units = 0 if ago == 1 else 4 + wobble
+        rows += [
+            {"date": d, "sku": "BTL-32-BLK", "units": blk_units, "revenue": blk_units * 29.99,
+             "ad_spend": 42.0 if ago <= 9 else 50.0, "ad_sales": 180.0 + 10 * wobble},
+            {"date": d, "sku": "BTL-32-SGE", "units": 11 + wobble, "revenue": (11 + wobble) * 29.99,
+             "ad_spend": 6.0, "ad_sales": 25.0},
+            {"date": d, "sku": "LID-STRAW", "units": lid_units, "revenue": lid_units * lid_price,
+             "ad_spend": 2.0, "ad_sales": 10.0},
+            {"date": d, "sku": "BTL-64-BLK", "units": big_units, "revenue": big_units * 39.99,
+             "ad_spend": 5.0, "ad_sales": 40.0 if big_units else 0.0},
+        ]
+    return rows
+
+
+def _past_actions(today: date) -> list[dict]:
+    """Executed actions from earlier runs, for the chief of staff to evaluate."""
+    def ago(n: int) -> str:
+        return (today - timedelta(days=n)).isoformat()
+
+    return [
+        {"agent": "ads", "kind": "update_bid", "target": "kw3", "sku": "BTL-32-BLK",
+         "before": json.dumps({"bid": 1.19, "keyword": "metal water bottle"}),
+         "after": json.dumps({"bid": 0.95}), "reason": "ACoS 98% vs target 25%",
+         "status": "executed", "created": ago(10), "executed_at": ago(10)},
+        {"agent": "pricing", "kind": "update_price", "target": "LID-STRAW", "sku": "LID-STRAW",
+         "before": json.dumps({"price": 13.99}), "after": json.dumps({"price": 12.99}),
+         "reason": "overstock: speed up sell-through",
+         "status": "executed", "created": ago(12), "executed_at": ago(12)},
+    ]
+
+
+def seed(wh: Warehouse, today: date | None = None) -> None:
+    today = today or date.today()
     cols_p = ["sku", "asin", "title", "price", "landed_cost", "fees", "units_on_hand",
               "units_inbound", "daily_velocity", "lead_time_days", "buybox_price"]
     cols_k = ["keyword_id", "campaign_id", "ad_group_id", "sku", "keyword", "match_type",
@@ -48,8 +94,11 @@ def seed(wh: Warehouse) -> None:
     cols_s = ["campaign_id", "ad_group_id", "sku", "search_term", "match_type",
               "clicks", "spend", "sales", "orders"]
     cols_r = ["asin", "rating", "body", "created"]
-    wh.execute("DELETE FROM search_terms")
-    wh.execute("DELETE FROM reviews")
+    for table in ("search_terms", "reviews", "metrics_daily", "actions", "outcomes"):
+        wh.execute(f"DELETE FROM {table}")
+    wh.execute("DELETE FROM sqlite_sequence WHERE name='actions'")  # restart action IDs at 1
+    wh.insert_many("metrics_daily", _history(today))
+    wh.insert_many("actions", _past_actions(today))
     wh.insert_many(
         "products", [{**dict(zip(cols_p, r)), "product_type": "BOTTLE"} for r in PRODUCTS]
     )
