@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS actions (
     before      TEXT,
     after       TEXT,
     reason      TEXT,
-    status      TEXT NOT NULL,     -- proposed | pending_approval | approved | rejected | executed | failed | acknowledged
+    status      TEXT NOT NULL,     -- proposed | pending_approval | approved | rejected | executed | failed | acknowledged | done
     notes       TEXT,
     sku         TEXT,              -- product the action affects, for outcome tracking
     impact_usd  REAL,              -- chief of staff's estimate of 30-day profit impact
@@ -78,7 +78,27 @@ CREATE TABLE IF NOT EXISTS actions (
     team        TEXT,              -- team that owns the work
     effort      TEXT,              -- XS | S | M | L | XL
     roi         REAL,              -- impact_usd / cost of the effort
-    priority    TEXT               -- now | high | medium | low | judgment
+    priority    TEXT,              -- now | high | medium | low | judgment
+    done_at     TEXT               -- when a person marked human-only work done
+);
+
+-- One row per run, and one per agent per run, for the tracker.
+CREATE TABLE IF NOT EXISTS runs (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    started    TEXT DEFAULT (datetime('now')),
+    finished   TEXT,
+    mode       TEXT,
+    submitted  INTEGER,
+    skipped    INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS agent_runs (
+    run_id     INTEGER,
+    agent      TEXT,
+    team       TEXT,
+    proposed   INTEGER,
+    problems   TEXT,               -- JSON list; empty = healthy
+    PRIMARY KEY (run_id, agent)
 );
 
 -- Daily per-SKU history (Sales & Traffic + Ads reports). The chief of staff
@@ -220,7 +240,9 @@ class Warehouse:
     def __init__(self, path: str | Path = ":memory:"):
         if str(path) != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(str(path))
+        # The tracker server answers one request at a time, possibly off the thread
+        # that opened the warehouse.
+        self.conn = sqlite3.connect(str(path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
         self._migrate()
@@ -230,7 +252,8 @@ class Warehouse:
         added = {
             "actions": [("sku", "TEXT"), ("impact_usd", "REAL"), ("confidence", "TEXT"),
                         ("goal", "TEXT"), ("executed_at", "TEXT"), ("team", "TEXT"),
-                        ("effort", "TEXT"), ("roi", "REAL"), ("priority", "TEXT")],
+                        ("effort", "TEXT"), ("roi", "REAL"), ("priority", "TEXT"),
+                        ("done_at", "TEXT")],
         }
         for table, cols in added.items():
             have = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}

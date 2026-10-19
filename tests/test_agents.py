@@ -56,7 +56,8 @@ def test_recommend_mode_never_executes(ctx):
     calls = []
     _submitted, log = run(ctx, Mode.RECOMMEND, {"update_bid": calls.append})
     assert not calls
-    new = [a for a in log.list() if a["status"] != "executed"]  # seeded history is executed
+    seeded = {r["id"] for r in ctx.wh.query("SELECT id FROM actions WHERE created < date('now')")}
+    new = [a for a in log.list() if a["id"] not in seeded]
     assert {a["status"] for a in new} == {"proposed"}
 
 

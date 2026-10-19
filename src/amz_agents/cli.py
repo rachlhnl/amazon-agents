@@ -9,6 +9,9 @@
   amz-agents actions [--status S] list logged actions
   amz-agents approve ID [ID ...]  approve and execute pending actions
   amz-agents reject ID [ID ...]   reject pending actions
+  amz-agents done ID [ID ...]     mark approved human-only work as done
+  amz-agents dashboard [--serve [--allow-actions] [--port N]] [--out FILE]
+                                  the agent tracker (also written by run/demo)
 """
 
 from __future__ import annotations
@@ -51,8 +54,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_list = sub.add_parser("actions")
     p_list.add_argument("--status")
-    for name in ("approve", "reject"):
+    for name in ("approve", "reject", "done"):
         sub.add_parser(name).add_argument("ids", nargs="+", type=int)
+    p_dash = sub.add_parser("dashboard")
+    p_dash.add_argument("--out", default="reports/dashboard.html")
+    p_dash.add_argument("--serve", action="store_true", help="serve it locally, always fresh")
+    p_dash.add_argument("--host", default="127.0.0.1")
+    p_dash.add_argument("--port", type=int, default=8765)
+    p_dash.add_argument("--allow-actions", action="store_true",
+                        help="show Approve / Reject / Mark done buttons (server mode)")
     args = ap.parse_args(argv)
 
     settings = Settings.from_env()
@@ -77,6 +87,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Brief written to {path}")
         for team, p in teams.items():
             print(f"{TEAMS[team]} brief written to {p}")
+        from .dashboard import write as write_dashboard
+
+        print(f"Agent tracker written to {write_dashboard(wh)}")
         if args.cmd == "run" and not args.no_email:
             from .notify import send_brief, team_recipients_var
 
@@ -102,13 +115,21 @@ def main(argv: list[str] | None = None) -> int:
         from .ingest import import_csv
 
         print(f"{import_csv(wh, args.table, args.file)} rows into {args.table}")
+    elif args.cmd == "dashboard":
+        from . import dashboard
+
+        if args.serve:
+            dashboard.serve(wh, _log(wh, settings, executors=args.allow_actions),
+                            args.host, args.port, args.allow_actions)
+        else:
+            print(f"Agent tracker written to {dashboard.write(wh, args.out)}")
     elif args.cmd == "actions":
         for a in _log(wh, settings, executors=False).list(args.status):
             print(json.dumps(a))
     else:
         log = _log(wh, settings)
         for i in args.ids:
-            (log.approve if args.cmd == "approve" else log.reject)(i)
+            {"approve": log.approve, "reject": log.reject, "done": log.complete}[args.cmd](i)
             status = log.wh.query("SELECT status FROM actions WHERE id=?", (i,))[0]["status"]
             print(f"action {i}: {status}")
     return 0

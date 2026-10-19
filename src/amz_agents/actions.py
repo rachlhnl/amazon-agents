@@ -5,6 +5,9 @@ attributed and changes rolled back. What happens next depends on Mode:
   recommend -> status 'proposed' (never executed)
   approve   -> status 'pending_approval' until a human approves
   auto      -> executed immediately (guardrails already applied)
+
+Human-only work, once approved, is 'acknowledged' (a person is on it) until
+someone marks it 'done'.
 """
 
 from __future__ import annotations
@@ -55,7 +58,7 @@ HUMAN_ONLY = {
 # Statuses that mean an action is still waiting, or was carried out recently
 # enough that proposing it again would duplicate it (e.g. a second identical
 # negative keyword while the 30-day search-term report still shows the term).
-OPEN_OR_DONE = ("pending_approval", "approved", "executed", "acknowledged")
+OPEN_OR_DONE = ("pending_approval", "approved", "executed", "acknowledged", "done")
 REPEAT_LOOKBACK_DAYS = 30
 
 
@@ -106,6 +109,11 @@ class ActionLog:
 
     def reject(self, action_id: int) -> None:
         self._set_status(action_id, "rejected", expect="pending_approval")
+
+    def complete(self, action_id: int) -> None:
+        """A person finished human-only work (placed the PO, published the copy...)."""
+        self._set_status(action_id, "done", expect="acknowledged")
+        self.wh.execute("UPDATE actions SET done_at=date('now') WHERE id=?", (action_id,))
 
     def already_open_or_done(self, action: Action) -> bool:
         """True if the same change is awaiting approval or was carried out recently.

@@ -81,7 +81,22 @@ class Orchestrator:
 
         self.chief.health = health
         plan = self.chief.plan(self.chief.review(proposals))
-        return [(self.log.submit(a), a) for a in plan]
+        submitted = [(self.log.submit(a), a) for a in plan]
+        self._record_run(len(submitted))
+        return submitted
+
+    def _record_run(self, submitted: int) -> None:
+        """Keep each run and each agent's health for the tracker."""
+        run_id = self.ctx.wh.execute(
+            "INSERT INTO runs (finished, mode, submitted, skipped) "
+            "VALUES (datetime('now'), ?, ?, ?)",
+            (self.ctx.settings.mode.value, submitted, self.skipped),
+        )
+        self.ctx.wh.insert_many("agent_runs", [
+            {"run_id": run_id, "agent": h["agent"], "team": h["role"].team,
+             "proposed": h["proposed"], "problems": json.dumps(h["problems"])}
+            for h in self.chief.agent_health()
+        ])
 
     def brief(self, submitted: list[tuple[int, Action]], out_dir: str = "reports") -> Path:
         path = Path(out_dir) / f"brief-{self.chief.today.isoformat()}.md"

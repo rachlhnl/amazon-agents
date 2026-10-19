@@ -179,6 +179,21 @@ Off-Amazon goals aren't tracked yet: `goals.toml` metrics are measured on Amazon
 sales, and outside spend doesn't count toward TACoS. The brief shows units by
 channel.
 
+## Agent tracker
+
+`amz-agents run` (and `demo`) also writes `reports/dashboard.html`: one page
+showing every agent's health, its work over the last 30 days as a progress bar
+(done, in progress, waiting for review, rejected, failed), the results of past
+changes, and a filterable work queue (team, agent, status, priority, search)
+with each item's priority, impact, effort, ROI, status and age. Items waiting
+3+ days are highlighted.
+
+`amz-agents dashboard --serve` serves it on http://127.0.0.1:8765, fresh on every
+load. Add `--allow-actions` for Approve / Reject / Mark done buttons; every change
+needs a token generated for that server process, and it listens on localhost only
+unless you pass `--host`. Approved human-only work stays "in progress" until
+someone marks it done (`amz-agents done ID`, or the button).
+
 ## Quick start
 
 ```bash

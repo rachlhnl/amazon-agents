@@ -164,7 +164,8 @@ def _history(today: date) -> list[dict]:
 
 
 def _past_actions(today: date) -> list[dict]:
-    """Executed actions from earlier runs, for the chief of staff to evaluate."""
+    """Actions from earlier runs: two executed ones for the chief of staff to judge,
+    and work at other stages for the tracker."""
     def ago(n: int) -> str:
         return (today - timedelta(days=n)).isoformat()
 
@@ -177,6 +178,43 @@ def _past_actions(today: date) -> list[dict]:
          "before": json.dumps({"price": 13.99}), "after": json.dumps({"price": 12.99}),
          "reason": "overstock: speed up sell-through",
          "status": "executed", "created": ago(12), "executed_at": ago(12)},
+        # Work at other stages, so the tracker has history to show.
+        {"agent": "ux", "kind": "improve_page_speed",
+         "target": "https://yourstore.example/products/insulated-bottle-32oz",
+         "sku": "BTL-32-BLK", "team": "ux", "effort": "M", "priority": "medium",
+         "before": json.dumps({"perf_mobile": 41}),
+         "after": json.dumps({"title": "Speed up product /products/insulated-bottle-32oz",
+                              "impact_usd": 180.0}),
+         "reason": "mobile performance 41/100", "status": "done", "created": ago(14),
+         "done_at": ago(6)},
+        {"agent": "listing", "kind": "update_listing_copy", "target": "BTL-32-SGE",
+         "sku": "BTL-32-SGE", "team": "amazon_ops", "effort": "M", "priority": "judgment",
+         "before": json.dumps({"title": "Insulated Water Bottle 32oz Sage"}),
+         "after": json.dumps({"missing_terms": ["gym"], "review_themes": [], "draft": None}),
+         "reason": "1 converting search-term word absent from title",
+         "status": "acknowledged", "created": ago(5)},
+        {"agent": "sales", "kind": "send_outreach", "target": "L4", "sku": "LID-STRAW",
+         "team": "sales", "effort": "S", "priority": "judgment",
+         "before": json.dumps({"stage": "negotiating"}),
+         "after": json.dumps({"company": "Lakeside Gifts", "contact": "Jo Park",
+                              "est_annual_value": 9000, "draft": None}),
+         "reason": "Lakeside Gifts (negotiating): no contact in 4 days",
+         "status": "done", "created": ago(21), "done_at": ago(20)},
+        {"agent": "ads", "kind": "add_negative", "target": "c1/ag1", "sku": "BTL-32-BLK",
+         "team": "amazon_ops", "effort": "XS", "priority": "medium", "impact_usd": 18.0,
+         "before": "null", "after": json.dumps({"keyword": "cheap water bottle",
+                                                 "match_type": "negativeExact"}),
+         "reason": "'cheap water bottle': 22 clicks, $18.00 spend, 0 orders",
+         "status": "rejected", "created": ago(6)},
+        {"agent": "marketing", "kind": "update_campaign_budget", "target": "m2",
+         "sku": "BTL-32-SGE", "team": "marketing", "effort": "XS", "priority": "medium",
+         "impact_usd": 40.0,
+         "before": json.dumps({"daily_budget": 16.0, "name": "Sage launch", "platform": "meta",
+                               "destination": "amazon", "profit_per_dollar": 1.6}),
+         "after": json.dumps({"daily_budget": 19.2}),
+         "reason": "$1.60 profit per $1 spent over 30 days (scale)",
+         "status": "failed", "notes": "no API executor for meta: META_ACCESS_TOKEN not set",
+         "created": ago(9)},
     ]
 
 
@@ -191,11 +229,13 @@ def seed(wh: Warehouse, today: date | None = None) -> None:
     cols_r = ["asin", "rating", "body", "created"]
     for table in ("search_terms", "reviews", "metrics_daily", "actions", "outcomes",
                   "channel_listings", "external_campaigns", "leads", "creatives",
-                  "listing_assets", "asin_traffic", "web_funnel", "web_pages"):
+                  "listing_assets", "asin_traffic", "web_funnel", "web_pages", "runs",
+                  "agent_runs"):
         wh.execute(f"DELETE FROM {table}")
     wh.execute("DELETE FROM sqlite_sequence WHERE name='actions'")  # restart action IDs at 1
     wh.insert_many("metrics_daily", _history(today))
-    wh.insert_many("actions", _past_actions(today))
+    for row in _past_actions(today):  # rows carry different columns
+        wh.insert_many("actions", [row])
     wh.insert_many(
         "products", [{**dict(zip(cols_p, r)), "product_type": "BOTTLE"} for r in PRODUCTS]
     )
