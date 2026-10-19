@@ -30,6 +30,7 @@ from .base import Context, days_of_cover
 PRICE_ELASTICITY = -1.5  # % change in units per % change in price
 BID_SALES_SENSITIVITY = 0.5  # sales move half as much as bids
 HARVEST_UPLIFT = 0.25  # extra profit share from moving a term to exact match
+BUDGET_SALES_SENSITIVITY = 0.7  # the next $ of external budget earns 70% of the average $
 SAFETY_DAYS = 14
 
 WINDOW = 7  # days, for goal progress and outcome checks
@@ -38,6 +39,10 @@ ANOMALY_DROP = 0.5  # yesterday's units below this share of the 14-day average
 SPEND_SPIKE = 2.0  # yesterday's ad spend above this multiple of average
 
 GROW, EFFICIENCY, SHRINK = "grow", "efficiency", "shrink"
+
+# Spend outside Amazon doesn't count toward TACoS (Amazon ad spend / Amazon revenue).
+EXTERNAL_KINDS = {"update_campaign_budget", "pause_campaign", "email_campaign",
+                  "update_channel_price", "list_on_channel", "send_outreach"}
 
 
 @dataclass
@@ -93,6 +98,8 @@ class ChiefOfStaff:
     # --------------------------------------------------------------- estimates
     def _estimate(self, a: Action) -> tuple[float | None, str, str]:
         p = self.products.get(a.sku or "")
+        if p and None in (p["price"], p["landed_cost"], p["fees"]):
+            p = None  # no cost data: no estimate
         if a.kind == "update_bid" and p:
             k = self.ctx.wh.query("SELECT * FROM keywords WHERE keyword_id=?", (a.target,))
             if not k:
@@ -135,7 +142,37 @@ class ChiefOfStaff:
                 note = "if you've lost the Buy Box, matching likely pays more than estimated"
             return round(impact, 2), "low", note
 
-        if a.kind == "reorder" and p:
+        if a.kind in ("update_campaign_budget", "pause_campaign"):
+            c = self.ctx.wh.query("SELECT * FROM external_campaigns WHERE campaign_id=?", (a.target,))
+            ppd = a.before.get("profit_per_dollar")
+            if not c or ppd is None:
+                return None, "", ""
+            c = c[0]
+            if a.kind == "pause_campaign" and "low stock" in a.reason:
+                # The stock sells organically before the reorder lands; the spend is saved.
+                return round(c["spend_30d"], 2), "medium", ""
+            ratio = 0.0 if a.kind == "pause_campaign" else a.after["daily_budget"] / a.before["daily_budget"]
+            d_spend = c["spend_30d"] * (ratio - 1)
+            return round(d_spend * (ppd * BUDGET_SALES_SENSITIVITY - 1), 2), "medium", ""
+
+        if a.kind == "update_channel_price" and p:
+            ch, _ = a.target.split("/", 1)
+            r = self.ctx.wh.query(
+                "SELECT * FROM channel_listings WHERE channel=? AND sku=?", (ch, a.sku)
+            )
+            if not r:
+                return None, "", ""
+            r = r[0]
+            old, new = a.before["price"], a.after["price"]
+            cost = p["landed_cost"] + r["fees"]
+            units = r["units_30d"] or 0
+            units_new = units * (1 + PRICE_ELASTICITY * (new - old) / old)
+            impact = units_new * (new - cost) - units * (old - cost)
+            note = ("protects the Amazon Buy Box; that benefit isn't in the estimate"
+                    if "fair pricing" in a.reason else "")
+            return round(impact, 2), "low", note
+
+        if a.kind == "reorder" and p and p["lead_time_days"] is not None:
             gap = max(0.0, p["lead_time_days"] + SAFETY_DAYS - days_of_cover(p))
             at_risk = gap * p["daily_velocity"] * self._unit_profit(p)
             return round(at_risk, 2), "high", f"{gap:.0f} days of sales at risk if not ordered"
@@ -177,6 +214,8 @@ class ChiefOfStaff:
 
     def _goal_tag(self, a: Action) -> str:
         d = _direction(a)
+        if a.kind in EXTERNAL_KINDS and (a.before or {}).get("destination") != "amazon":
+            d = None  # goals are measured on Amazon sales
         for g in self.goals:
             if not g.covers(a.sku) or d is None:
                 continue
@@ -185,7 +224,7 @@ class ChiefOfStaff:
                     return f"serves: {g.name}"
                 if d == SHRINK:
                     return f"works against: {g.name}"
-            elif g.metric == "tacos":
+            elif g.metric == "tacos" and a.kind not in EXTERNAL_KINDS:
                 if d == EFFICIENCY:
                     return f"serves: {g.name}"
                 if a.kind == "update_bid" and d == GROW:
@@ -279,7 +318,7 @@ class ChiefOfStaff:
         out = []
         for a in rows:
             p = self.products.get(a["sku"])
-            if not p:
+            if not p or p["landed_cost"] is None or p["fees"] is None:
                 continue
             ex = date.fromisoformat(a["executed_at"][:10])
             before = self._profit(a["sku"], ex - timedelta(days=WINDOW), ex - timedelta(days=1), p)
@@ -326,7 +365,12 @@ class ChiefOfStaff:
         acts = [(i, a) for i, a in submitted if a.kind != "escalation"]
         top = [(i, a) for i, a in acts if (a.impact_usd or 0) > 0][:5]
         negative = [(i, a) for i, a in acts if a.impact_usd is not None and a.impact_usd < 0]
-        judgment = [(i, a) for i, a in acts if a.impact_usd is None]
+        # Judgment calls carry no estimate; wholesale leads go first, biggest first.
+        judgment = sorted(
+            [(i, a) for i, a in acts if a.impact_usd is None],
+            key=lambda x: -(x[1].after.get("est_annual_value") or 0)
+            if isinstance(x[1].after, dict) else 0,
+        )
         shown = {i for i, _ in top + negative + judgment}
         rest = [(i, a) for i, a in acts if i not in shown]
 
@@ -342,6 +386,12 @@ class ChiefOfStaff:
                 return a.reason.replace(ref, f"(see action [{price_ids[a.sku]}])")
             return a.reason
 
+        gaps = sorted(s for s, p in self.products.items()
+                      if None in (p["landed_cost"], p["lead_time_days"], p["fees"]))
+        if gaps:
+            L += [(f"_Skipped for missing cost, fee or lead-time data: {', '.join(gaps)}. "
+                   "Load them with `amz-agents ingest --costs FILE`._"), ""]
+
         L += ["## Needs your attention", ""]
         L += [f"- **[{i}]** {link(a)}" for i, a in esc] or ["Nothing urgent."]
 
@@ -351,6 +401,13 @@ class ChiefOfStaff:
             L += [f"| {g['goal'].name} | {g['target']} | {g['actual']} | {g['status']} |"
                   for g in self.progress]
 
+        mix = self.channel_mix()
+        if len(mix) > 1:
+            L += ["", "## Sales by channel (last 30 days)", "", "| Channel | Units | Share |",
+                  "|---|---|---|"]
+            total = sum(mix.values()) or 1
+            L += [f"| {ch} | {u:,.0f} | {u / total:.0%} |" for ch, u in mix.items()]
+
         L += ["", "## Top actions by estimated 30-day impact", ""]
         if top:
             L += ["| # | Action | Est. impact | Confidence | Goal | Why |", "|---|---|---|---|---|---|"]
@@ -358,7 +415,8 @@ class ChiefOfStaff:
                   f"{a.goal or '—'} | {a.reason}" + (f" ({a.notes})" if a.notes else "") + " |"
                   for i, a in top]
             if self.ctx.settings.mode.value == "approve":
-                L += ["", f"Approve all five: `amz-agents approve {' '.join(str(i) for i, _ in top)}`"]
+                ids = " ".join(str(i) for i, _ in top)
+                L += ["", f"Approve all {len(top)}: `amz-agents approve {ids}`"]
         else:
             L += ["No positive-impact actions today."]
 
@@ -389,12 +447,15 @@ class ChiefOfStaff:
             L += [f"- [{i}] {_describe(a)}: {a.reason}" for i, a in rest]
 
         L += ["", "---", (f"_Impact estimates assume price elasticity {PRICE_ELASTICITY}, "
-              f"sales moving {BID_SALES_SENSITIVITY:.0%} as much as bids, and trailing 30-day data. "
+              f"sales moving {BID_SALES_SENSITIVITY:.0%} as much as bids, the next dollar of "
+              f"external budget earning {BUDGET_SALES_SENSITIVITY:.0%} of the average, "
+              "and trailing 30-day data. "
               "Use them to rank, not to forecast._")]
 
         text = "\n".join(L)
         narrative = llm.complete(
-            "You are chief of staff to the head of an Amazon brand. Write a 4-sentence note to "
+            "You are chief of staff to the head of a consumer brand that sells mainly on "
+            "Amazon, plus its own store, other channels and wholesale. Write a 4-sentence note to "
             "open the brief: the one thing to decide today, the biggest opportunity, how goals "
             "are tracking, and anything the numbers can't tell you. Plain language. No hype.",
             text, self.ctx.settings.anthropic_model, max_tokens=400,
@@ -403,6 +464,16 @@ class ChiefOfStaff:
             text = text.replace("\n\n## Needs your attention", f"\n\n{narrative.strip()}\n\n"
                                 "## Needs your attention", 1)
         return text + "\n"
+
+    def channel_mix(self) -> dict[str, float]:
+        """Units over the last 30 days by channel: Amazon plus every off-Amazon channel."""
+        mix = {"amazon": sum((p["daily_velocity"] or 0) * 30 for p in self.products.values())}
+        for r in self.ctx.wh.query(
+            "SELECT channel, SUM(units_30d) AS units FROM channel_listings "
+            "WHERE listed = 1 GROUP BY channel ORDER BY units DESC"
+        ):
+            mix[r["channel"]] = r["units"] or 0
+        return mix
 
     # ----------------------------------------------------------------- helpers
     def _sku_for(self, a: Action) -> str | None:
@@ -460,9 +531,18 @@ def _direction(a: Action) -> str | None:
         return GROW if a.after["price"] < a.before["price"] else SHRINK
     if a.kind == "add_negative":
         return EFFICIENCY
+    if a.kind == "update_campaign_budget":
+        return GROW if a.after["daily_budget"] > a.before["daily_budget"] else EFFICIENCY
+    if a.kind == "pause_campaign":
+        return EFFICIENCY
     if a.kind in ("add_keyword", "reorder", "update_listing_copy"):
         return GROW
     return None
+
+
+def _platform(a: Action) -> str:
+    p = a.before["platform"]
+    return {"meta": "Meta", "google": "Google", "tiktok": "TikTok"}.get(p, p.title())
 
 
 def _usd(v: float) -> str:
@@ -484,4 +564,17 @@ def _describe(a: Action) -> str:
         return f"Revise listing {a.target}"
     if a.kind == "flag_defect":
         return f"Defect on {a.sku or a.target}: {a.after['theme']}"
+    if a.kind == "update_campaign_budget":
+        return (f"{_platform(a)} budget '{a.before['name']}' "
+                f"{a.before['daily_budget']:.2f} → {a.after['daily_budget']:.2f}/day")
+    if a.kind == "pause_campaign":
+        return f"Pause {_platform(a)} campaign '{a.before['name']}'"
+    if a.kind == "email_campaign":
+        return f"Email customers about {a.target}"
+    if a.kind == "update_channel_price":
+        return f"Price {a.target} {a.before['price']:.2f} → {a.after['price']:.2f}"
+    if a.kind == "list_on_channel":
+        return f"List {a.sku} on {a.after['channel']}"
+    if a.kind == "send_outreach":
+        return f"Follow up with {a.after['company']}"
     return f"{a.kind} {a.target}"

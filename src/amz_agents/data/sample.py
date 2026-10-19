@@ -42,6 +42,40 @@ REVIEWS = [
     ("B0SAMPLE02", 5, "Beautiful color, exactly as pictured.", "2026-10-05"),
 ]
 
+# ---- Outside Amazon ----
+
+CHANNEL_LISTINGS = [
+    # channel, sku, external_id, price, fees, units_30d, fulfillment, listed
+    ("shopify", "BTL-32-BLK", "gid://shopify/ProductVariant/1001", 27.99, 5.50, 160, "mcf", 1),
+    ("shopify", "BTL-32-SGE", "gid://shopify/ProductVariant/1002", 29.99, 5.50, 45, "mcf", 1),
+    ("shopify", "LID-STRAW", "gid://shopify/ProductVariant/1003", 9.99, 4.00, 30, "mcf", 1),
+    ("walmart", "BTL-32-BLK", "WM-88213", 30.99, 6.50, 70, "own", 1),
+]
+
+EXTERNAL_CAMPAIGNS = [
+    # id, platform, name, sku, destination, status, budget, spend, clicks, orders, sales
+    ("m1", "meta", "Black bottle - prospecting", "BTL-32-BLK", "amazon", "enabled",
+     40.0, 1200.0, 2400, 70, 2099.3),
+    ("g1", "google", "Black bottle - search", "BTL-32-BLK", "shopify", "enabled",
+     25.0, 600.0, 900, 60, 1679.4),
+    ("m2", "meta", "Sage launch", "BTL-32-SGE", "amazon", "enabled",
+     20.0, 450.0, 800, 25, 749.75),
+    ("t1", "tiktok", "Black bottle - creators", "BTL-32-BLK", "shopify", "enabled",
+     10.0, 300.0, 400, 0, 0.0),
+]
+
+# lead_id, company, contact, email, stage, est_annual_value, days since contact, skus, notes
+LEADS = [
+    ("L1", "Peak Outfitters", "Dana Ruiz", "dana@peakoutfitters.example", "negotiating", 48000,
+     5, "BTL-32-SGE,BTL-32-BLK", "Wants 600 units/quarter, asked for net-30 terms"),
+    ("L2", "Campus Store Co", "Sam Lee", "sam@campusstore.example", "contacted", 15000,
+     3, "BTL-32-BLK", "Sent line sheet"),
+    ("L3", "Trailhead Gyms", "Alex Kim", "alex@trailheadgyms.example", "new", 12000,
+     None, "BTL-64-BLK", "Inbound form: gym merch"),
+    ("L4", "Lakeside Gifts", "Jo Park", "jo@lakesidegifts.example", "won", 9000,
+     20, "LID-STRAW", "Reorders quarterly"),
+]
+
 
 def _history(today: date) -> list[dict]:
     """28 days of per-SKU history ending yesterday, shaped to exercise the chief
@@ -94,7 +128,8 @@ def seed(wh: Warehouse, today: date | None = None) -> None:
     cols_s = ["campaign_id", "ad_group_id", "sku", "search_term", "match_type",
               "clicks", "spend", "sales", "orders"]
     cols_r = ["asin", "rating", "body", "created"]
-    for table in ("search_terms", "reviews", "metrics_daily", "actions", "outcomes"):
+    for table in ("search_terms", "reviews", "metrics_daily", "actions", "outcomes",
+                  "channel_listings", "external_campaigns", "leads"):
         wh.execute(f"DELETE FROM {table}")
     wh.execute("DELETE FROM sqlite_sequence WHERE name='actions'")  # restart action IDs at 1
     wh.insert_many("metrics_daily", _history(today))
@@ -105,3 +140,15 @@ def seed(wh: Warehouse, today: date | None = None) -> None:
     wh.insert_many("keywords", [dict(zip(cols_k, r)) for r in KEYWORDS])
     wh.insert_many("search_terms", [dict(zip(cols_s, r)) for r in SEARCH_TERMS])
     wh.insert_many("reviews", [dict(zip(cols_r, r)) for r in REVIEWS])
+
+    cols_c = ["channel", "sku", "external_id", "price", "fees", "units_30d", "fulfillment", "listed"]
+    cols_e = ["campaign_id", "platform", "name", "sku", "destination", "status", "daily_budget",
+              "spend_30d", "clicks_30d", "orders_30d", "sales_30d"]
+    wh.insert_many("channel_listings", [dict(zip(cols_c, r)) for r in CHANNEL_LISTINGS])
+    wh.insert_many("external_campaigns", [dict(zip(cols_e, r)) for r in EXTERNAL_CAMPAIGNS])
+    wh.insert_many("leads", [
+        {"lead_id": i, "company": co, "contact": n, "email": e, "stage": st,
+         "est_annual_value": v, "sku_interest": s, "notes": nt,
+         "last_contact": (today - timedelta(days=d)).isoformat() if d is not None else None}
+        for i, co, n, e, st, v, d, s, nt in LEADS
+    ])

@@ -33,6 +33,7 @@ class Guardrails:
     max_daily_budget: float = 500.00
     min_margin_pct: float = 0.15
     max_price_change_pct: float = 0.10
+    max_budget_change_pct: float = 0.20
 
     @classmethod
     def from_env(cls) -> Guardrails:
@@ -44,6 +45,7 @@ class Guardrails:
             max_daily_budget=_f("MAX_DAILY_BUDGET", cls.max_daily_budget),
             min_margin_pct=_f("MIN_MARGIN_PCT", cls.min_margin_pct),
             max_price_change_pct=_f("MAX_PRICE_CHANGE_PCT", cls.max_price_change_pct),
+            max_budget_change_pct=_f("MAX_BUDGET_CHANGE_PCT", cls.max_budget_change_pct),
         )
 
 

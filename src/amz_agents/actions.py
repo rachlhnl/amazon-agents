@@ -39,7 +39,16 @@ class Executor(Protocol):
 
 
 # Customer-facing or real-world actions that always need a human, even in auto mode.
-HUMAN_ONLY = {"update_listing_copy", "reorder", "flag_defect", "escalation"}
+HUMAN_ONLY = {
+    "update_listing_copy", "reorder", "flag_defect", "escalation",
+    "list_on_channel", "send_outreach", "email_campaign",
+}
+
+# Statuses that mean an action is still waiting, or was carried out recently
+# enough that proposing it again would duplicate it (e.g. a second identical
+# negative keyword while the 30-day search-term report still shows the term).
+OPEN_OR_DONE = ("pending_approval", "approved", "executed", "acknowledged")
+REPEAT_LOOKBACK_DAYS = 30
 
 
 class ActionLog:
@@ -84,6 +93,16 @@ class ActionLog:
 
     def reject(self, action_id: int) -> None:
         self._set_status(action_id, "rejected", expect="pending_approval")
+
+    def already_open_or_done(self, action: Action) -> bool:
+        """True if the same change is awaiting approval or was carried out recently."""
+        rows = self.wh.query(
+            "SELECT after FROM actions WHERE kind=? AND target=? AND status IN "
+            f"({','.join('?' * len(OPEN_OR_DONE))}) AND created >= date('now', ?)",
+            (action.kind, action.target, *OPEN_OR_DONE, f"-{REPEAT_LOOKBACK_DAYS} days"),
+        )
+        after = json.dumps(action.after, sort_keys=True)
+        return any(json.dumps(json.loads(r["after"]), sort_keys=True) == after for r in rows)
 
     def list(self, status: str | None = None) -> list[dict[str, Any]]:
         if status:

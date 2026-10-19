@@ -19,8 +19,11 @@ class PricingAgent(Agent):
         low = ctx.shared.get("low_stock", set())
         over = ctx.shared.get("overstock", set())
         out: list[Action] = []
+        proposed_prices: dict[str, float] = {}
         for p in ctx.wh.query("SELECT * FROM products"):
             price, cost, fees = p["price"], p["landed_cost"], p["fees"]
+            if None in (price, cost, fees):
+                continue  # can't price without costs; the brief lists the gap
             floor = price_floor(g, cost, fees)
 
             if p["sku"] in low:
@@ -37,6 +40,7 @@ class PricingAgent(Agent):
             c = clamp_price(g, price, proposed, cost, fees)
             if c.value == price:
                 continue
+            proposed_prices[p["sku"]] = c.value
             margin = (c.value - cost - fees) / c.value
             out.append(
                 Action(
@@ -49,4 +53,6 @@ class PricingAgent(Agent):
                     notes=c.note,
                 )
             )
+        # The sales agent keeps off-Amazon prices in line with these.
+        ctx.shared["amazon_price_proposals"] = proposed_prices
         return out

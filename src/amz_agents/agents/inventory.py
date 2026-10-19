@@ -23,7 +23,7 @@ class InventoryAgent(Agent):
         low, over = set(), set()
         for p in ctx.wh.query("SELECT * FROM products"):
             v = p["daily_velocity"] or 0
-            if v <= 0:
+            if v <= 0 or p["lead_time_days"] is None:
                 continue
             cover = days_of_cover(p)
             stock = p["units_on_hand"] + p["units_inbound"]

@@ -1,7 +1,9 @@
 # amz-agents
 
-An agent suite that optimizes Amazon product sales across ads, listings, pricing,
-inventory, and reviews, with hard guardrails and a human-approval workflow.
+An agent suite that optimizes a brand's sales on Amazon (ads, listings, pricing,
+inventory, reviews) and outside it (paid traffic from Meta/Google/TikTok, email,
+its own store and other marketplaces, wholesale), with hard guardrails and a
+human-approval workflow.
 
 ## Design principles
 
@@ -28,10 +30,42 @@ inventory, and reviews, with hard guardrails and a human-approval workflow.
 | Pricing | price, cost, fees, Buy Box | `update_price` | SP-API Listings Items |
 | Ads | keywords, search terms | `update_bid`, `add_keyword`, `add_negative` | Ads API (SP v3) |
 | Listing | search terms, review themes | `update_listing_copy` (+ LLM draft) | human |
+| Marketing | external campaigns, stock | `update_campaign_budget`, `pause_campaign`, `email_campaign` (+ LLM draft) | Meta Marketing API; human for Google/TikTok and email |
+| Sales | other channels' prices, CRM leads | `update_channel_price`, `list_on_channel`, `send_outreach` (+ LLM draft) | Shopify Admin API; human otherwise |
 
 The orchestrator runs them in that order. Inventory and reviews publish findings
 to a shared context that later agents use: the ads agent won't raise bids and the
-pricing agent won't cut prices on a SKU that is about to stock out.
+pricing agent won't cut prices on a SKU that is about to stock out; the marketing
+agent pauses outside campaigns that would sell that stock; the sales agent warns
+not to promise wholesale volume on it, and checks off-Amazon prices against the
+Amazon price the pricing agent is about to set.
+
+An action already awaiting approval, or carried out in the last 30 days, isn't
+proposed again.
+
+### Marketing agent (outside Amazon)
+
+Judges each external campaign by **profit per $1 of spend** over 30 days:
+sales × unit margin on the destination channel, plus Amazon's Brand Referral
+Bonus (~10%, set in `agents/marketing.py`) when the campaign sends shoppers to
+Amazon via Amazon Attribution. At $1.50 or more it raises the budget; below $1 it
+cuts it (both by at most `MAX_BUDGET_CHANGE_PCT`, never above `MAX_DAILY_BUDGET`).
+It pauses campaigns with 150+ clicks and no orders, and campaigns that would
+draw on FBA stock (Amazon traffic, or a channel fulfilled by Multi-Channel
+Fulfillment) for a SKU about to stock out. For overstocked SKUs with no campaign
+behind them, it drafts an email to the customer list for a person to send.
+
+### Sales agent (outside Amazon)
+
+- **Price parity.** Amazon's fair pricing policy can remove the Buy Box when a
+  product is noticeably cheaper elsewhere, so off-Amazon prices more than 2% below
+  Amazon are raised toward it, within the price guardrails.
+- **Margin floor** on each channel after that channel's fees.
+- **New channels.** SKUs selling 5+/day on Amazon (and not short on stock) that
+  aren't listed on a channel the company already uses.
+- **Wholesale follow-ups.** Leads quiet for longer than their stage allows (new 2
+  days, negotiating 3, contacted 7), biggest first, with a drafted email and a
+  warning if they want a SKU that's about to stock out.
 
 ## Chief of staff
 
@@ -58,6 +92,10 @@ person can act on in five minutes. It doesn't make changes itself. Each run it:
 The before/after checks need daily per-SKU history in `metrics_daily`
 (Sales & Traffic report plus Ads reports; see `ingest.py`).
 
+Off-Amazon goals aren't tracked yet: `goals.toml` metrics are measured on Amazon
+sales, and outside spend doesn't count toward TACoS. The brief shows units by
+channel.
+
 ## Quick start
 
 ```bash
@@ -78,8 +116,28 @@ and the narrative in the daily brief. Everything else runs without it.
    company's own account, a self-authorized private SP-API app is enough.
 2. Fill in `.env` (LWA client ID/secret and refresh tokens for both APIs,
    Ads profile ID, `SP_API_SELLER_ID`).
-3. Implement the stubs in `src/amz_agents/ingest.py`. Each one names the API or
-   report to use. Schedule them hourly or nightly.
+3. Load data with `amz-agents ingest --costs costs.csv` (nightly, before `run`).
+   It runs every job whose credentials are set:
+
+   | Job | Source | Fills |
+   |---|---|---|
+   | products | Listings Items, Product Fees, Product Pricing | `products` |
+   | metrics | orders flat-file report + Ads `spAdvertisedProduct` (60-day backfill) | `metrics_daily` |
+   | inventory | FBA Inventory; velocity from `metrics_daily` | `products` stock |
+   | ads | Ads `spTargeting`, `spSearchTerm` (30 days) | `keywords`, `search_terms` |
+   | costs | your CSV: `sku,landed_cost,lead_time_days` | `products` |
+   | shopify | Shopify Admin GraphQL | `channel_listings` |
+   | meta | Meta Marketing API ad sets + insights | `external_campaigns` |
+
+   Everything else comes in as a CSV export with `amz-agents import TABLE FILE`
+   (header = column names; existing rows update only the columns given):
+   reviews from a licensed vendor, `leads` from the CRM, Google Ads/TikTok
+   campaigns and Amazon Attribution results into `external_campaigns`, other
+   marketplaces into `channel_listings`.
+
+   **Meta naming convention:** put `sku=<SKU> dest=amazon` (or `dest=shopify`) in
+   each ad set's name. That's how the agent knows what an ad set sells; ad sets
+   without it are skipped.
 4. `amz-agents run` in `AGENT_MODE=recommend`. Review `reports/` for a few weeks.
 5. Switch to `approve`, then use `amz-agents actions --status pending_approval`,
    `amz-agents approve <id>`, `amz-agents reject <id>`.
@@ -88,11 +146,14 @@ and the narrative in the daily brief. Everything else runs without it.
 Amazon's official Ads MCP server (open beta since Feb 2026, for Ads API partners)
 can replace `AdsClient` as the action layer if you'd rather route through MCP.
 
-Endpoint paths and payloads in `data/clients.py` follow the SP-API Listings
-Items API and Sponsored Products v3. Verify them against current docs before
-going live:
+Endpoint paths, report types and payloads in `data/clients.py` and `ingest.py`
+follow the SP-API, Ads API v3, Shopify Admin GraphQL and Meta Marketing API docs,
+and are tested against mocked responses, not live accounts. Verify them against
+current docs and check a first ingest against Seller Central before going live:
 - https://developer-docs.amazon.com/sp-api/
 - https://advertising.amazon.com/API/docs/
+- https://shopify.dev/docs/api/admin-graphql
+- https://developers.facebook.com/docs/marketing-api/
 
 ## Layout
 
@@ -105,8 +166,9 @@ src/amz_agents/
   orchestrator.py    runs agents, hands proposals to the chief of staff
   notify.py          emails the brief (optional)
   llm.py             optional Claude calls
-  ingest.py          API -> warehouse jobs (stubs to implement)
-  agents/            inventory, reviews, pricing, ads, listing, chief_of_staff
+  ingest.py          API -> warehouse jobs, CSV imports
+  agents/            inventory, reviews, pricing, ads, listing, marketing, sales,
+                     chief_of_staff
   data/              warehouse (SQLite), API clients, sample data
 goals.toml           goals the chief of staff steers toward
 tests/               guardrail, agent and chief-of-staff tests
@@ -119,3 +181,6 @@ tests/               guardrail, agent and chief-of-staff tests
 - Don't scrape Amazon pages; use the APIs or licensed data.
 - Listing copy must follow Amazon's style guide for each category; drafts are
   never published without review.
+- Marketing emails go only to people who opted in to the brand's list, and
+  wholesale outreach must follow CAN-SPAM (or local equivalents). Both are
+  drafted for a person to send; nothing is emailed automatically.

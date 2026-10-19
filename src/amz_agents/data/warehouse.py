@@ -97,6 +97,50 @@ CREATE TABLE IF NOT EXISTS outcomes (
     after      REAL,
     verdict    TEXT                -- helped | hurt | neutral
 );
+
+-- ---- Outside Amazon -------------------------------------------------------
+
+-- One row per SKU per non-Amazon sales channel (own store, other marketplaces).
+CREATE TABLE IF NOT EXISTS channel_listings (
+    channel      TEXT,     -- e.g. shopify, walmart, tiktok
+    sku          TEXT,
+    external_id  TEXT,     -- the channel's own ID (Shopify variant GID, ...)
+    price        REAL,
+    fees         REAL,     -- channel fees + fulfillment per unit
+    units_30d    INTEGER,
+    fulfillment  TEXT,     -- mcf (ships from FBA stock) | own
+    listed       INTEGER,  -- 1 if live on the channel
+    PRIMARY KEY (channel, sku)
+);
+
+-- Paid campaigns outside Amazon (Meta, Google, TikTok...), trailing 30 days.
+-- destination=amazon campaigns get sales from Amazon Attribution.
+CREATE TABLE IF NOT EXISTS external_campaigns (
+    campaign_id   TEXT PRIMARY KEY,  -- platform's ID of the unit whose budget we change
+    platform      TEXT,              -- meta | google | tiktok
+    name          TEXT,
+    sku           TEXT,
+    destination   TEXT,              -- amazon | <channel>, e.g. shopify
+    status        TEXT,              -- enabled | paused
+    daily_budget  REAL,
+    spend_30d     REAL,
+    clicks_30d    INTEGER,
+    orders_30d    INTEGER,
+    sales_30d     REAL
+);
+
+-- Wholesale / B2B pipeline (from the CRM).
+CREATE TABLE IF NOT EXISTS leads (
+    lead_id           TEXT PRIMARY KEY,
+    company           TEXT,
+    contact           TEXT,
+    email             TEXT,
+    stage             TEXT,     -- new | contacted | negotiating | won | lost
+    est_annual_value  REAL,
+    last_contact      TEXT,     -- ISO date
+    sku_interest      TEXT,     -- comma-separated SKUs
+    notes             TEXT
+);
 """
 
 

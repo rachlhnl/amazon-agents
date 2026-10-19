@@ -66,8 +66,9 @@ class ReviewsAgent(Agent):
                     ctx.settings.anthropic_model,
                     max_tokens=500,
                 )
+                text = (summary or "[]").strip().removeprefix("```json").strip("`\n ")
                 try:
-                    for t in json.loads(summary or "[]"):
+                    for t in json.loads(text):
                         themes_by_asin[asin].append(t["theme"])
                 except (json.JSONDecodeError, KeyError, TypeError):
                     pass
