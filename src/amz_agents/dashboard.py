@@ -15,9 +15,10 @@ names can't inject markup. The server binds to localhost by default, and with
 from __future__ import annotations
 
 import json
+import os
 import secrets
 from collections import Counter
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
@@ -29,9 +30,9 @@ from .agents import creative as cr
 from .agents import data as da
 from .agents import inventory as inv
 from .agents import marketing as mk
-from .agents.base import EFFORT_HOURS, TEAMS
-from .agents.chief_of_staff import ChiefOfStaff, _describe
-from .config import Guardrails
+from .agents.base import EFFORT_HOURS, TEAMS, Context
+from .agents.chief_of_staff import ChiefOfStaff, _describe, load_goals
+from .config import Guardrails, Settings
 from .data.warehouse import Warehouse
 
 WINDOW_DAYS = 30
@@ -274,10 +275,104 @@ def _agents() -> list[tuple[str, Any]]:
     return [(a.name, a.role) for a in DEFAULT_AGENTS]
 
 
+def scorecard(wh: Warehouse) -> dict[str, Any] | None:
+    """The business this week vs last: revenue, units, contribution profit, TACoS.
+    Weeks end on the last day with sales data, not today, so a late feed doesn't
+    read as a crash."""
+    last = wh.query("SELECT MAX(date) AS d FROM metrics_daily")[0]["d"]
+    if not last:
+        return None
+    end = date.fromisoformat(last)
+
+    def week(ago: int) -> dict[str, float | None]:
+        hi, lo = end - timedelta(days=ago), end - timedelta(days=ago + 6)
+        rows = wh.query(
+            "SELECT COALESCE(SUM(m.units),0) AS units, COALESCE(SUM(m.revenue),0) AS revenue, "
+            "COALESCE(SUM(m.ad_spend),0) AS ad_spend, "
+            "SUM(m.units * (p.landed_cost + p.fees)) AS cogs, "
+            "SUM(CASE WHEN p.landed_cost IS NULL OR p.fees IS NULL THEN m.units END) AS uncosted "
+            "FROM metrics_daily m LEFT JOIN products p ON p.sku = m.sku "
+            "WHERE m.date BETWEEN ? AND ?", (lo.isoformat(), hi.isoformat()))[0]
+        rev, spend = rows["revenue"], rows["ad_spend"]
+        profit = rev - rows["cogs"] - spend if rows["cogs"] is not None and not rows["uncosted"] \
+            else None
+        return {"revenue": rev, "units": rows["units"], "ad_spend": spend, "profit": profit,
+                "tacos": spend / rev if rev else None}
+
+    return {"through": last, "now": week(0), "prior": week(7)}
+
+
+def goals_view(wh: Warehouse, settings: Settings | None = None) -> list[dict[str, Any]]:
+    """goals.toml progress, plus whether each goal points at a product we sell."""
+    skus = {r["sku"] for r in wh.query("SELECT sku FROM products")}
+    ctx = Context(wh, settings or Settings.from_env())
+    chief = ChiefOfStaff(ctx, goals=load_goals())
+    out = []
+    for gp in chief.goal_progress():
+        g = gp["goal"]
+        out.append({"name": g.name, "metric": g.metric, "scope": g.scope, "target": gp["target"],
+                    "actual": gp["actual"], "status": gp["status"],
+                    "known": g.scope == "all" or g.scope in skus})
+    return out
+
+
+def setup_gaps(wh: Warehouse, goals: list[dict[str, Any]]) -> list[str]:
+    """Config still on the shipped examples, or data the agents can't decide without."""
+    gaps = []
+    if not wh.query("SELECT 1 FROM products LIMIT 1"):
+        gaps.append("No product or sales data yet: connect Seller Central (SP-API) and "
+                    "run amz-agents ingest, then amz-agents run.")
+    else:
+        uncosted = wh.query("SELECT COUNT(*) AS n FROM products "
+                            "WHERE landed_cost IS NULL OR fees IS NULL")[0]["n"]
+        if uncosted:
+            gaps.append(f"{uncosted} products have no landed cost, so profit, price floors "
+                        "and ROI can't be worked out for them: load COSTS_CSV.")
+    if not goals:
+        gaps.append("No company goals: add them to goals.toml so the chief of staff can "
+                    "rank work by what matters.")
+    stray = [g["scope"] for g in goals if not g["known"]]
+    if stray:
+        gaps.append("goals.toml targets products you don't sell (" + ", ".join(stray)
+                    + "): it's still the example file.")
+    brand = Path(os.getenv("BRAND_PATH", "brand.toml"))
+    if brand.exists() and 'name = "Your Brand"' in brand.read_text():
+        gaps.append("brand.toml is still the template, so drafts are checked against a "
+                    "generic voice, not Dagacci's.")
+    site = Path(os.getenv("SITE_PATH", "site.toml"))
+    if site.exists() and "yourstore.example" in site.read_text():
+        gaps.append("site.toml lists placeholder pages, so the UX agent isn't checking "
+                    "dagacci.com.")
+    return gaps
+
+
+def market_summary(root: Path | None = None) -> dict[str, Any] | None:
+    """Headline, tiles and recommendations from the public market tracker, if it has run."""
+    from . import market
+    from .market import analyze
+
+    root = root or market.ROOT
+    try:
+        snaps = market.history(root)
+        if not snaps:
+            return None
+        config = market.load_config(root)
+        reviews = {k: market.reviews(k, root) for k, c in config.items()
+                   if c.get("judgeme_shop")}
+        a = analyze.build(snaps, config, reviews)
+    except (OSError, ValueError, KeyError) as e:
+        return {"error": repr(e)}
+    keep = ("when", "when_label", "area", "effort", "title", "see", "why", "do", "kpi",
+            "now", "target", "url")
+    return {"date": a["date"], "title": a["title"], "hero": a["hero"], "tiles": a["tiles"],
+            "recs": [{k: r.get(k) for k in keep} for r in a["recs"]]}
+
+
 def collect(wh: Warehouse, today: date | None = None,
-            guardrails: Guardrails | None = None) -> dict[str, Any]:
+            guardrails: Guardrails | None = None, include_market: bool = True) -> dict[str, Any]:
     """Everything the page shows, as plain JSON-able data."""
     today = today or date.today()
+    goals = goals_view(wh)
     run = (wh.query("SELECT * FROM runs ORDER BY id DESC LIMIT 1") or [None])[0]
     health = {r["agent"]: r for r in wh.query(
         "SELECT * FROM agent_runs WHERE run_id=?", (run["id"],))} if run else {}
@@ -354,19 +449,29 @@ def collect(wh: Warehouse, today: date | None = None,
         "handoffs": HANDOFFS,
         "walkthrough": creative_walkthrough(),
         "rules": decision_rules(guardrails or Guardrails.from_env()),
+        "sample": getattr(wh, "path", "").endswith("demo.db"),
+        "scorecard": scorecard(wh),
+        "goals": goals,
+        "setup_gaps": setup_gaps(wh, goals),
+        "market": market_summary() if include_market else None,
     }
 
 
-def render(data: dict[str, Any], token: str | None = None) -> str:
-    """The page. `token` turns on the action buttons (server mode only)."""
-    payload = json.dumps({**data, "token": token}).replace("</", "<\\/")
+def render(data: dict[str, Any], token: str | None = None, market_src: str = "/market") -> str:
+    """The page. `token` turns on the action buttons (server mode only); `market_src`
+    is where the Market tab loads the market tracker from."""
+    payload = json.dumps({**data, "token": token, "market_src": market_src}).replace("</", "<\\/")
     return _PAGE.replace("__DATA__", payload)
 
 
 def write(wh: Warehouse, out: str | Path = "reports/dashboard.html") -> Path:
     path = Path(out)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render(collect(wh)))
+    from .market import ROOT
+
+    src = os.path.relpath(ROOT / "index.html", path.parent.resolve()) if ROOT.is_absolute() \
+        else os.path.relpath(Path.cwd() / ROOT / "index.html", path.parent.resolve())
+    path.write_text(render(collect(wh), market_src=src))
     return path
 
 
@@ -384,7 +489,16 @@ def serve(wh: Warehouse, log: ActionLog, host: str = "127.0.0.1", port: int = 87
             self.wfile.write(body)
 
         def do_GET(self) -> None:
-            if self.path.split("?")[0] not in ("/", "/index.html"):
+            route = self.path.split("?")[0]
+            if route == "/market":
+                from .market import ROOT
+
+                page = ROOT / "index.html"
+                if not page.exists():
+                    return self._send(404, b"no market tracker yet: run amz-agents market",
+                                      "text/plain")
+                return self._send(200, page.read_bytes(), "text/html; charset=utf-8")
+            if route not in ("/", "/index.html"):
                 return self._send(404, b"not found", "text/plain")
             self._send(200, render(collect(wh), token).encode(), "text/html; charset=utf-8")
 
@@ -580,6 +694,25 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
 .empty { padding: 20px; text-align: center; color: var(--text-3); font-size: 13px; }
 #tip { position: fixed; pointer-events: none; background: var(--text); color: var(--bg); font-size: 12px;
   padding: 6px 8px; border-radius: 6px; display: none; z-index: 30; white-space: nowrap; }
+/* CEO view */
+.warn-box { background: var(--warn-soft); border: 1px solid var(--warn); border-radius: 12px; padding: 12px 14px; margin-top: 16px; font-size: 13.5px; }
+.warn-box b { color: var(--warn-text); }
+.warn-box ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 3px; }
+.score { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; margin-top: 16px; }
+.score .kpis { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.score .tile { cursor: default; }
+.score .tile:hover { border-color: var(--border); }
+.delta { font-size: 12px; font-weight: 600; } .delta.up { color: var(--good-text); } .delta.down { color: var(--crit-text); }
+.optim { color: var(--text-2); font-size: 12.5px; margin: 8px 0 0; }
+.goal { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.goal:last-child { border-bottom: 0; }
+.goal .gs { color: var(--text-3); font-size: 12px; }
+.goal .tag { align-self: center; grid-row: 1 / span 2; grid-column: 2; }
+.todo.mkt { border-left-color: var(--st-done); }
+.todo.mkt .avatar { background: var(--good-soft); color: var(--good-text); }
+.group-label { font-size: 12px; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; margin: 10px 0 2px; }
+.mframe { width: 100%; height: calc(100vh - 140px); min-height: 600px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); margin-top: 16px; }
+@media (max-width: 900px) { .score { grid-template-columns: 1fr; } }
 /* Tabs */
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 18px 0 0; }
 .tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; margin-bottom: -1px;
@@ -661,10 +794,14 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
   </header>
   <nav class="tabs" role="tablist" aria-label="Views">
     <button type="button" role="tab" id="t-work" aria-controls="tab-work" aria-selected="true">Work</button>
+    <button type="button" role="tab" id="t-market" aria-controls="tab-market" aria-selected="false">Market &amp; customers</button>
     <button type="button" role="tab" id="t-how" aria-controls="tab-how" aria-selected="false">How the agents work together</button>
   </nav>
   <div id="tab-work" role="tabpanel" aria-labelledby="t-work">
-  <p class="headline" id="headline"></p>
+  <div id="setup"></div>
+  <section class="score" id="score" aria-label="This week"></section>
+  <div class="sec-head"><h2>Agent work</h2><p></p></div>
+  <p class="headline" id="headline" style="margin-top:0"></p>
   <section class="kpis" id="kpis" aria-label="Summary"></section>
 
   <div class="sec-head"><h2>Needs you</h2><p id="inbox-note"></p></div>
@@ -693,6 +830,10 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
   <div class="sec-head"><h2>The team</h2><p>Click an agent to see only their work.</p></div>
   <section class="team" id="team" aria-label="Agents"></section>
   <p class="note" id="foot"></p>
+  </div>
+  <div id="tab-market" role="tabpanel" aria-labelledby="t-market" hidden>
+    <p class="lead" id="market-lead"></p>
+    <div id="market-box"></div>
   </div>
   <div id="tab-how" role="tabpanel" aria-labelledby="t-how" hidden>
     <p class="lead">Every run, the agents go in a fixed order. Each one reads what the earlier ones
@@ -786,6 +927,41 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
     el('span', {class: 'chip', text: {recommend: 'Suggest only', approve: 'Approve first', auto: 'Auto within limits'}[D.run.mode] || D.run.mode}));
   else meta.append(el('span', {text: 'The agents haven’t run yet'}));
   meta.append(el('span', {text: 'Sales data through ' + (D.data_through || 'n/a')}));
+
+  // Setup problems: decisions are only as good as these.
+  const gaps = [...(D.sample ? ['This is sample data (a water-bottle company from amz-agents demo), not Dagacci.'] : []), ...D.setup_gaps];
+  if (gaps.length) document.getElementById('setup').append(el('div', {class: 'warn-box'},
+    el('b', {text: 'Fix before trusting these numbers: '}), 'the agents are only as good as the data and goals they get.',
+    el('ul', {}, gaps.map(g => el('li', {text: g})))));
+
+  // This week: the business, and the goals the chief of staff steers by.
+  const S = D.scorecard, score = document.getElementById('score');
+  const chg = (a, b, inverse) => {
+    if (a == null || b == null || !b) return null;
+    const d = a / b - 1, good = inverse ? d < 0 : d > 0;
+    return el('span', {class: 'delta ' + (Math.abs(d) < 0.005 ? '' : good ? 'up' : 'down'),
+      text: (d > 0 ? '\u25b2 ' : d < 0 ? '\u25bc ' : '') + Math.abs(d * 100).toFixed(1) + '% vs prior week'});
+  };
+  const stile = (label, value, delta, sub) => el('div', {class: 'tile'}, el('div', {class: 'label', text: label}),
+    el('div', {class: 'value', text: value}), delta, sub ? el('div', {class: 'sub', text: sub}) : null);
+  const pct = v => v == null ? '\u2014' : (v * 100).toFixed(1) + '%';
+  const biz = el('div', {class: 'panel'}, el('h2', {text: S ? 'This week (7 days to ' + S.through + ')' : 'This week'}));
+  if (S) {
+    biz.append(el('div', {class: 'kpis', style: 'margin-top:12px'},
+      stile('Contribution profit', usd(S.now.profit), chg(S.now.profit, S.prior.profit), S.now.profit == null ? 'needs product costs' : null),
+      stile('Revenue', usd(S.now.revenue), chg(S.now.revenue, S.prior.revenue)),
+      stile('Units', fmt(S.now.units), chg(S.now.units, S.prior.units)),
+      stile('TACoS', pct(S.now.tacos), chg(S.now.tacos, S.prior.tacos, true), 'ad spend \u00f7 revenue')));
+  } else biz.append(el('p', {class: 'optim', text: 'No sales data yet. Once Seller Central is connected this shows revenue, profit, units and ad efficiency each week.'}));
+  biz.append(el('p', {class: 'optim'}, el('b', {text: 'What the agents optimize: '}),
+    'contribution profit (sales \u2212 product cost \u2212 Amazon fees \u2212 ad spend). Every suggestion is ranked by how much profit it should add over 30 days per hour of your team\u2019s time, then checked against the goals on the right.'));
+  const gl = el('div', {class: 'panel'}, el('h2', {text: 'Goals'}), el('p', {class: 'optim', style: 'margin-top:2px', text: 'From goals.toml. Last 7 days vs days 15\u201328 ago.'}));
+  const GS = {'on track': 'good', behind: 'you', 'off track': 'bad', 'no data': ''};
+  if (!D.goals.length) gl.append(el('p', {class: 'optim', text: 'No goals set. Add them to goals.toml.'}));
+  for (const g of D.goals) gl.append(el('div', {class: 'goal'}, el('div', {text: g.name}),
+    el('span', {class: 'tag ' + (g.known ? GS[g.status] || '' : 'bad'), text: g.known ? g.status : 'not our product'}),
+    el('div', {class: 'gs', text: 'Target ' + g.target + ' \u00b7 now ' + g.actual + (g.scope !== 'all' ? ' \u00b7 ' + g.scope : '')})));
+  score.append(biz, gl);
 
   // Headline sentence
   const K = D.kpis;
@@ -890,12 +1066,31 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
     drawer.querySelector('.x').focus();
   }
 
+  function openRec(r) {
+    lastFocus = document.activeElement;
+    drawer.replaceChildren(...[
+      el('button', {type: 'button', class: 'x', 'aria-label': 'Close', text: '\u00d7', onclick: close}),
+      el('div', {class: 'dtags'}, el('span', {class: 'tag ' + (r.when === 1 ? 'now' : 'high'), text: r.when_label}),
+        el('span', {class: 'tag', text: r.area}), el('span', {class: 'tag', text: r.effort + ' effort'})),
+      el('h3', {text: r.title}),
+      el('h5', {style: 'margin:0 0 4px;font-size:12px;color:var(--text-3)', text: 'WHAT WE SEE'}), el('div', {class: 'why-box', text: r.see}),
+      el('h5', {style: 'margin:0 0 4px;font-size:12px;color:var(--text-3)', text: 'WHY IT MATTERS'}), el('div', {class: 'why-box', text: r.why}),
+      el('h5', {style: 'margin:0 0 4px;font-size:12px;color:var(--text-3)', text: 'WHAT TO DO'}),
+      el('ul', {style: 'margin:0 0 16px;padding-left:18px;font-size:13px'}, (r.do || []).map(t => el('li', {text: t}))),
+      r.kpi ? el('dl', {}, el('dt', {text: 'Track'}), el('dd', {text: r.kpi}), el('dt', {text: 'Now \u2192 target'}), el('dd', {text: r.now + ' \u2192 ' + r.target})) : null,
+      r.url && /^https:\/\//.test(r.url) ? el('a', {href: r.url, target: '_blank', rel: 'noopener', text: 'Open the product page'}) : null,
+      el('p', {class: 'note', text: 'From the market tracker. It isn\u2019t an agent action yet, so assign it to a team yourself.'}),
+    ].filter(Boolean));
+    shell.classList.add('open'); drawer.setAttribute('aria-hidden', 'false');
+    drawer.querySelector('.x').focus();
+  }
+
   // Inbox: what needs a person now, plus agents that are missing data.
   const INBOX_MAX = 6;
   const inbox = document.getElementById('inbox');
   function renderInbox() {
     inbox.replaceChildren();
-    if (!todos.length && !sick.length) { inbox.append(el('div', {class: 'caught-up', text: D.run ? 'You’re all caught up. Nothing needs you right now.' : 'Nothing yet.'})); return; }
+    if (!todos.length && !sick.length && !(D.market && D.market.recs && D.market.recs.some(r => r.when <= 2))) { inbox.append(el('div', {class: 'caught-up', text: D.run ? 'You’re all caught up. Nothing needs you right now.' : 'Nothing yet.'})); return; }
     for (const a of todos.slice(0, INBOX_MAX)) {
       const what = needsOk(a) ? 'Approve or reject' : needsDone(a) ? 'Do it, then mark done' : a.status === 'failed' ? 'Failed: take a look' : 'Worth acting on';
       inbox.append(el('div', {class: 'todo p-' + (a.priority || 'none')},
@@ -906,6 +1101,15 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
           el('span', {class: a.age >= D.stale_days ? 'stale' : '', text: a.age ? 'waiting ' + age(a.age) : 'new today'}))));
     }
     if (todos.length > INBOX_MAX) inbox.append(el('div', {class: 'more', text: '+ ' + (todos.length - INBOX_MAX) + ' more in To review below'}));
+    const mrecs = (D.market && D.market.recs || []).filter(r => r.when <= 2).slice(0, 4);
+    if (mrecs.length) {
+      inbox.append(el('div', {class: 'group-label', text: 'From the market tracker (dagacci.com, reviews, competitors)'}));
+      for (const r of mrecs) inbox.append(el('div', {class: 'todo mkt'},
+        el('span', {class: 'avatar', text: 'MT'}),
+        el('button', {type: 'button', class: 't', text: r.title, onclick: () => openRec(r)}),
+        el('div', {class: 'acts'}, el('button', {type: 'button', class: 'btn', text: 'Details', onclick: () => openRec(r)})),
+        el('div', {class: 's', text: r.when_label + ' \u00b7 ' + r.area + ' \u00b7 ' + r.effort + ' effort' + (r.kpi ? ' \u00b7 track ' + r.kpi + ': ' + r.now + ' \u2192 ' + r.target : '')})));
+    }
     for (const g of sick) inbox.append(el('div', {class: 'todo health'},
       el('span', {class: 'avatar', text: INITIALS(g.name)}),
       el('button', {type: 'button', class: 't', text: NAME(g.name) + ' agent can’t do its job', onclick: () => { state.agent = g.name; sync(); focus('#f-q'); }}),
@@ -1122,18 +1326,31 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
       tells.length ? el('div', {class: 'links'}, el('b', {text: 'Tells: '}), tells.join(', ')) : null));
   }
 
+  // Market tab: the public market tracker, loaded on first open.
+  const M = D.market;
+  document.getElementById('market-lead').textContent = M && !M.error
+    ? 'What customers and competitors show in public data (dagacci.com catalog and stock, Judge.me reviews, Amazon pages, Cozyfit and 7 other scrub brands), updated daily. Data from ' + M.date + '.'
+    : 'The market tracker hasn\u2019t run yet. Run amz-agents market to build it.';
+  let framed = false;
+  const loadMarket = () => {
+    if (framed || !M || M.error) return;
+    framed = true;
+    document.getElementById('market-box').append(el('iframe', {class: 'mframe', src: D.market_src, title: 'Market tracker'}),
+      el('p', {class: 'note'}, el('a', {href: D.market_src, target: '_blank', rel: 'noopener', text: 'Open it full screen'})));
+  };
+
   // Tabs (remembered in the URL hash so a link opens the right one)
-  const tabs = {work: ['t-work', 'tab-work'], how: ['t-how', 'tab-how']};
+  const tabs = {work: ['t-work', 'tab-work'], market: ['t-market', 'tab-market'], how: ['t-how', 'tab-how']};
   const setTab = t => {
     for (const [k, [b, p]] of Object.entries(tabs)) {
       document.getElementById(b).setAttribute('aria-selected', String(k === t));
       document.getElementById(p).hidden = k !== t;
     }
-    if (location.hash.slice(1) !== t) history.replaceState(null, '', t === 'work' ? location.pathname + location.search : '#how');
+    if (t === 'market') loadMarket();
+    if (location.hash.slice(1) !== t) history.replaceState(null, '', t === 'work' ? location.pathname + location.search : '#' + t);
   };
-  document.getElementById('t-work').onclick = () => setTab('work');
-  document.getElementById('t-how').onclick = () => setTab('how');
-  setTab(location.hash === '#how' ? 'how' : 'work');
+  for (const t of Object.keys(tabs)) document.getElementById('t-' + t).onclick = () => setTab(t);
+  setTab(tabs[location.hash.slice(1)] ? location.hash.slice(1) : 'work');
 
   document.getElementById('foot').textContent = 'Covers the last ' + D.window_days + ' days plus anything still open. '
     + (D.token ? 'Approve / reject / mark done are on.' : 'Read-only. To approve here: amz-agents dashboard --serve --allow-actions');

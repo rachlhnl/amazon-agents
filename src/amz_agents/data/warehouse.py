@@ -242,6 +242,7 @@ class Warehouse:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         # The tracker server answers one request at a time, possibly off the thread
         # that opened the warehouse.
+        self.path = str(path)
         self.conn = sqlite3.connect(str(path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)

@@ -140,3 +140,14 @@ def test_decision_rules_follow_settings(ctx):
     assert set(rules["agents"]) >= {"inventory", "ads", "creative", "chief_of_staff"}
     assert any("30% ACoS" in r["then"] for r in rules["agents"]["ads"])
     assert next(x for x in rules["limits"] if x["env"] == "TARGET_ACOS")["value"] == "30%"
+
+
+def test_ceo_view_flags_example_config(ctx):
+    goals = [{"name": "Grow bottles", "metric": "units", "scope": "NOT-A-SKU", "target": "+15%",
+              "actual": "n/a", "status": "no data", "known": False}]
+    gaps = dashboard.setup_gaps(ctx.wh, goals)
+    assert any("NOT-A-SKU" in g for g in gaps)
+    data = dashboard.collect(ctx.wh, include_market=False)
+    s = data["scorecard"]
+    assert s and s["now"]["revenue"] > 0 and set(s["now"]) >= {"profit", "tacos", "units"}
+    assert data["market"] is None
