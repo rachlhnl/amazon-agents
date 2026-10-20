@@ -117,3 +117,17 @@ def test_server_actions_need_the_token(ctx):
         assert r["status"] == "rejected"
     finally:
         srv.shutdown()
+
+
+def test_how_tab_matches_the_agents(ctx):
+    data = dashboard.collect(ctx.wh)
+    names = [r["name"] for r in data["roster"]]
+    assert names[-1] == "chief_of_staff" and "creative" in names
+    for h in data["handoffs"]:
+        assert h["from"] in names + ["everyone"] and set(h["to"]) <= set(names)
+    creative = next(r for r in data["roster"] if r["name"] == "creative")
+    by = {k["kind"]: k["by"] for k in creative["proposes"]}
+    assert by["new_creative_variants"] == "person" and by["pause_creative"] == "api"
+    steps = data["walkthrough"]
+    assert any(s["who"] == "creative" for s in steps) and steps[-1]["status"] == ""
+    assert "How the agents work together" in dashboard.render(data)

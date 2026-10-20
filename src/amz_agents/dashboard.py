@@ -22,9 +22,10 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
 
-from .actions import Action, ActionLog
+from .actions import HUMAN_ONLY, Action, ActionLog
+from .agents import creative as cr
 from .agents.base import EFFORT_HOURS, TEAMS
-from .agents.chief_of_staff import _describe
+from .agents.chief_of_staff import ChiefOfStaff, _describe
 from .data.warehouse import Warehouse
 
 WINDOW_DAYS = 30
@@ -37,6 +38,104 @@ STAGE = {
     "executed": "done", "done": "done",
     "rejected": "rejected", "failed": "failed",
 }
+
+
+# What each agent leaves in ctx.shared for the ones after it, and who reads it.
+# Keep in step with the agents' ctx.shared reads and writes.
+HANDOFFS = [
+    {"from": "inventory", "to": ["pricing", "ads", "marketing", "sales", "creative", "data",
+                                 "chief_of_staff"],
+     "what": "Items running low on stock",
+     "why": "Nobody raises bids, budgets or ad variants for stock that's about to run out."},
+    {"from": "inventory", "to": ["pricing", "marketing", "data"],
+     "what": "Items with too much stock",
+     "why": "Pricing can mark them down and marketing can email them to move the stock."},
+    {"from": "reviews", "to": ["listing", "data"],
+     "what": "Recurring complaints by product",
+     "why": "Listing copy stays honest about known issues; the data agent sizes defects."},
+    {"from": "pricing", "to": ["sales"],
+     "what": "Proposed Amazon prices",
+     "why": "Other channels aren't priced under the new Amazon price and the Buy Box."},
+    {"from": "everyone", "to": ["creative"],
+     "what": "Drafts: emails, wholesale outreach, listing copy",
+     "why": "Each draft is checked against brand.toml and marked ok or needs changes."},
+    {"from": "everyone", "to": ["ux"],
+     "what": "Budget and listing proposals",
+     "why": "UX flags when the landing or detail page, not the ad, is what's losing sales."},
+    {"from": "everyone", "to": ["data"],
+     "what": "All proposals so far",
+     "why": "The data agent links its opportunities to work already proposed and routes "
+            "new ones to the agent whose job covers them."},
+    {"from": "everyone", "to": ["chief_of_staff"],
+     "what": "The full list of proposals",
+     "why": "Sized, ranked, assigned to a team, checked against goals, written into the briefs."},
+]
+
+
+def creative_walkthrough() -> list[dict[str, str]]:
+    """How a new piece of ad creative goes from a signal to built and live."""
+    drop, freq = f"{-cr.FATIGUE_CTR_DROP:.0%}", f"{cr.FATIGUE_FREQUENCY:g}"
+    win = f"{cr.WINNER_CTR_RATIO:g}×"
+    return [
+        {"who": "Ad platforms", "actor": "system", "status": "",
+         "title": "Ad results land in the warehouse",
+         "text": "Each run pulls every live ad's views, clicks, frequency, spend and "
+                 "purchases from Meta (or a CSV export for Google and TikTok)."},
+        {"who": "inventory", "actor": "agent", "status": "",
+         "title": "Inventory says what's safe to promote",
+         "text": "It runs first and shares the items running low, so no one asks for new "
+                 "ads to sell stock that's about to run out."},
+        {"who": "creative", "actor": "agent", "status": "",
+         "title": "Creative agent spots that a new ad is needed",
+         "text": f"Tired ad: click rate down {drop}+ while people have seen it {freq}+ times "
+                 f"a week → \u201cRefresh fatigued ad\u201d. Winning ad: click rate {win} its "
+                 f"campaign with {cr.WINNER_MIN_PURCHASES}+ purchases → \u201cMake variants\u201d. "
+                 "Amazon pages short on images, video or A+ → \u201cImprove listing assets\u201d."},
+        {"who": "data", "actor": "agent", "status": "",
+         "title": "Data agent checks nothing is missed or doubled",
+         "text": "It runs last, links its own opportunities to proposals already made, and "
+                 "routes any new one to the agent whose job covers it."},
+        {"who": "chief_of_staff", "actor": "agent", "status": "proposed",
+         "title": "Chief of staff sizes it and hands it to Creative",
+         "text": "It adds the 30-day value, effort (a couple of hours) and priority, tags "
+                 "the goal it serves, and files it under the Creative team."},
+        {"who": "Creative team", "actor": "person", "status": "pending_approval",
+         "title": "The Creative team is told",
+         "text": "It's in the Creative section of the daily brief, the Creative team brief "
+                 "(emailed to BRIEF_TO_CREATIVE) and this tracker under To review."},
+        {"who": "You", "actor": "person", "status": "acknowledged",
+         "title": "Someone approves it; designers build it",
+         "text": "Ad creative is people's work, so the system never makes or uploads an ad. "
+                 "Once approved it moves to Being done as \u201cYour team to do\u201d. (In "
+                 "suggest-only mode it stays a suggestion for the team to pick up; set "
+                 "AGENT_MODE=approve to use the buttons.)"},
+        {"who": "Creative team", "actor": "person", "status": "done",
+         "title": "Launch it and mark it done",
+         "text": "The new ad goes live in the campaign; click Mark done here."},
+        {"who": "creative", "actor": "agent", "status": "",
+         "title": "Agents judge it on the next runs",
+         "text": "The new ad's results flow back in. Creative watches it for fatigue or a "
+                 "win, and marketing moves budget toward campaigns that return profit."},
+    ]
+
+
+def _roster() -> list[dict[str, Any]]:
+    from .orchestrator import DEFAULT_AGENTS
+
+    out = []
+    for i, a in enumerate(DEFAULT_AGENTS, 1):
+        out.append({
+            "name": a.name, "step": i, "team": a.role.team, "mission": a.role.mission,
+            "proposes": [{"kind": k, "effort": e, "by": "person" if k in HUMAN_ONLY else "api"}
+                         for k, e in a.role.proposes.items()],
+            "needs": list(a.role.needs),
+        })
+    out.append({"name": ChiefOfStaff.name, "step": len(out) + 1, "team": "",
+                "mission": "Doesn't propose changes. Sizes, ranks and assigns everyone's "
+                           "proposals to a team, escalates goal conflicts and sudden swings, "
+                           "checks last week's changes worked, and writes the briefs.",
+                "proposes": [{"kind": "escalation", "effort": "", "by": "person"}], "needs": []})
+    return out
 
 
 def _agents() -> list[tuple[str, Any]]:
@@ -120,6 +219,9 @@ def collect(wh: Warehouse, today: date | None = None) -> dict[str, Any]:
         "effort_hours": EFFORT_HOURS,
         "window_days": WINDOW_DAYS,
         "stale_days": STALE_WAITING_DAYS,
+        "roster": _roster(),
+        "handoffs": HANDOFFS,
+        "walkthrough": creative_walkthrough(),
     }
 
 
@@ -346,6 +448,56 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
 .empty { padding: 20px; text-align: center; color: var(--text-3); font-size: 13px; }
 #tip { position: fixed; pointer-events: none; background: var(--text); color: var(--bg); font-size: 12px;
   padding: 6px 8px; border-radius: 6px; display: none; z-index: 30; white-space: nowrap; }
+/* Tabs */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 18px 0 0; }
+.tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; margin-bottom: -1px;
+  font-size: 14px; color: var(--text-2); cursor: pointer; }
+.tabs button[aria-selected=true] { color: var(--text); border-bottom-color: var(--accent); font-weight: 650; }
+.lead { color: var(--text-2); max-width: 820px; margin: 16px 0 0; }
+/* Run order */
+.flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+.stage { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; min-width: 0; flex: 1 1 200px; }
+.stage h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-3); }
+.stage .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.arrow { align-self: center; color: var(--text-3); font-size: 18px; }
+.ag { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 3px; border-radius: 999px;
+  background: var(--surface-2); font-size: 12.5px; white-space: nowrap; }
+.ag .avatar { width: 20px; height: 20px; font-size: 9px; grid-row: auto; }
+.ag .n { color: var(--text-3); font-variant-numeric: tabular-nums; }
+/* Walkthrough */
+.callout { background: var(--accent-soft); border-radius: 12px; padding: 12px 14px; font-size: 13.5px; margin-bottom: 14px; }
+.callout b { font-weight: 650; }
+.timeline { list-style: none; margin: 0; padding: 0; position: relative; }
+.timeline li { display: grid; grid-template-columns: 34px 1fr; gap: 12px; padding-bottom: 14px; position: relative; }
+.timeline li::before { content: ""; position: absolute; left: 16px; top: 30px; bottom: 0; width: 2px; background: var(--border); }
+.timeline li:last-child::before { display: none; }
+.timeline .num { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 13px;
+  background: var(--accent-soft); color: var(--accent); }
+.timeline .num.person { background: var(--warn-soft); color: var(--warn-text); }
+.timeline .num.system { background: var(--surface-2); color: var(--text-2); }
+.timeline .who { font-size: 12px; color: var(--text-3); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.timeline .ttl { font-weight: 650; margin: 1px 0 3px; }
+.timeline .txt { color: var(--text-2); font-size: 13px; max-width: 760px; }
+.key { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--text-2); margin: 0 0 12px; }
+.key span { display: inline-flex; align-items: center; gap: 6px; }
+/* Handoffs */
+.hand { display: grid; grid-template-columns: minmax(150px, 220px) 1fr; gap: 6px 16px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.hand:last-child { border-bottom: 0; }
+.hand .route { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.hand .what { font-weight: 600; } .hand .why { color: var(--text-2); font-size: 13px; }
+/* Agent cards */
+.roster { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.role { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; box-shadow: var(--shadow); }
+.role .hd { display: flex; gap: 10px; align-items: center; }
+.role .hd .avatar { grid-row: auto; }
+.role .nm { font-weight: 650; } .role .tm { color: var(--text-3); font-size: 12px; }
+.role p { color: var(--text-2); font-size: 13px; margin: 8px 0 10px; }
+.role h5 { margin: 10px 0 4px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-3); }
+.role ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; font-size: 13px; }
+.role li .by { display: block; color: var(--text-3); font-size: 11.5px; }
+.role .links { font-size: 12.5px; color: var(--text-2); }
+.role .links b { color: var(--text); font-weight: 600; }
+@media (max-width: 600px) { .hand { grid-template-columns: 1fr; } .arrow { transform: rotate(90deg); width: 100%; text-align: center; } }
 @media (max-width: 900px) { .board { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) {
   .board { grid-template-columns: 1fr; }
@@ -365,6 +517,11 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
     </div>
     <button class="theme" id="theme" type="button">Dark / light</button>
   </header>
+  <nav class="tabs" role="tablist" aria-label="Views">
+    <button type="button" role="tab" id="t-work" aria-controls="tab-work" aria-selected="true">Work</button>
+    <button type="button" role="tab" id="t-how" aria-controls="tab-how" aria-selected="false">How the agents work together</button>
+  </nav>
+  <div id="tab-work" role="tabpanel" aria-labelledby="t-work">
   <p class="headline" id="headline"></p>
   <section class="kpis" id="kpis" aria-label="Summary"></section>
 
@@ -394,6 +551,22 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
   <div class="sec-head"><h2>The team</h2><p>Click an agent to see only their work.</p></div>
   <section class="team" id="team" aria-label="Agents"></section>
   <p class="note" id="foot"></p>
+  </div>
+  <div id="tab-how" role="tabpanel" aria-labelledby="t-how" hidden>
+    <p class="lead">Every run, the agents go in a fixed order. Each one reads what the earlier ones
+      found and leaves its own findings for the ones after it. No agent changes anything on its own:
+      everything goes to the chief of staff, who turns it into one ranked plan and tells each team its part.</p>
+    <div class="sec-head"><h2>The daily run</h2><p>Numbers are the order they run in.</p></div>
+    <section class="flow" id="flow"></section>
+    <div class="sec-head"><h2>Example: a new ad needs to be built</h2><p>Who does what, and where it shows up in the Work tab.</p></div>
+    <div class="callout" id="strategist"></div>
+    <div class="key" id="tl-key"></div>
+    <section class="panel"><ol class="timeline" id="timeline"></ol></section>
+    <div class="sec-head"><h2>Who tells whom</h2><p>What each agent passes along during a run.</p></div>
+    <section class="panel" id="handoffs" style="padding-top:4px;padding-bottom:4px"></section>
+    <div class="sec-head"><h2>What each agent does</h2><p>What it can suggest, who carries that out, and the data it needs.</p></div>
+    <section class="roster" id="roster"></section>
+  </div>
 </div>
 <div id="shell">
   <div class="scrim" id="scrim"></div>
@@ -697,6 +870,101 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
     document.getElementById('work-note').textContent = (filtered ? rows.length + ' of ' : '') + plural(D.actions.length, 'item') + ' · click any card for details';
   }
   sync();
+
+  // ------------------------------------------------ How the agents work together
+  const KIND = {reorder: 'Reorder stock', flag_defect: 'Flag a product defect', update_price: 'Change an Amazon price',
+    update_bid: 'Change a keyword bid', add_keyword: 'Add a search keyword', add_negative: 'Block a wasted search term',
+    update_listing_copy: 'Rewrite listing copy', update_campaign_budget: 'Change a campaign budget',
+    pause_campaign: 'Pause a campaign', email_campaign: 'Draft an email campaign',
+    update_channel_price: 'Change a price on another channel', list_on_channel: 'List on a new channel',
+    send_outreach: 'Draft wholesale outreach', refresh_creative: 'Refresh a tired ad', pause_creative: 'Pause an ad',
+    new_creative_variants: 'Make variants of a winning ad', improve_listing_assets: 'Add Amazon images, video or A+',
+    fix_listing_title: 'Fix a listing title', fix_funnel_step: 'Fix a store checkout step',
+    improve_page_speed: 'Speed up a page', fix_accessibility: 'Fix an accessibility issue',
+    fix_landing_page: 'Fix an ad landing page', improve_listing_conversion: 'Improve an Amazon page that converts poorly',
+    opportunity: 'Raise an opportunity for another agent', escalation: 'Escalate a decision to you'};
+  const TABLE = {products: 'products & costs', metrics_daily: 'daily sales', reviews: 'reviews', keywords: 'ad keywords',
+    search_terms: 'search terms', external_campaigns: 'Meta / Google / TikTok campaigns', channel_listings: 'other-channel listings',
+    leads: 'wholesale leads', creatives: 'ad creative results', listing_assets: 'Amazon images & A+',
+    web_funnel: 'store funnel (GA4)', web_pages: 'page speed', asin_traffic: 'Amazon page traffic'};
+  const R = Object.fromEntries(D.roster.map(r => [r.name, r]));
+  const chip = n => el('span', {class: 'ag'}, el('span', {class: 'avatar', text: n === 'everyone' ? '··' : INITIALS(n)}),
+    n === 'everyone' ? 'Every agent' : NAME(n), R[n] ? el('span', {class: 'n', text: R[n].step}) : null);
+
+  // Run order, grouped the way work moves.
+  const agents = D.roster.filter(r => r.name !== 'chief_of_staff');
+  const STAGES = [
+    ['1 · Find', 'Amazon operations first, then outside channels, then the reviewers', agents.map(r => chip(r.name))],
+    ['2 · Plan', 'Size, rank, assign a team, escalate', [chip('chief_of_staff')]],
+    ['3 · Tell', 'Daily brief, a brief per team (email), this tracker', [el('span', {class: 'ag', text: 'Briefs + Work tab'})]],
+    ['4 · Do', 'Approved price, bid and budget changes go through the API; everything else is a person', [
+      el('span', {class: 'ag', text: 'API'}), el('span', {class: 'ag', text: 'Your teams'})]],
+  ];
+  const flow = document.getElementById('flow');
+  STAGES.forEach(([h, sub, chips], i) => {
+    if (i) flow.append(el('span', {class: 'arrow', 'aria-hidden': 'true', text: '\u2192'}));
+    flow.append(el('div', {class: 'stage', style: i ? '' : 'flex-basis:420px;flex-grow:3'},
+      el('h4', {text: h}), el('div', {class: 'chips'}, chips), el('div', {class: 'sub', style: 'color:var(--text-3);font-size:12px;margin-top:6px', text: sub})));
+  });
+
+  // Walkthrough
+  document.getElementById('strategist').append(el('b', {text: 'Where\u2019s the strategist? '}),
+    'There isn\u2019t a separate strategist agent. The job is split three ways: the ',
+    el('b', {text: 'Creative'}), ' agent spots ads that need to be built, the ', el('b', {text: 'Data'}),
+    ' agent finds opportunities the others\u2019 rules miss and routes them to the right agent, and the ',
+    el('b', {text: 'Chief of staff'}), ' ranks everything and tells each team what\u2019s theirs.');
+  const ACTOR = {agent: ['Agent', 'var(--accent)'], person: ['A person', 'var(--warn)'], system: ['Data feed', 'var(--text-3)']};
+  document.getElementById('tl-key').append(...Object.values(ACTOR).map(([l, c]) => el('span', {}, el('i', {class: 'dot', style: 'background:' + c}), l)));
+  const tl = document.getElementById('timeline');
+  D.walkthrough.forEach((st, i) => {
+    const [label, cls] = STATUS[st.status] || [];
+    tl.append(el('li', {},
+      el('span', {class: 'num ' + st.actor, text: i + 1}),
+      el('div', {},
+        el('div', {class: 'who'}, R[st.who] ? chip(st.who) : el('span', {text: st.who}),
+          label ? el('span', {class: 'tag ' + cls, text: 'Work tab: ' + label}) : null),
+        el('div', {class: 'ttl', text: st.title}), el('div', {class: 'txt', text: st.text}))));
+  });
+
+  // Handoffs
+  const hands = document.getElementById('handoffs');
+  for (const h of D.handoffs) hands.append(el('div', {class: 'hand'},
+    el('div', {class: 'route'}, chip(h.from), el('span', {class: 'arrow', text: '\u2192', style: 'font-size:14px;transform:none;width:auto'})),
+    el('div', {}, el('div', {class: 'route'}, h.to.map(chip)), el('div', {class: 'what', style: 'margin-top:6px', text: h.what}),
+      el('div', {class: 'why', text: h.why}))));
+
+  // Agent cards
+  const roster = document.getElementById('roster');
+  const listen = n => [...new Set(D.handoffs.filter(h => h.to.includes(n)).map(h => h.from === 'everyone' ? 'every agent' : NAME(h.from)))];
+  const tell = n => [...new Set(D.handoffs.filter(h => h.from === n).flatMap(h => h.to.map(NAME)))];
+  for (const r of D.roster) {
+    const hears = listen(r.name), tells = tell(r.name);
+    roster.append(el('div', {class: 'role'},
+      el('div', {class: 'hd'}, el('span', {class: 'avatar', text: INITIALS(r.name)}),
+        el('div', {}, el('div', {class: 'nm', text: r.step + '. ' + NAME(r.name)}), el('div', {class: 'tm', text: D.teams[r.team] || 'Coordinates every team'}))),
+      el('p', {text: r.mission}),
+      el('h5', {text: 'Can suggest'}),
+      el('ul', {}, r.proposes.map(k => el('li', {}, el('span', {text: KIND[k.kind] || k.kind.replace(/_/g, ' ')}),
+        el('span', {class: 'by', text: (k.by === 'api' ? 'system, once approved' : 'a person') + (k.effort ? ' · ' + (EFFORT_LABEL[k.effort] || k.effort).toLowerCase() : '')})))),
+      r.needs.length ? [el('h5', {text: 'Needs data'}), el('div', {class: 'links', text: r.needs.map(t => TABLE[t] || t).join(', ')})] : null,
+      hears.length || tells.length ? el('h5', {text: 'Works with'}) : null,
+      hears.length ? el('div', {class: 'links'}, el('b', {text: 'Hears from: '}), hears.join(', ')) : null,
+      tells.length ? el('div', {class: 'links'}, el('b', {text: 'Tells: '}), tells.join(', ')) : null));
+  }
+
+  // Tabs (remembered in the URL hash so a link opens the right one)
+  const tabs = {work: ['t-work', 'tab-work'], how: ['t-how', 'tab-how']};
+  const setTab = t => {
+    for (const [k, [b, p]] of Object.entries(tabs)) {
+      document.getElementById(b).setAttribute('aria-selected', String(k === t));
+      document.getElementById(p).hidden = k !== t;
+    }
+    if (location.hash.slice(1) !== t) history.replaceState(null, '', t === 'work' ? location.pathname + location.search : '#how');
+  };
+  document.getElementById('t-work').onclick = () => setTab('work');
+  document.getElementById('t-how').onclick = () => setTab('how');
+  setTab(location.hash === '#how' ? 'how' : 'work');
+
   document.getElementById('foot').textContent = 'Covers the last ' + D.window_days + ' days plus anything still open. '
     + (D.token ? 'Approve / reject / mark done are on.' : 'Read-only. To approve here: amz-agents dashboard --serve --allow-actions');
 })();
