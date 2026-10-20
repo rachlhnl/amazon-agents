@@ -1,0 +1,57 @@
+import json
+
+from amz_agents import dashboard, plan
+from amz_agents.actions import Action, ActionLog
+from amz_agents.config import Mode
+
+PLAN = """
+[[item]]
+id = "sizing"
+rank = 1
+added = "2026-10-20"
+title = "One clear sizing step"
+team = "product"
+effort = "S"
+due_days = 7
+gain_low = 1000
+gain_high = 2000
+why = "Shoppers size down twice."
+kpi = "Fit share"
+baseline = "70%"
+target = "\\u2264 35%"
+measure = "manual"
+steps = ["Pick one size system."]
+covers = ["Straw Lid: buyers complain about leaks"]
+drafter = "product"
+draft = "A sizing memo."
+"""
+
+
+def test_plan_becomes_approved_work_and_merges_suggestions(ctx, tmp_path, monkeypatch):
+    path = tmp_path / "plan.toml"
+    path.write_text(PLAN)
+    monkeypatch.setenv("PLAN_PATH", str(path))
+    log = ActionLog(ctx.wh, Mode.APPROVE)
+    sid = log.submit(Action(agent="product", kind="fix_fit", target="straw-lid", before=None,
+                            after={"title": "Straw Lid: buyers complain about leaks"}, reason=""))
+    assert plan.sync(ctx.wh) == 1
+    assert plan.sync(ctx.wh) == 0  # idempotent
+    rows = ctx.wh.query("SELECT * FROM actions WHERE agent='ceo'")
+    assert len(rows) == 1 and rows[0]["status"] == "acknowledged" and rows[0]["priority"] == "now"
+    after = json.loads(rows[0]["after"])
+    assert after["draft_text"]["voice"] == "outline" and "Pick one size system." in after["draft_text"]["text"]
+    assert ctx.wh.query("SELECT status FROM actions WHERE id=?", (sid,))[0]["status"] == "superseded"
+    # the merged suggestion isn't proposed again
+    assert log.already_open_or_done(Action(agent="product", kind="fix_fit", target="straw-lid",
+                                           before=None, after={"title": "Straw Lid: buyers complain about leaks"},
+                                           reason=""))
+    log.complete(rows[0]["id"])
+    data = dashboard.collect(ctx.wh)
+    item = data["plan"][0]
+    assert item["status"] == "done" and item["merged"] == 1 and item["gain_high"] == 2000
+    assert not any(a["status"] == "superseded" for a in data["actions"])
+
+
+def test_targets_read_both_ways():
+    assert plan._met(0.3, "≤ 35%") and not plan._met(0.7, "≤ 35%")
+    assert plan._met(1200, "< 1,500 KB") and plan._met(49, "≤ $49") and not plan._met(50, "≤ $49")

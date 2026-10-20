@@ -60,7 +60,8 @@ HUMAN_ONLY = {
 # Statuses that mean an action is still waiting, or was carried out recently
 # enough that proposing it again would duplicate it (e.g. a second identical
 # negative keyword while the 30-day search-term report still shows the term).
-OPEN_OR_DONE = ("pending_approval", "approved", "executed", "acknowledged", "done")
+# "superseded": merged into a CEO plan item (plan.toml), so it isn't proposed again.
+OPEN_OR_DONE = ("pending_approval", "approved", "executed", "acknowledged", "done", "superseded")
 REPEAT_LOOKBACK_DAYS = 30
 
 

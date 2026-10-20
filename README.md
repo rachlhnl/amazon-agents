@@ -210,6 +210,21 @@ needs a token generated for that server process, and it listens on localhost onl
 unless you pass `--host`. Approved human-only work stays "in progress" until
 someone marks it done (`amz-agents done ID`, or the button).
 
+## CEO plan
+
+`plan.toml` lists the changes leadership has decided on, in priority order, each
+with its team, effort, deadline, estimated monthly gain (assumptions stated), the
+KPI that says it worked (baseline and target) and how to read it. Every run the
+chief of staff puts each item in the tracker as approved work for its team,
+ranked above the agents' suggestions, and merges in the suggestions it covers
+(they're marked `superseded` and not proposed again). The item's agent writes a
+first draft of the work (a memo, policy, spec block or brief), in Claude's words
+with an Anthropic key or as an outline from the evidence without one. The
+tracker's CEO plan table shows each item's owner, due date and KPI as
+baseline -> now -> target; the KPIs are read from store reviews and the weekly
+mystery shop, or marked "check by hand". Mark an item done in the tracker or
+with `amz-agents done ID`.
+
 ## Mystery shopper
 
 `amz-agents shop` (weekly, from the Market tracker workflow) shops every brand's

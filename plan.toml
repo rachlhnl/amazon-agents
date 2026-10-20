@@ -1,0 +1,245 @@
+# The CEO plan: changes leadership has decided on, in priority order.
+#
+# Every run, the chief of staff puts each item in the tracker as approved work for
+# its team ("Your team to do"), above the agents' own suggestions, with a due date
+# and a scorecard. Agent suggestions an item covers are merged into it. An agent
+# drafts the first version of the work (with an Anthropic key, in Claude's words;
+# without one, a starter outline from the evidence).
+#
+# Fields:
+#   rank, title, team (key of TEAMS), effort (XS S M L XL), loe (in words), due_days
+#   (from added)
+#   gain_low / gain_high: estimated monthly profit gain, $ (assumptions in `why`)
+#   kpi, baseline, target: the number that says it worked
+#   measure: how the scorecard reads the KPI today (see amz_agents/plan.py), or
+#            "manual" when only a person can check it
+#   checks: mystery-shopper checks that should pass once it's done
+#   covers: titles of agent suggestions this item replaces
+#   draft: what the drafting agent writes, and drafter: which agent
+#   added: date the item joined the plan
+
+[[item]]
+id = "sizing"
+loe = "2–3 days"
+rank = 1
+added = "2026-10-20"
+title = "One clear sizing step on every channel"
+team = "product"
+effort = "S"
+due_days = 7
+gain_low = 1500
+gain_high = 2500
+why = "Size buttons read \"XS(Men) / S(Women)\" and the size guide says women should size down, so careful shoppers size down twice; 70% of the best seller's 1-2 star reviews are about fit. Gain is mostly fewer Amazon returns (est. $100k/mo on Amazon, 12% returns, half fit-driven, cut by a fifth) plus 2-5% more conversion."
+kpi = "Share of 1-2★ reviews about fit (Best Seller Unisex Sets, last 12 months)"
+baseline = "70%"
+target = "≤ 35%"
+measure = "fit_share:Best Seller Unisex"
+checks = ["model"]
+steps = [
+  "Decide one system: unisex sizes with a women's conversion table, or the dual labels without the size-down note.",
+  "Put the size chart as text next to the size buttons on every product page.",
+  "Add the model's height and size to every product page.",
+  "Use the same chart as the second image on Amazon and Walmart listings.",
+]
+covers = ["dagacci.com: make sizing one clear step", "dagacci.com: nothing to help me pick a size",
+          "dagacci.com: no model height or size to compare against",
+          "Best Seller Unisex Scrub Sets: buyers complain about fit & sizing"]
+drafter = "product"
+draft = "A one-page sizing decision memo: the problem in shoppers' words, the two options with pros and cons, a recommendation, and the exact size-chart text to publish."
+
+[[item]]
+id = "free-shipping"
+loe = "2–4 hours"
+rank = 2
+added = "2026-10-20"
+title = "Free shipping at $49 (or a 2-set bundle) and a cart progress bar"
+team = "ux"
+effort = "XS"
+due_days = 7
+gain_low = 200
+gain_high = 500
+why = "Free shipping starts at $50 and two best-seller sets cost $49.98; the cart shows no progress. Gain assumes 15% single-set orders, 10% of them adding a second set, and fewer abandoned $49.98 carts."
+kpi = "Free-shipping line on dagacci.com"
+baseline = "$50"
+target = "≤ $49"
+measure = "free_ship_over"
+steps = ["Set the free-shipping threshold to $49 (or create a 2-set bundle at $49).",
+         "Add a \"you're $X from free shipping\" bar to the cart drawer."]
+covers = ["dagacci.com: free shipping at $49, or a 2-set bundle"]
+drafter = "ux"
+draft = "The exact settings change and the cart-bar copy for each state (empty, under, reached)."
+
+[[item]]
+id = "popup"
+loe = "1–2 hours"
+rank = 3
+added = "2026-10-20"
+title = "Stop the email popup from blocking the first click"
+team = "ux"
+effort = "XS"
+due_days = 7
+gain_low = 100
+gain_high = 300
+why = "The 10%-off popup covered the page and swallowed the first click on the way to a product."
+kpi = "Popup timing"
+baseline = "on arrival"
+target = "exit intent or 30 s"
+measure = "manual"
+steps = ["Switch the popup to exit intent, or show it after 30 seconds or a second page view."]
+drafter = "ux"
+draft = "The popup settings to change and how to check sign-ups don't drop."
+
+[[item]]
+id = "on-model"
+loe = "1–2 days"
+rank = 4
+added = "2026-10-20"
+title = "Lead with on-model photos on every channel"
+team = "creative"
+effort = "S"
+due_days = 14
+gain_low = 500
+gain_high = 1200
+why = "Collection pages show flat lays; the women's on-model shots exist but sit behind them. Cozyfit and Jaanuu lead with a woman wearing the set. Gain assumes 2-4% more Amazon conversion and a little on the site."
+kpi = "Products whose first image is on a model"
+baseline = "mostly flat lays"
+target = "all sets"
+measure = "manual"
+steps = ["Make an on-model shot the first image for every set on dagacci.com, Amazon and Walmart.",
+         "Where none exists, list the set for the next shoot."]
+drafter = "creative"
+draft = "An image-order brief per channel and a shot list for sets with no on-model photo."
+
+[[item]]
+id = "free-exchanges"
+loe = "3–5 days + a returns app"
+rank = 5
+added = "2026-10-20"
+title = "Free size exchanges on dagacci.com"
+team = "ux"
+effort = "M"
+due_days = 30
+gain_low = 400
+gain_high = 850
+why = "Returns are 14 days, customer-paid, no exchanges, while Amazon sells the same set with free returns. Gain assumes 8-15% more site conversion, less $300-450/mo of exchange labels; it also keeps orders off Amazon's fees."
+kpi = "Free returns or exchanges on dagacci.com"
+baseline = "no"
+target = "yes"
+measure = "check:free_returns"
+checks = ["free_returns"]
+steps = ["Offer free exchanges for size with a prepaid label (a returns app or Shopify's built-in returns).",
+         "Say so next to the price and in the cart.",
+         "Rewrite the refund policy: fix the pre-printed label contradiction and the typos."]
+covers = ["dagacci.com: offer free size exchanges", "dagacci.com: returns aren't free"]
+drafter = "ux"
+draft = "A new returns and exchanges policy, the one-line promise for the product page, and the cost model (exchange rate x label cost)."
+
+[[item]]
+id = "page-cleanup"
+loe = "~2 days"
+rank = 6
+added = "2026-10-20"
+title = "Product page cleanup: fabric %, real specs, typos"
+team = "ux"
+effort = "S"
+due_days = 30
+gain_low = 200
+gain_high = 600
+why = "Specs pasted from Amazon (\"tuxedo shirt\", \"T back\"), no fabric percentages, \"OFFCIAL\" in names and a (22) review-count bug make a careful shopper doubt the page."
+kpi = "Fabric blend in % on the product page"
+baseline = "no"
+target = "yes"
+measure = "check:fabric"
+checks = ["fabric"]
+steps = ["Replace the pasted spec list with fabric %, stretch, pockets, fit and care on all 36 products.",
+         "Fix \"OFFCIAL\" and the (22) review counts in \"You may also like\"."]
+covers = ["dagacci.com: replace the pasted Amazon specs", "dagacci.com: doesn't say what the fabric is made of"]
+drafter = "listing"
+draft = "The replacement spec block for the best seller, as a template for the other 35."
+
+[[item]]
+id = "buy-box"
+loe = "~1 day"
+rank = 7
+added = "2026-10-20"
+title = "Find out who undercuts Dagacci on Amazon"
+team = "amazon_ops"
+effort = "S"
+due_days = 30
+gain_low = 0
+gain_high = 0
+why = "The best seller shows \"May be available at a lower price from other sellers\"; resellers may be taking the Buy Box. Impact is unknown until checked."
+kpi = "Buy Box share on the top listings"
+baseline = "unknown"
+target = "≥ 95%"
+measure = "manual"
+steps = ["Check the other offers on the top 8 listings and who wins the Buy Box.",
+         "Report unauthorized sellers through Brand Registry; fix MAP with authorized ones."]
+drafter = "pricing"
+draft = "A checklist for the offer review and the Brand Registry report."
+
+[[item]]
+id = "page-weight"
+loe = "3–5 dev days"
+rank = 8
+added = "2026-10-20"
+title = "Cut product pages from 4.8 MB to under 1.5 MB"
+team = "ux"
+effort = "M"
+due_days = 90
+gain_low = 250
+gain_high = 700
+why = "The best-seller page is 4.8 MB, about 5x other brands'. Gain assumes 3-8% more mobile conversion on the site."
+kpi = "Product page weight"
+baseline = "4,894 KB"
+target = "< 1,500 KB"
+measure = "page_kb"
+steps = ["Compress and lazy-load images; serve them sized for phones.",
+         "Remove apps and scripts the product page doesn't need."]
+covers = ["dagacci.com product pages are heavy (4.8 MB)"]
+drafter = "ux"
+draft = "The fix list: the heaviest images and scripts on the page and what to do with each."
+
+[[item]]
+id = "walmart"
+loe = "2–3 days"
+rank = 9
+added = "2026-10-20"
+title = "Merge Dagacci's split Walmart listings"
+team = "marketing"
+effort = "M"
+due_days = 90
+gain_low = 200
+gain_high = 400
+why = "Sets are listed separately by color and size (one with 222 reviews, its twin with 1), so reviews don't add up. Gain assumes Walmart at ~$15k/mo and 5-10% more conversion."
+kpi = "Dagacci Walmart items split by color/size"
+baseline = "several"
+target = "0"
+measure = "manual"
+steps = ["Group variants under one item per style in Walmart Seller Center.",
+         "Shorten titles to brand, style, fit and pockets."]
+covers = ["Walmart: merge Dagacci's split listings"]
+drafter = "listing"
+draft = "The variant-group plan: which items merge into which, and the new titles."
+
+[[item]]
+id = "fit-shoot"
+loe = "2–4 weeks"
+rank = 10
+added = "2026-10-20"
+title = "A women's-fit photoshoot and a fit finder"
+team = "product"
+effort = "L"
+due_days = 90
+gain_low = 500
+gain_high = 1500
+why = "Jaanuu's \"Find My Size\" and on-model photos are what a fit-anxious shopper wants. Slow to pay back, but compounds with the sizing fix."
+kpi = "Fit help on the product page"
+baseline = "none"
+target = "fit finder live"
+measure = "check:fit_tool"
+checks = ["fit_tool"]
+steps = ["Shoot the best sellers on women of three heights and sizes.",
+         "Add a fit finder (height, weight, usual size) to product pages."]
+drafter = "creative"
+draft = "A shoot brief (styles, models, shots) and a shortlist of fit-finder options."

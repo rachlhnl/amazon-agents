@@ -425,6 +425,32 @@ def market_summary(root: Path | None = None) -> dict[str, Any] | None:
             "recs": [{k: r.get(k) for k in keep} for r in a["recs"]]}
 
 
+def plan_view(wh: Warehouse, actions: list[dict[str, Any]], owners: dict[str, str],
+              today: date) -> list[dict[str, Any]]:
+    """plan.toml items with their tracker work and KPI scorecard."""
+    from . import plan
+
+    by_target = {a["target"]: a for a in actions if a["agent"] == plan.AGENT}
+    merged = {r["t"]: r["n"] for r in wh.query(
+        "SELECT COUNT(*) AS n, "  # notes: "merged into CEO plan #<rank>: <title>"
+        "substr(notes, instr(notes, '#') + 1, instr(notes, ':') - instr(notes, '#') - 1) AS t "
+        "FROM actions WHERE status='superseded' GROUP BY t")}
+    out = []
+    for item in plan.load_plan():
+        a = by_target.get(f"plan/{item['id']}")
+        out.append({
+            "id": item["id"], "rank": item["rank"], "title": item["title"], "team": item["team"],
+            "owner": owners.get(item["team"], ""), "effort": item.get("effort", ""),
+            "loe": item.get("loe", ""),
+            "gain_low": item.get("gain_low", 0), "gain_high": item.get("gain_high", 0),
+            "kpi": item["kpi"], "baseline": item["baseline"], "target": item["target"],
+            "score": plan.measure(item, today), "action_id": a["id"] if a else None,
+            "status": a["status"] if a else None, "due": a["due"] if a else None,
+            "overdue": a["overdue"] if a else False, "merged": merged.get(str(item["rank"]), 0),
+        })
+    return out
+
+
 def shopper_view() -> dict[str, Any] | None:
     """The latest mystery shop, plus the checklist it ran."""
     from .market import shopper
@@ -453,8 +479,8 @@ def collect(wh: Warehouse, today: date | None = None,
     last_data = wh.query("SELECT MAX(date) AS d FROM metrics_daily")[0]["d"]
 
     rows = wh.query(
-        "SELECT * FROM actions WHERE created >= date(?, ?) "
-        "OR status IN ('pending_approval', 'approved', 'acknowledged') ORDER BY id DESC",
+        "SELECT * FROM actions WHERE status != 'superseded' AND (created >= date(?, ?) "
+        "OR status IN ('pending_approval', 'approved', 'acknowledged')) ORDER BY id DESC",
         (today.isoformat(), f"-{WINDOW_DAYS} days"),
     )
     verdicts = {o["action_id"]: o for o in wh.query("SELECT * FROM outcomes")}
@@ -478,9 +504,11 @@ def collect(wh: Warehouse, today: date | None = None,
         due = None
         if stage in ("waiting", "in_progress"):
             days = teams_cfg["due_days"].get(r["priority"] or "", 7)
+            if isinstance(after, dict) and after.get("source") == "plan" and after.get("due_days"):
+                days = after["due_days"]  # the plan sets its own deadlines
             due = (date.fromisoformat(created) + timedelta(days=days)).isoformat()
         actions.append({
-            "id": r["id"], "agent": r["agent"], "team": r["team"] or "", "kind": r["kind"],
+            "id": r["id"], "agent": r["agent"], "target": r["target"], "team": r["team"] or "", "kind": r["kind"],
             "title": title, "reason": r["reason"] or "", "notes": r["notes"] or "",
             "status": r["status"], "stage": stage,
             "priority": r["priority"] or "", "impact": r["impact_usd"], "effort": r["effort"] or "",
@@ -493,6 +521,8 @@ def collect(wh: Warehouse, today: date | None = None,
             "source": after.get("source", "") if isinstance(after, dict) else "",
             "steps": after.get("steps", []) if isinstance(after, dict) else [],
             "url": after.get("url") if isinstance(after, dict) else None,
+            "draft": after.get("draft_text") if isinstance(after, dict) else None,
+            "loe": after.get("loe") if isinstance(after, dict) else None,
         })
 
     agents = []
@@ -544,6 +574,7 @@ def collect(wh: Warehouse, today: date | None = None,
         "setup_gaps": setup_gaps(wh, goals, teams_cfg["owners"]),
         "market": market_summary() if include_market else None,
         "shopper": shopper_view() if include_market else None,
+        "plan": plan_view(wh, actions, teams_cfg["owners"], today) if include_market else [],
     }
 
 
@@ -805,6 +836,15 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
 .group-label { font-size: 12px; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; margin: 10px 0 2px; }
 .mframe { width: 100%; height: calc(100vh - 140px); min-height: 600px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); margin-top: 16px; }
 @media (max-width: 900px) { .score { grid-template-columns: 1fr; } }
+/* CEO plan */
+.plan td { vertical-align: middle; }
+.plan .rk { font-weight: 700; color: var(--text-3); width: 28px; }
+.plan .ttl { font-weight: 600; cursor: pointer; background: none; border: 0; padding: 0; text-align: left; }
+.plan .ttl:hover { color: var(--accent); }
+.plan .kpi { font-size: 12.5px; color: var(--text-2); }
+.plan .kpi b { color: var(--text); font-variant-numeric: tabular-nums; }
+.plan tr.done td { opacity: .55; }
+.draft { background: var(--surface-2); border-radius: 10px; padding: 12px; font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 360px; overflow: auto; margin-bottom: 16px; }
 /* Mystery shopper */
 .verdict { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 12px; padding: 16px; margin-top: 16px; }
 .verdict .k { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-3); }
@@ -921,6 +961,8 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
   <div id="tab-work" role="tabpanel" aria-labelledby="t-work">
   <div id="setup"></div>
   <section class="score" id="score" aria-label="This week"></section>
+  <div class="sec-head"><h2>CEO plan</h2><p id="plan-note">From plan.toml. Approved work, in priority order.</p></div>
+  <section class="table-wrap" id="plan"></section>
   <div class="sec-head"><h2>Agent work</h2><p></p></div>
   <p class="headline" id="headline" style="margin-top:0"></p>
   <section class="kpis" id="kpis" aria-label="Summary"></section>
@@ -1015,8 +1057,8 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
   const PRI = {now: 0, high: 1, medium: 2, low: 3, judgment: 4, '': 5};
   const PRI_LABEL = {now: 'Urgent', high: 'High', medium: 'Medium', low: 'Low', judgment: 'Your call'};
   const EFFORT_LABEL = {XS: 'Minutes', S: 'Under an hour', M: 'A couple of hours', L: 'About a day', XL: 'Several days'};
-  const NAME = n => n === 'chief_of_staff' ? 'Chief of staff' : n === 'ux' ? 'UX' : n[0].toUpperCase() + n.slice(1).replace(/_/g, ' ');
-  const INITIALS = n => n === 'chief_of_staff' ? 'CS' : n === 'ux' ? 'UX' : n.slice(0, 2).toUpperCase();
+  const NAME = n => n === 'chief_of_staff' ? 'Chief of staff' : n === 'ux' ? 'UX' : n === 'ceo' ? 'CEO plan' : n[0].toUpperCase() + n.slice(1).replace(/_/g, ' ');
+  const INITIALS = n => n === 'chief_of_staff' ? 'CS' : n === 'ux' ? 'UX' : n === 'ceo' ? 'CEO' : n.slice(0, 2).toUpperCase();
   const el = (tag, attrs = {}, ...kids) => {
     const e = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs)) {
@@ -1057,8 +1099,9 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
   const needsOk = a => a.status === 'pending_approval';
   const needsDone = a => a.status === 'acknowledged';
   // Suggestions only reach the inbox when they're urgent or a judgment call.
-  const isTodo = a => needsOk(a) || needsDone(a) || a.status === 'failed'
-    || (a.status === 'proposed' && (a.priority === 'now' || a.priority === 'high'));
+  // CEO plan work has its own table; it reaches the inbox only when overdue.
+  const isTodo = a => (a.source === 'plan' ? a.overdue && needsDone(a) : needsOk(a) || needsDone(a))
+    || a.status === 'failed' || (a.status === 'proposed' && (a.priority === 'now' || a.priority === 'high'));
 
   // Header
   const meta = document.getElementById('meta');
@@ -1101,6 +1144,40 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
     el('span', {class: 'tag ' + (g.known ? GS[g.status] || '' : 'bad'), text: g.known ? g.status : 'not our product'}),
     el('div', {class: 'gs', text: 'Target ' + g.target + ' \u00b7 now ' + g.actual + (g.scope !== 'all' ? ' \u00b7 ' + g.scope : '')})));
   score.append(biz, gl);
+
+  // CEO plan
+  const planBox = document.getElementById('plan');
+  if (!D.plan.length) planBox.append(el('div', {class: 'empty', text: 'No plan.toml yet.'}));
+  else {
+    const byId = Object.fromEntries(D.actions.map(a => [a.id, a]));
+    const ST = {met: ['Target met', 'good'], no: ['Not yet', 'bad'], manual: ['Check by hand', '']};
+    const gainTxt = p => p.gain_high ? '$' + fmt(p.gain_low) + '\u2013' + fmt(p.gain_high) + '/mo' : 'unknown';
+    planBox.append(el('table', {class: 'plan'},
+      el('thead', {}, el('tr', {}, el('th', {text: '#'}), el('th', {text: 'Change'}), el('th', {text: 'Owner'}),
+        el('th', {class: 'hide-sm', text: 'KPI: baseline \u2192 now \u2192 target'}), el('th', {class: 'num hide-sm', text: 'Est. gain'}),
+        el('th', {class: 'hide-sm', text: 'Effort'}), el('th', {class: 'num', text: 'Due'}))),
+      el('tbody', {}, D.plan.map(p => {
+        const a = byId[p.action_id], done = p.status === 'done';
+        const sc = p.score || {}, st = done ? ['Done', 'good'] : sc.met === true ? ST.met : sc.met === false ? ST.no : ST.manual;
+        const team = D.teams[p.team] || p.team;
+        return el('tr', {class: done ? 'done' : ''},
+          el('td', {class: 'rk', text: p.rank}),
+          el('td', {}, a ? el('button', {type: 'button', class: 'ttl', text: p.title, onclick: () => open(a)}) : el('span', {text: p.title}),
+            p.merged ? el('div', {class: 'why', style: 'color:var(--text-3);font-size:12px', text: 'merges ' + plural(p.merged, 'agent suggestion')}) : null),
+          el('td', {}, p.owner ? el('span', {text: p.owner}) : el('span', {class: 'unowned', text: 'Unassigned'}),
+            el('div', {style: 'color:var(--text-3);font-size:12px', text: team})),
+          el('td', {class: 'hide-sm'}, el('div', {class: 'kpi'}, p.kpi),
+            el('div', {class: 'kpi'}, p.baseline + ' \u2192 ', el('b', {text: sc.now || '?'}), ' \u2192 ' + p.target + ' ',
+              el('span', {class: 'tag ' + st[1], text: st[0]}))),
+          el('td', {class: 'num hide-sm', text: gainTxt(p)}),
+          el('td', {class: 'hide-sm', text: p.loe || p.effort}),
+          el('td', {class: 'num' + (p.overdue && !done ? ' overdue' : ''), text: done ? 'done' : p.due ? (p.overdue ? 'overdue' : day(p.due)) : '\u2014'}));
+      }))));
+    const lo = D.plan.reduce((n, p) => n + (p.gain_low || 0), 0), hi = D.plan.reduce((n, p) => n + (p.gain_high || 0), 0);
+    const met = D.plan.filter(p => p.status === 'done' || (p.score && p.score.met)).length;
+    document.getElementById('plan-note').textContent = met + ' of ' + D.plan.length + ' at target \u00b7 est. $'
+      + fmt(lo) + '\u2013' + fmt(hi) + '/mo if all land \u00b7 click a change for its steps and first draft';
+  }
 
   // Headline sentence
   const K = D.kpis;
@@ -1196,12 +1273,15 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
       el('div', {class: 'dtags'}, tags(a)),
       el('h3', {text: a.title}), steps,
       el('div', {class: 'why-box', text: (a.reason || 'No reason recorded.') + (a.notes ? '\n\n' + a.notes : '')}),
+      a.draft && a.draft.text ? [el('h5', {style: 'margin:0 0 4px;font-size:12px;color:var(--text-3)',
+        text: 'FIRST DRAFT \u00b7 ' + NAME(a.draft.by || 'agent').toUpperCase() + ' AGENT' + (a.draft.voice === 'claude' ? '' : ' (OUTLINE)')}),
+        el('div', {class: 'draft', text: a.draft.text})] : null,
       acts.length ? el('div', {class: 'acts'}, acts) : null,
       a.steps && a.steps.length ? [el('h5', {style: 'margin:0 0 4px;font-size:12px;color:var(--text-3)', text: 'WHAT TO DO'}),
         el('ul', {style: 'margin:0 0 16px;padding-left:18px;font-size:13px'}, a.steps.map(t => el('li', {text: t})))] : null,
       el('dl', {}, row('Owner', a.owner || 'Unassigned (set it in teams.toml)'), row('Due', a.due ? day(a.due) + (a.overdue ? ' (overdue)' : '') : ''),
         row('Agent', NAME(a.agent)), row('Team', D.teams[a.team] || ''), row('Est. impact', a.impact == null ? '' : usd(a.impact) + ' over 30 days'),
-        row('Effort', a.effort ? EFFORT_LABEL[a.effort] || a.effort : ''), row('Return', a.roi == null ? '' : a.roi + '× the time it takes'),
+        row('Effort', a.loe || (a.effort ? EFFORT_LABEL[a.effort] || a.effort : '')), row('Return', a.roi == null ? '' : a.roi + '× the time it takes'),
         row('Product', a.product ? a.product + ' (' + a.sku + ')' : a.sku), row('Raised', a.created + ' (' + age(a.age) + (a.age ? ' ago' : '') + ')'), row('Item', '#' + a.id + ' · ' + a.kind.replace(/_/g, ' '))),
       a.url && /^https:\/\//.test(a.url) ? el('a', {href: a.url, target: '_blank', rel: 'noopener', text: 'Open the product page'}) : null,
       help].flat().filter(Boolean));

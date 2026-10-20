@@ -84,6 +84,10 @@ class Orchestrator:
         self.chief.health = health
         plan = self.chief.plan(self.chief.review(proposals))
         submitted = [(self.log.submit(a), a) for a in plan]
+        # The CEO plan goes in last, so it can merge in what the agents just suggested.
+        from . import plan as ceo_plan
+
+        self.merged = ceo_plan.sync(self.ctx.wh, self.ctx.settings.anthropic_model)
         self._record_run(len(submitted))
         return submitted
 

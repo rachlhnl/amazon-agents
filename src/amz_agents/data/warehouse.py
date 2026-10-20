@@ -288,6 +288,12 @@ class Warehouse:
         self.conn.commit()
         return cur.lastrowid
 
+    def execute_count(self, sql: str, params: tuple | dict = ()) -> int:
+        """Like execute, but returns how many rows changed."""
+        cur = self.conn.execute(sql, params)
+        self.conn.commit()
+        return cur.rowcount
+
     def insert_many(self, table: str, rows: list[dict[str, Any]]) -> None:
         if not rows:
             return
