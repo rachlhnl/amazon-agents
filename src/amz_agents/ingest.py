@@ -401,6 +401,7 @@ def ingest_market(wh: Warehouse, root: Path | None = None) -> int:
 
     if shop := shopper.latest(root):
         a["recs"] += shopper.findings(shop)
+    a["recs"] += shopper.live_findings(root)
     wh.execute("DELETE FROM market_recs")
     wh.insert_many("market_recs", [
         {"date": a["date"], "rank": r["when"], "area": r["area"], "effort": r["effort"],

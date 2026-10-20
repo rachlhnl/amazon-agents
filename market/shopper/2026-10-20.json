@@ -1,6 +1,6 @@
 {
  "date": "2026-10-20",
- "collected_at": "2026-10-20T17:15:50+00:00",
+ "collected_at": "2026-10-20T17:30:34+00:00",
  "persona": "a working nurse buying two scrub sets for 12-hour shifts, shopping on their phone between shifts; cares most about fit, comfort, pockets and price, and hates guessing sizes or paying return shipping",
  "self": "Dagacci",
  "visits": [
@@ -26,11 +26,11 @@
      "5XL(Men) / 6XL (Women)"
     ],
     "images": 237,
-    "rating": 4.23,
-    "reviews": 139
+    "rating": 4.24,
+    "reviews": 140
    },
    "page_kb": 4894,
-   "load_s": 1.2,
+   "load_s": 1.1,
    "found": {
     "size_guide": "SIZE GUIDE",
     "fit_tool": null,
@@ -43,23 +43,23 @@
     "free_returns": null,
     "return_window": "14 days of your purchase date for a full refund",
     "free_shipping": "Free Shipping",
-    "pay_later": null,
+    "pay_later": "shopify-payment-terms",
     "help": null
    },
    "return_days": 14,
    "free_ship_over": 50,
    "outfit": 27.99,
    "scores": {
-    "Ease of shopping": 3.5,
+    "Ease of shopping": 4.5,
     "Product information": 5.5,
     "Trust & policies": 7.2,
     "Price & value": 10.0
    },
-   "overall": 6.5,
+   "overall": 6.8,
    "review": {
     "summary": "Shopped DAGACCI MEDICAL UNIFORM\u00ae Best Seller Unisex Scrub Sets ($24.99). Strongest on price & value, weakest on ease of shopping.",
     "likes": [
-     "139 reviews at 4.2\u2605 on this product",
+     "140 reviews at 4.2\u2605 on this product",
      "Size guide right on the product page",
      "Customer reviews on the page",
      "Pocket count is clear",
@@ -83,73 +83,38 @@
    "brand": "Dagacci",
    "site": "amazon",
    "where": "Amazon",
-   "product": {
-    "title": "Dagacci Scrubs Medical Uniform Women and Man Scrubs Set Medical Scrubs Top and Pants",
-    "price": 24.99,
-    "rating": 4.0,
-    "reviews": 69281,
-    "url": "https://www.amazon.com/dp/B00FT739RA"
-   },
-   "median_price": 26.49,
-   "rating": 4.047839601403316,
-   "reviews": 87507,
-   "badge": true,
-   "error": null,
-   "scores": {
-    "Ease of shopping": 8.0,
-    "Trust & policies": 7.3,
-    "Price & value": 4.3
-   },
-   "overall": 6.5,
+   "product": null,
+   "median_price": null,
+   "rating": null,
+   "reviews": null,
+   "badge": false,
+   "error": "no Amazon listing could be read",
+   "scores": {},
+   "overall": null,
    "review": {
-    "summary": "Dagacci Scrubs Medical Uniform Women and Man Scrubs Set Medical Scrubs at $24.99.",
-    "likes": [
-     "Prime shipping and Amazon's returns",
-     "Best Seller badge"
-    ],
-    "dislikes": [
-     "Rating is only 4.0\u2605",
-     "Hard to tell fit and fabric apart from other brands' listings"
-    ],
-    "change": [
-     "Put the size chart and fabric blend in the main images"
-    ]
+    "summary": "Couldn't shop here: no Amazon listing could be read.",
+    "likes": [],
+    "dislikes": [],
+    "change": []
    }
   },
   {
    "brand": "Cozyfit",
    "site": "amazon",
    "where": "Amazon",
-   "product": {
-    "title": "COZYFIT Scrubs for Women Set - Stretch V-Neck & Jogger Pant with 9 Pockets",
-    "price": 19.99,
-    "rating": 4.2,
-    "reviews": 14277,
-    "url": "https://www.amazon.com/dp/B0CL56RRPN"
-   },
-   "median_price": 19.99,
-   "rating": 4.245464717002971,
-   "reviews": 25919,
-   "badge": true,
-   "error": null,
-   "scores": {
-    "Ease of shopping": 8.0,
-    "Trust & policies": 8.5,
-    "Price & value": 6.4
-   },
-   "overall": 7.6,
+   "product": null,
+   "median_price": null,
+   "rating": null,
+   "reviews": null,
+   "badge": false,
+   "error": "no Amazon listing could be read",
+   "scores": {},
+   "overall": null,
    "review": {
-    "summary": "COZYFIT Scrubs for Women Set - Stretch V-Neck & Jogger Pant with 9 Poc at $19.99.",
-    "likes": [
-     "Prime shipping and Amazon's returns",
-     "Best Seller badge"
-    ],
-    "dislikes": [
-     "Hard to tell fit and fabric apart from other brands' listings"
-    ],
-    "change": [
-     "Put the size chart and fabric blend in the main images"
-    ]
+    "summary": "Couldn't shop here: no Amazon listing could be read.",
+    "likes": [],
+    "dislikes": [],
+    "change": []
    }
   },
   {
@@ -178,7 +143,7 @@
     "reviews": null
    },
    "page_kb": 959,
-   "load_s": 1.4,
+   "load_s": 1.7,
    "found": {
     "size_guide": "Size Guide",
     "fit_tool": "Find My Size",
@@ -187,7 +152,7 @@
     "model": "Model is",
     "pockets": "6-Pocket",
     "lengths": null,
-    "reviews": "Yotpo",
+    "reviews": "okendo",
     "free_returns": "Free Returns",
     "return_window": "returns and exchanges must be made within 30 days",
     "free_shipping": "Free Shipping",
@@ -246,7 +211,7 @@
     "reviews": null
    },
    "page_kb": 534,
-   "load_s": 0.4,
+   "load_s": 0.6,
    "found": {
     "size_guide": "Size Guide",
     "fit_tool": null,
@@ -259,19 +224,19 @@
     "free_returns": null,
     "return_window": "Returns will be accepted within 30 days",
     "free_shipping": "Free shipping",
-    "pay_later": null,
+    "pay_later": "shopify-payment-terms",
     "help": null
    },
    "return_days": 30,
    "free_ship_over": 79,
-   "outfit": 47.98,
+   "outfit": 41.67999999999999,
    "scores": {
-    "Ease of shopping": 4.0,
+    "Ease of shopping": 5.0,
     "Product information": 5.5,
     "Trust & policies": 6.2,
-    "Price & value": 8.5
+    "Price & value": 9.1
    },
-   "overall": 6.0,
+   "overall": 6.5,
    "review": {
     "summary": "Shopped Freesia Top | Betsey Johnson ($19.99). Strongest on price & value, weakest on ease of shopping.",
     "likes": [
@@ -322,7 +287,7 @@
     "reviews": null
    },
    "page_kb": 638,
-   "load_s": 0.9,
+   "load_s": 0.6,
    "found": {
     "size_guide": null,
     "fit_tool": "kiwiSizing",
@@ -331,7 +296,7 @@
     "model": null,
     "pockets": "3 Pocket",
     "lengths": "Petite",
-    "reviews": "Yotpo",
+    "reviews": "judgeme",
     "free_returns": "free returns",
     "return_window": "returns & exchanges within 30-days",
     "free_shipping": "FREE SHIPPING",
@@ -383,7 +348,7 @@
     "reviews": null
    },
    "page_kb": 296,
-   "load_s": 0.7,
+   "load_s": 0.6,
    "found": {
     "size_guide": "Size Guide",
     "fit_tool": null,
@@ -448,7 +413,7 @@
     "reviews": null
    },
    "page_kb": 284,
-   "load_s": 0.8,
+   "load_s": 0.7,
    "found": {
     "size_guide": "Size Guide",
     "fit_tool": null,
@@ -502,8 +467,8 @@
    "site": "store",
    "where": "www.mandalascrubs.com",
    "product": {
-    "title": "Multi Wear Collar Top Eggplant",
-    "url": "https://www.mandalascrubs.com/products/multi-wear-collar-top-eggplant",
+    "title": "Mandarin Dolman Top Coastline Blue",
+    "url": "https://www.mandalascrubs.com/products/mandarin-dolman-top-coastline-blue",
     "price": 19.99,
     "line": "Tops",
     "colors": 1,
@@ -519,12 +484,12 @@
      "4XL",
      "5XL"
     ],
-    "images": 8,
+    "images": 10,
     "rating": null,
     "reviews": null
    },
-   "page_kb": 773,
-   "load_s": 0.7,
+   "page_kb": 811,
+   "load_s": 0.8,
    "found": {
     "size_guide": "Size chart",
     "fit_tool": null,
@@ -551,7 +516,7 @@
    },
    "overall": 7.6,
    "review": {
-    "summary": "Shopped Multi Wear Collar Top Eggplant ($19.99). Strongest on trust & policies, weakest on ease of shopping.",
+    "summary": "Shopped Mandarin Dolman Top Coastline Blue ($19.99). Strongest on trust & policies, weakest on ease of shopping.",
     "likes": [
      "Size guide right on the product page",
      "Fabric blend is spelled out: 75% Polyester",
@@ -589,7 +554,7 @@
     "reviews": null
    },
    "page_kb": 286,
-   "load_s": 0.7,
+   "load_s": 0.5,
    "found": {
     "size_guide": "Size Guide",
     "fit_tool": null,
@@ -643,7 +608,7 @@
   "choice": "Jaanuu",
   "site": "store",
   "score": 8.7,
-  "why": "Jaanuu on its own site (8.7/10): size guide right on the product page; fabric blend is spelled out: 76% Polyester; customer reviews on the page. Dagacci's best is 6.5/10 (its site): the product page is heavy (4.8 MB): slow on a phone; doesn't say what the fabric is made of. Dagacci is the cheaper buy ($27.99 vs $64.50 a set), so a shopper on a tight budget would still pick it.",
+  "why": "Jaanuu on its own site (8.7/10): size guide right on the product page; fabric blend is spelled out: 76% Polyester; customer reviews on the page. Dagacci's best is 6.8/10 (its site): the product page is heavy (4.8 MB): slow on a phone; doesn't say what the fabric is made of. Dagacci is the cheaper buy ($27.99 vs $64.50 a set), so a shopper on a tight budget would still pick it.",
   "ranking": [
    {
     "brand": "Jaanuu",
@@ -654,11 +619,6 @@
     "brand": "Grey's Anatomy",
     "site": "store",
     "overall": 8.1
-   },
-   {
-    "brand": "Cozyfit",
-    "site": "amazon",
-    "overall": 7.6
    },
    {
     "brand": "Mandala",
@@ -676,24 +636,19 @@
     "overall": 7.2
    },
    {
+    "brand": "Dagacci",
+    "site": "store",
+    "overall": 6.8
+   },
+   {
     "brand": "Medelita",
     "site": "store",
     "overall": 6.6
    },
    {
-    "brand": "Dagacci",
-    "site": "store",
-    "overall": 6.5
-   },
-   {
-    "brand": "Dagacci",
-    "site": "amazon",
-    "overall": 6.5
-   },
-   {
     "brand": "koi",
     "site": "store",
-    "overall": 6.0
+    "overall": 6.5
    }
   ]
  },

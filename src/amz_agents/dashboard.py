@@ -430,12 +430,14 @@ def shopper_view() -> dict[str, Any] | None:
     from .market import shopper
 
     try:
-        shop = shopper.latest()
+        shop, walk = shopper.latest(), shopper.live()
     except (OSError, ValueError):
         return None
-    if not shop:
+    if not shop and not walk:
         return None
-    return {**shop, "checks": [{"key": c.key, "label": c.yes, "category": c.category,
+    if not shop:
+        return {"live": walk, "visits": []}
+    return {**shop, "live": walk, "checks": [{"key": c.key, "label": c.yes, "category": c.category,
                                 "weight": c.weight} for c in shopper.CHECKS],
             "categories": shopper.CATEGORIES}
 
@@ -955,6 +957,8 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
     <div id="market-box"></div>
   </div>
   <div id="tab-shop" role="tabpanel" aria-labelledby="t-shop" hidden>
+    <div id="live"></div>
+    <div class="sec-head" id="auto-head" hidden><h2>Weekly automated shop</h2><p>The same checks every week, so changes show up.</p></div>
     <p class="lead" id="shop-lead"></p>
     <div id="shop-verdict"></div>
     <div class="sec-head"><h2>Scoreboard</h2><p>0&ndash;10 per area, from what the shopper found. Shaded: us.</p></div>
@@ -1487,6 +1491,25 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
 
   // Mystery shopper
   const SH = D.shopper;
+  const siteCard = (title, score, link, linkText, summary, r, me) => el('div', {class: 'site' + (me ? ' me' : '')},
+    el('div', {class: 'hd'}, el('span', {class: 'nm', text: title}), el('span', {class: 'sc', text: score || ''})),
+    link && /^https:\/\//.test(link) ? el('a', {class: 'pr', href: link, target: '_blank', rel: 'noopener', text: (linkText || '').slice(0, 80)})
+      : el('div', {class: 'pr', text: linkText || ''}),
+    summary ? el('p', {text: summary}) : null,
+    r.likes && r.likes.length ? [el('h5', {text: 'Likes'}), el('ul', {class: 'like'}, r.likes.map(t => el('li', {text: t})))] : null,
+    r.dislikes && r.dislikes.length ? [el('h5', {text: 'Dislikes'}), el('ul', {class: 'dislike'}, r.dislikes.map(t => el('li', {text: t})))] : null,
+    r.change && r.change.length ? [el('h5', {text: 'Would change'}), el('ul', {class: 'chg'}, r.change.map(t => el('li', {text: t})))] : null);
+  if (SH && SH.live) {
+    const L = SH.live, box = document.getElementById('live');
+    box.append(el('div', {class: 'verdict', style: 'margin-top:20px'},
+      el('div', {class: 'k', text: 'Today\u2019s verdict \u00b7 live walkthrough, ' + L.date}),
+      el('div', {class: 'v', text: 'I\u2019d buy ' + L.verdict.choice + ' on ' + L.verdict.where}),
+      el('p', {text: L.verdict.why})),
+      el('p', {class: 'note', text: L.method}),
+      el('div', {class: 'sec-head'}, el('h2', {text: 'What I saw, site by site'}), el('p', {text: 'Shopping by hand in a real browser, Walmart included.'})),
+      el('section', {class: 'sites'}, L.sites.map(x => siteCard(x.brand + ' \u00b7 ' + x.where, x.price, x.url, x.url ? x.url.replace(/^https:\/\/(www\.)?/, '').slice(0, 60) : '', '', x, x.brand === (SH.self || 'Dagacci')))));
+    document.getElementById('auto-head').hidden = false;
+  }
   if (!SH) document.getElementById('shop-lead').textContent = 'No mystery shop yet. Run amz-agents shop (the daily market workflow does it weekly).';
   else {
     const where = v => v.site === 'amazon' ? 'Amazon' : 'own site';

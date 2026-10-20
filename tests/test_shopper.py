@@ -60,3 +60,16 @@ def test_scores_reviews_and_verdict(monkeypatch):
     titles = [g["title"] for g in gaps]
     assert titles[0].startswith("dagacci.com product pages are heavy")
     assert any("size guide" in t for t in titles) and all(g["area"] == "Website" for g in gaps)
+
+
+def test_live_walkthrough_findings_expire(tmp_path):
+    import json
+    from datetime import date
+
+    (tmp_path / "shopper").mkdir()
+    f = {"when": 1, "area": "Website", "title": "dagacci.com: offer free size exchanges"}
+    (tmp_path / "shopper" / "live-2026-10-20.json").write_text(json.dumps(
+        {"date": "2026-10-20", "verdict": {}, "sites": [], "findings": [f]}))
+    assert shopper.live(tmp_path)["date"] == "2026-10-20"
+    assert shopper.live_findings(tmp_path, date(2026, 11, 1)) == [f]
+    assert shopper.live_findings(tmp_path, date(2027, 1, 30)) == []

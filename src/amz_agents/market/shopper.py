@@ -95,7 +95,8 @@ CHECKS = [
           r"free (standard )?shipping"),
     Check("pay_later", "Ease of shopping", 1, "Can split the payment",
           "No pay-later option", "Add Shop Pay Installments, Afterpay or Klarna",
-          r"afterpay|klarna|shop ?pay installments|sezzle|affirm", markup=True),
+          r"afterpay|klarna|shop ?pay installments|sezzle|affirm|pay over time|shopify-payment-terms|"
+          r"pay in \d+ (interest-free )?installments", markup=True),
     Check("help", "Ease of shopping", 1, "Live chat if I have a question",
           "No live chat", "Add live chat or a help widget",
           r"gorgias|zendesk|tidio|intercom|livechat|re:?amaze|richpanel|gladly|kustomer",
@@ -420,6 +421,23 @@ def save(result: dict[str, Any], root: Path = ROOT) -> Path:
 def latest(root: Path = ROOT) -> dict[str, Any] | None:
     p = root / "shopper" / "latest.json"
     return json.loads(p.read_text()) if p.exists() else None
+
+
+LIVE_DAYS = 60  # how long a hand-run live walkthrough's findings stay in the queue
+
+
+def live(root: Path = ROOT) -> dict[str, Any] | None:
+    """The latest live walkthrough (market/shopper/live-YYYY-MM-DD.json): a person, or
+    Claude in a real browser, shopping the sites by hand, Walmart included."""
+    files = sorted((root / "shopper").glob("live-*.json"))
+    return json.loads(files[-1].read_text()) if files else None
+
+
+def live_findings(root: Path = ROOT, today: date | None = None) -> list[dict[str, Any]]:
+    w = live(root)
+    if not w or ((today or date.today()) - date.fromisoformat(w["date"])).days > LIVE_DAYS:
+        return []
+    return w.get("findings", [])
 
 
 def due(root: Path = ROOT, every: int = EVERY_DAYS) -> bool:
