@@ -137,7 +137,9 @@ class ChiefOfStaff:
 
     def _priority(self, a: Action) -> tuple[float | None, str]:
         if a.impact_usd is None:
-            return None, "judgment"
+            # No dollar estimate, but the market tracker says it can't wait.
+            urgent = isinstance(a.after, dict) and a.after.get("when") == 1
+            return None, "now" if urgent else "judgment"
         hours = EFFORT_HOURS.get(a.effort)
         roi = round(a.impact_usd / (hours * HOURLY_COST), 1) if hours else None
         if a.impact_usd <= 0:

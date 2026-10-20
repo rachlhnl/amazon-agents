@@ -16,7 +16,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
+import tomllib
 from collections import Counter
 from datetime import date, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -57,6 +59,10 @@ HANDOFFS = [
     {"from": "inventory", "to": ["pricing", "marketing", "data"],
      "what": "Items with too much stock",
      "why": "Pricing can mark them down and marketing can email them to move the stock."},
+    {"from": "market", "to": ["product", "data"],
+     "what": "Findings from dagacci.com, its Judge.me reviews and competitors",
+     "why": "Product works fit, stock and launches itself; the data agent routes the rest "
+            "(marketing, pricing, search, ads) to the agent that owns it."},
     {"from": "reviews", "to": ["listing", "data"],
      "what": "Recurring complaints by product",
      "why": "Listing copy stays honest about known issues; the data agent sizes defects."},
@@ -162,6 +168,16 @@ def decision_rules(g: Guardrails) -> dict[str, Any]:
              "Add it as an exact keyword"),
             ("item is low on stock", "Never raise its bids"),
         ],
+        "product": [
+            ("the market tracker finds a well-reviewed style sold out on dagacci.com",
+             "Restock it, best sellers first"),
+            ("1\u20132\u2605 reviews of a style are mostly about fit or sizing",
+             "Fix the fit or the size chart"),
+            ("a style rates poorly, or a review topic is getting worse",
+             "Fix what buyers dislike"),
+            ("we launch fewer new styles or colors than other brands", "Plan a launch"),
+            ("the market tracker says act this week", "Ranked Urgent"),
+        ],
         "listing": [
             (f"a search term with {listing.MIN_ORDERS}+ orders is missing from the title",
              "Draft a new title and bullets"),
@@ -216,6 +232,8 @@ def decision_rules(g: Guardrails) -> dict[str, Any]:
             (f"over {_pct(da.CONCENTRATION_HIGH)} of units sell on Amazon",
              "Grow other channels"),
             (f"data more than {da.STALE_DAYS} days old", "Warn that decisions are on stale data"),
+            ("the market tracker finds something in marketing, pricing, search or ads",
+             "Route it to that agent"),
         ],
         "chief_of_staff": [
             (f"sales yesterday under {_pct(cos.ANOMALY_DROP)} of the 14-day average",
@@ -269,6 +287,35 @@ def _roster() -> list[dict[str, Any]]:
     return out
 
 
+DEFAULT_DUE_DAYS = {"now": 1, "high": 3, "medium": 7, "low": 14, "judgment": 7, "": 7}
+
+
+def load_teams(path: str | Path | None = None) -> dict[str, Any]:
+    """teams.toml: an owner per team and how long work may wait, by priority."""
+    path = Path(path or os.getenv("TEAMS_PATH", "teams.toml"))
+    cfg: dict[str, Any] = {}
+    if path.exists():
+        with path.open("rb") as f:
+            cfg = tomllib.load(f)
+    owners = {k: (v.get("owner") or "").strip() for k, v in cfg.get("team", {}).items()}
+    return {"owners": owners, "due_days": {**DEFAULT_DUE_DAYS, **cfg.get("due_days", {})}}
+
+
+def _short_name(title: str | None) -> str:
+    """'Insulated Water Bottle 64oz Black - The BEST Leakproof Jug' -> the part before
+    the marketing tail, capped so it fits on a card."""
+    name = re.split(r"\s+[-|\u2013\u2014,]\s+", title or "")[0].strip()
+    return name if len(name) <= 48 else name[:46].rstrip() + "\u2026"
+
+
+def _named(title: str, names: dict[str, str]) -> str:
+    """Swap SKUs in a title for product names."""
+    for sku, name in names.items():
+        if sku in title:
+            title = re.sub(rf"(?<![\w-]){re.escape(sku)}(?![\w-])", name, title)
+    return title
+
+
 def _agents() -> list[tuple[str, Any]]:
     from .orchestrator import DEFAULT_AGENTS
 
@@ -316,9 +363,14 @@ def goals_view(wh: Warehouse, settings: Settings | None = None) -> list[dict[str
     return out
 
 
-def setup_gaps(wh: Warehouse, goals: list[dict[str, Any]]) -> list[str]:
+def setup_gaps(wh: Warehouse, goals: list[dict[str, Any]],
+               owners: dict[str, str] | None = None) -> list[str]:
     """Config still on the shipped examples, or data the agents can't decide without."""
     gaps = []
+    unowned = [label for t, label in TEAMS.items() if not (owners or {}).get(t)]
+    if unowned:
+        gaps.append(f"No owner in teams.toml for {', '.join(unowned)}, so nobody is "
+                    "accountable for that work.")
     if not wh.query("SELECT 1 FROM products LIMIT 1"):
         gaps.append("No product or sales data yet: connect Seller Central (SP-API) and "
                     "run amz-agents ingest, then amz-agents run.")
@@ -384,6 +436,9 @@ def collect(wh: Warehouse, today: date | None = None,
         (today.isoformat(), f"-{WINDOW_DAYS} days"),
     )
     verdicts = {o["action_id"]: o for o in wh.query("SELECT * FROM outcomes")}
+    names = {p["sku"]: _short_name(p["title"]) for p in wh.query("SELECT sku, title FROM products")
+             if p["title"]}
+    teams_cfg = load_teams()
     actions = []
     for r in rows:
         before, after = json.loads(r["before"] or "null"), json.loads(r["after"] or "null")
@@ -396,14 +451,26 @@ def collect(wh: Warehouse, today: date | None = None,
             title = f"{r['kind']} {r['target']}"
         created = (r["created"] or today.isoformat())[:10]
         o = verdicts.get(r["id"])
+        title = _named(title, names)
+        stage = STAGE.get(r["status"], "waiting")
+        due = None
+        if stage in ("waiting", "in_progress"):
+            days = teams_cfg["due_days"].get(r["priority"] or "", 7)
+            due = (date.fromisoformat(created) + timedelta(days=days)).isoformat()
         actions.append({
             "id": r["id"], "agent": r["agent"], "team": r["team"] or "", "kind": r["kind"],
             "title": title, "reason": r["reason"] or "", "notes": r["notes"] or "",
-            "status": r["status"], "stage": STAGE.get(r["status"], "waiting"),
+            "status": r["status"], "stage": stage,
             "priority": r["priority"] or "", "impact": r["impact_usd"], "effort": r["effort"] or "",
             "roi": r["roi"], "sku": r["sku"] or "", "created": created,
             "age": (today - date.fromisoformat(created)).days,
             "verdict": o["verdict"] if o else None,
+            "product": names.get(r["sku"] or "", ""),
+            "owner": teams_cfg["owners"].get(r["team"] or "", ""),
+            "due": due, "overdue": bool(due and due < today.isoformat()),
+            "source": after.get("source", "") if isinstance(after, dict) else "",
+            "steps": after.get("steps", []) if isinstance(after, dict) else [],
+            "url": after.get("url") if isinstance(after, dict) else None,
         })
 
     agents = []
@@ -452,7 +519,7 @@ def collect(wh: Warehouse, today: date | None = None,
         "sample": getattr(wh, "path", "").endswith("demo.db"),
         "scorecard": scorecard(wh),
         "goals": goals,
-        "setup_gaps": setup_gaps(wh, goals),
+        "setup_gaps": setup_gaps(wh, goals, teams_cfg["owners"]),
         "market": market_summary() if include_market else None,
     }
 
@@ -643,6 +710,8 @@ input[type=search] { min-width: 180px; flex: 1; }
 .tag.bad { background: var(--crit-soft); border-color: var(--crit); color: var(--crit-text); }
 .tag.good { background: var(--good-soft); border-color: var(--good); color: var(--good-text); }
 .stale { color: var(--warn-text); font-weight: 600; }
+.overdue { color: var(--crit-text); font-weight: 600; }
+.unowned { color: var(--warn-text); }
 .col-more { font-size: 12.5px; color: var(--accent); background: none; border: 0; cursor: pointer; padding: 4px; }
 /* List */
 .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow-x: auto; }
@@ -821,8 +890,8 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
   <section id="board" class="board" aria-label="Board"></section>
   <section id="list" class="table-wrap" hidden>
     <table>
-      <thead><tr><th>Work</th><th>Agent</th><th>Stage</th><th class="hide-sm">Priority</th>
-        <th class="num">Est. impact</th><th class="num">Age</th></tr></thead>
+      <thead><tr><th>Work</th><th>Owner</th><th>Stage</th><th class="hide-sm">Priority</th>
+        <th class="num">Est. impact</th><th class="num">Due</th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
   </section>
@@ -897,6 +966,11 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
   const fmt = n => n.toLocaleString();
   const age = d => d === 0 ? 'today' : d === 1 ? '1 day' : d + ' days';
   const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+  const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const day = iso => MON[+iso.slice(5, 7) - 1] + ' ' + +iso.slice(8, 10);
+  const ownerEl = a => a.owner ? el('span', {text: a.owner}) : el('span', {class: 'unowned', text: 'Unassigned'});
+  const dueEl = a => !a.due ? null : a.overdue
+    ? el('span', {class: 'overdue', text: 'overdue since ' + day(a.due)}) : el('span', {text: 'due ' + day(a.due)});
 
   // Theme toggle
   const root = document.documentElement;
@@ -1058,10 +1132,14 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
       el('h3', {text: a.title}), steps,
       el('div', {class: 'why-box', text: (a.reason || 'No reason recorded.') + (a.notes ? '\n\n' + a.notes : '')}),
       acts.length ? el('div', {class: 'acts'}, acts) : null,
-      el('dl', {}, row('Agent', NAME(a.agent)), row('Team', D.teams[a.team] || ''), row('Est. impact', a.impact == null ? '' : usd(a.impact) + ' over 30 days'),
+      a.steps && a.steps.length ? [el('h5', {style: 'margin:0 0 4px;font-size:12px;color:var(--text-3)', text: 'WHAT TO DO'}),
+        el('ul', {style: 'margin:0 0 16px;padding-left:18px;font-size:13px'}, a.steps.map(t => el('li', {text: t})))] : null,
+      el('dl', {}, row('Owner', a.owner || 'Unassigned (set it in teams.toml)'), row('Due', a.due ? day(a.due) + (a.overdue ? ' (overdue)' : '') : ''),
+        row('Agent', NAME(a.agent)), row('Team', D.teams[a.team] || ''), row('Est. impact', a.impact == null ? '' : usd(a.impact) + ' over 30 days'),
         row('Effort', a.effort ? EFFORT_LABEL[a.effort] || a.effort : ''), row('Return', a.roi == null ? '' : a.roi + '× the time it takes'),
-        row('Product', a.sku), row('Raised', a.created + ' (' + age(a.age) + (a.age ? ' ago' : '') + ')'), row('Item', '#' + a.id + ' · ' + a.kind.replace(/_/g, ' '))),
-      help].filter(Boolean));
+        row('Product', a.product ? a.product + ' (' + a.sku + ')' : a.sku), row('Raised', a.created + ' (' + age(a.age) + (a.age ? ' ago' : '') + ')'), row('Item', '#' + a.id + ' · ' + a.kind.replace(/_/g, ' '))),
+      a.url && /^https:\/\//.test(a.url) ? el('a', {href: a.url, target: '_blank', rel: 'noopener', text: 'Open the product page'}) : null,
+      help].flat().filter(Boolean));
     shell.classList.add('open'); drawer.setAttribute('aria-hidden', 'false');
     drawer.querySelector('.x').focus();
   }
@@ -1090,18 +1168,20 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
   const inbox = document.getElementById('inbox');
   function renderInbox() {
     inbox.replaceChildren();
-    if (!todos.length && !sick.length && !(D.market && D.market.recs && D.market.recs.some(r => r.when <= 2))) { inbox.append(el('div', {class: 'caught-up', text: D.run ? 'You’re all caught up. Nothing needs you right now.' : 'Nothing yet.'})); return; }
+    if (!todos.length && !sick.length && (D.actions.some(a => a.source === 'market') || !(D.market && D.market.recs && D.market.recs.some(r => r.when <= 2)))) { inbox.append(el('div', {class: 'caught-up', text: D.run ? 'You’re all caught up. Nothing needs you right now.' : 'Nothing yet.'})); return; }
     for (const a of todos.slice(0, INBOX_MAX)) {
       const what = needsOk(a) ? 'Approve or reject' : needsDone(a) ? 'Do it, then mark done' : a.status === 'failed' ? 'Failed: take a look' : 'Worth acting on';
       inbox.append(el('div', {class: 'todo p-' + (a.priority || 'none')},
         el('span', {class: 'avatar', title: NAME(a.agent), text: INITIALS(a.agent)}),
         el('button', {type: 'button', class: 't', text: a.title, onclick: () => open(a)}),
         el('div', {class: 'acts'}, buttons(a).length ? buttons(a) : el('button', {type: 'button', class: 'btn', text: 'Details', onclick: () => open(a)})),
-        el('div', {class: 's'}, what + ' · ' + NAME(a.agent) + (a.impact > 0 ? ' · ' + usd(a.impact) : '') + ' · ',
-          el('span', {class: a.age >= D.stale_days ? 'stale' : '', text: a.age ? 'waiting ' + age(a.age) : 'new today'}))));
+        el('div', {class: 's'}, what + ' · ', ownerEl(a), ' (' + (D.teams[a.team] || NAME(a.agent)) + ')' + (a.impact > 0 ? ' · ' + usd(a.impact) : '') + ' · ',
+          dueEl(a) || el('span', {class: a.age >= D.stale_days ? 'stale' : '', text: a.age ? 'waiting ' + age(a.age) : 'new today'}))));
     }
     if (todos.length > INBOX_MAX) inbox.append(el('div', {class: 'more', text: '+ ' + (todos.length - INBOX_MAX) + ' more in To review below'}));
-    const mrecs = (D.market && D.market.recs || []).filter(r => r.when <= 2).slice(0, 4);
+    // Once the agents have queued the market tracker's findings, they're in the list above.
+    const queued = D.actions.some(a => a.source === 'market');
+    const mrecs = queued ? [] : (D.market && D.market.recs || []).filter(r => r.when <= 2).slice(0, 4);
     if (mrecs.length) {
       inbox.append(el('div', {class: 'group-label', text: 'From the market tracker (dagacci.com, reviews, competitors)'}));
       for (const r of mrecs) inbox.append(el('div', {class: 'todo mkt'},
@@ -1176,7 +1256,8 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
     return el('button', {type: 'button', class: 'item', onclick: () => open(a)},
       el('div', {class: 'tags'}, tags(a)),
       el('div', {class: 't', text: a.title}),
-      el('div', {class: 'who'}, el('span', {text: NAME(a.agent) + ' · ' + (a.col === 'review' ? (a.age ? 'waiting ' + age(a.age) : 'new') : age(a.age) + (a.age ? ' ago' : ''))}),
+      el('div', {class: 'who'}, el('span', {}, ownerEl(a), ' · ',
+          (a.col === 'review' || a.col === 'doing') && a.due ? dueEl(a) : el('span', {text: age(a.age) + (a.age ? ' ago' : '')})),
         a.impact > 0 ? el('span', {class: 'imp', text: usd(a.impact)}) : null));
   }
   function sync() {
@@ -1208,11 +1289,11 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
       const [label] = STATUS[a.status] || [a.status];
       tbody.append(el('tr', {onclick: () => open(a)},
         el('td', {}, el('div', {style: 'font-weight:550', text: a.title})),
-        el('td', {text: NAME(a.agent)}),
+        el('td', {}, ownerEl(a), el('div', {class: 'why', style: 'color:var(--text-3);font-size:12px', text: NAME(a.agent) + ' agent'})),
         el('td', {}, el('span', {class: 'chip'}, el('i', {class: 'dot', style: 'background:' + COL_COLOR[a.col]}), label)),
         el('td', {class: 'hide-sm', text: PRI_LABEL[a.priority] || '—'}),
         el('td', {class: 'num', text: usd(a.impact)}),
-        el('td', {class: 'num' + (a.col === 'review' && a.age >= D.stale_days ? ' stale' : ''), text: age(a.age)})));
+        el('td', {class: 'num' + (a.overdue ? ' overdue' : a.col === 'review' && a.age >= D.stale_days ? ' stale' : ''), text: a.due && (a.col === 'review' || a.col === 'doing') ? (a.overdue ? 'overdue' : 'due ' + day(a.due)) : age(a.age)})));
     }
     const filtered = state.team || state.agent || state.col || state.q;
     document.getElementById('work-note').textContent = (filtered ? rows.length + ' of ' : '') + plural(D.actions.length, 'item') + ' · click any card for details';
@@ -1230,14 +1311,17 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
     fix_listing_title: 'Fix a listing title', fix_funnel_step: 'Fix a store checkout step',
     improve_page_speed: 'Speed up a page', fix_accessibility: 'Fix an accessibility issue',
     fix_landing_page: 'Fix an ad landing page', improve_listing_conversion: 'Improve an Amazon page that converts poorly',
+    fix_fit: 'Fix fit or the size chart', restock_style: 'Restock a style on dagacci.com',
+    improve_product: 'Fix what buyers dislike', plan_launch: 'Plan a launch (new styles or colors)',
     opportunity: 'Raise an opportunity for another agent', escalation: 'Escalate a decision to you'};
   const TABLE = {products: 'products & costs', metrics_daily: 'daily sales', reviews: 'reviews', keywords: 'ad keywords',
     search_terms: 'search terms', external_campaigns: 'Meta / Google / TikTok campaigns', channel_listings: 'other-channel listings',
     leads: 'wholesale leads', creatives: 'ad creative results', listing_assets: 'Amazon images & A+',
     web_funnel: 'store funnel (GA4)', web_pages: 'page speed', asin_traffic: 'Amazon page traffic'};
   const R = Object.fromEntries(D.roster.map(r => [r.name, r]));
-  const chip = n => el('span', {class: 'ag'}, el('span', {class: 'avatar', text: n === 'everyone' ? '··' : INITIALS(n)}),
-    n === 'everyone' ? 'Every agent' : NAME(n), R[n] ? el('span', {class: 'n', text: R[n].step}) : null);
+  const PSEUDO = {everyone: ['··', 'Every agent'], market: ['MT', 'Market tracker']};
+  const chip = n => el('span', {class: 'ag'}, el('span', {class: 'avatar', text: PSEUDO[n] ? PSEUDO[n][0] : INITIALS(n)}),
+    PSEUDO[n] ? PSEUDO[n][1] : NAME(n), R[n] ? el('span', {class: 'n', text: R[n].step}) : null);
 
   // Run order, grouped the way work moves.
   const agents = D.roster.filter(r => r.name !== 'chief_of_staff');
@@ -1308,7 +1392,7 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
 
   // Agent cards
   const roster = document.getElementById('roster');
-  const listen = n => [...new Set(D.handoffs.filter(h => h.to.includes(n)).map(h => h.from === 'everyone' ? 'every agent' : NAME(h.from)))];
+  const listen = n => [...new Set(D.handoffs.filter(h => h.to.includes(n)).map(h => PSEUDO[h.from] ? PSEUDO[h.from][1].toLowerCase() : NAME(h.from)))];
   const tell = n => [...new Set(D.handoffs.filter(h => h.from === n).flatMap(h => h.to.map(NAME)))];
   for (const r of D.roster) {
     const hears = listen(r.name), tells = tell(r.name);

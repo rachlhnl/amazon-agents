@@ -15,6 +15,7 @@ from .agents import (
     ListingAgent,
     MarketingAgent,
     PricingAgent,
+    ProductAgent,
     ReviewsAgent,
     SalesAgent,
     UXAgent,
@@ -27,6 +28,7 @@ from .agents.chief_of_staff import ChiefOfStaff
 # runs last so it can link its opportunities to what the others already proposed.
 DEFAULT_AGENTS: list[type[Agent]] = [
     InventoryAgent, ReviewsAgent, PricingAgent, AdsAgent, ListingAgent,
+    ProductAgent,  # fit, store stock and launches, from the market tracker's findings
     MarketingAgent, SalesAgent,
     CreativeAgent,  # reviews the drafts above against brand.toml
     UXAgent,  # annotates marketing's budget proposals when the landing page is the problem

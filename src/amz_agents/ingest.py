@@ -384,6 +384,47 @@ def ingest_leads(wh: Warehouse) -> None:
     raise NotImplementedError(__doc__)
 
 
+def ingest_market(wh: Warehouse, root: Path | None = None) -> int:
+    """market_recs <- the market tracker's latest recommendations (no network: it reads
+    the snapshots in market/, which the daily Market tracker workflow keeps fresh)."""
+    from . import market
+    from .market import analyze
+
+    root = root or market.ROOT
+    snaps = market.history(root)
+    if not snaps:
+        return 0
+    config = market.load_config(root)
+    reviews = {k: market.reviews(k, root) for k, c in config.items() if c.get("judgeme_shop")}
+    a = analyze.build(snaps, config, reviews)
+    wh.execute("DELETE FROM market_recs")
+    wh.insert_many("market_recs", [
+        {"date": a["date"], "rank": r["when"], "area": r["area"], "effort": r["effort"],
+         "title": r["title"], "see": r["see"], "why": r["why"], "actions": json.dumps(r["do"]),
+         "kpi": r.get("kpi"), "kpi_now": r.get("now"), "kpi_target": r.get("target"),
+         "url": r.get("url")}
+        for r in a["recs"]
+    ])
+    return len(a["recs"])
+
+
+def ingest_store_reviews(wh: Warehouse, root: Path | None = None) -> int:
+    """reviews <- our own store's Judge.me reviews (collected by the market tracker), so
+    the reviews agent hears from dagacci.com buyers too. Stored with asin 'store:<id>'."""
+    from . import market
+
+    root = root or market.ROOT
+    own = [k for k, c in market.load_config(root).items()
+           if c.get("role") == "self" and c.get("judgeme_shop")]
+    rows = [{"asin": f"store:{r['product_id']}", "rating": r["score"],
+             "body": " ".join(x for x in (r.get("title"), r.get("body")) if x),
+             "created": r["date"]}
+            for k in own for r in market.reviews(k, root) if r.get("score")]
+    wh.execute("DELETE FROM reviews WHERE asin LIKE 'store:%'")
+    wh.insert_many("reviews", rows)
+    return len(rows)
+
+
 # ------------------------------------------------------------ creative and UX
 
 
@@ -652,5 +693,10 @@ def run_all(wh: Warehouse, only: set[str] | None = None) -> dict[str, Any]:
     # After meta_creatives and ga4, so new landing pages get checked too.
     if os.getenv("PAGESPEED_API_KEY") and want("pagespeed"):
         run("pagespeed", lambda: ingest_pagespeed(wh, PageSpeedClient.from_env()))
+    if (Path("market") / "history").is_dir():
+        if want("market"):
+            run("market", lambda: ingest_market(wh))
+        if want("store_reviews"):
+            run("store_reviews", lambda: ingest_store_reviews(wh))
     results["finished"] = datetime.now(UTC).isoformat(timespec="seconds")
     return results

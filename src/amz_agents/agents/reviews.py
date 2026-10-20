@@ -38,7 +38,10 @@ class ReviewsAgent(Agent):
     def run(self, ctx: Context) -> list[Action]:
         hits: dict[tuple[str, str], list[str]] = defaultdict(list)
         low_by_asin: dict[str, list[str]] = defaultdict(list)
-        for r in ctx.wh.query("SELECT * FROM reviews WHERE rating <= ?", (LOW_RATING + 1,)):
+        # Store (Judge.me) reviews are the product agent's, via the market tracker's
+        # topic analysis; this agent's themes are for marketplace listings.
+        for r in ctx.wh.query("SELECT * FROM reviews WHERE rating <= ? AND asin NOT LIKE 'store:%'",
+                              (LOW_RATING + 1,)):
             if r["rating"] <= LOW_RATING:
                 low_by_asin[r["asin"]].append(r["body"])
             for theme, pat in THEMES.items():

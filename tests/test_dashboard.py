@@ -28,7 +28,7 @@ def test_collect_tracks_every_agent_and_stage(ctx):
     run(ctx)
     data = dashboard.collect(ctx.wh)
     agents = {a["name"]: a for a in data["agents"]}
-    assert len(agents) == 10 and data["kpis"]["healthy"] == 10
+    assert len(agents) == 11 and data["kpis"]["healthy"] == 11
     assert data["run"]["mode"] == "recommend"
     assert agents["ux"]["stages"]["done"] == 1  # seeded page-speed fix
     assert agents["listing"]["stages"]["in_progress"] == 1
@@ -37,7 +37,7 @@ def test_collect_tracks_every_agent_and_stage(ctx):
     assert agents["ads"]["helped"] == 1  # seeded bid cut judged "helped"
     assert data["kpis"]["failed"] == 1 and data["kpis"]["waiting"] > 0
     titles = {a["title"] for a in data["actions"]}
-    assert "Reorder 1,214 × BTL-32-SGE" in titles
+    assert "Reorder 1,214 × Insulated Water Bottle 32oz Sage" in titles
 
 
 def test_agent_problems_reach_the_tracker(ctx):
@@ -124,7 +124,7 @@ def test_how_tab_matches_the_agents(ctx):
     names = [r["name"] for r in data["roster"]]
     assert names[-1] == "chief_of_staff" and "creative" in names
     for h in data["handoffs"]:
-        assert h["from"] in names + ["everyone"] and set(h["to"]) <= set(names)
+        assert h["from"] in names + ["everyone", "market"] and set(h["to"]) <= set(names)
     creative = next(r for r in data["roster"] if r["name"] == "creative")
     by = {k["kind"]: k["by"] for k in creative["proposes"]}
     assert by["new_creative_variants"] == "person" and by["pause_creative"] == "api"

@@ -233,6 +233,23 @@ CREATE TABLE IF NOT EXISTS web_pages (
     purchases_30d    INTEGER,
     checked          TEXT                -- date PageSpeed last ran
 );
+
+-- Findings from the public market tracker (market/), refreshed by `ingest`. The
+-- product agent works the product ones; the data agent routes the rest.
+CREATE TABLE IF NOT EXISTS market_recs (
+    date      TEXT,      -- market snapshot date
+    rank      INTEGER,   -- 1 act this week, 2 this month, 3 this quarter, 4 test
+    area      TEXT,      -- Stock, Fit & returns, Product, Marketing, Search, ...
+    effort    TEXT,      -- Low | Medium | High
+    title     TEXT,
+    see       TEXT,      -- what the data shows
+    why       TEXT,
+    actions   TEXT,      -- JSON list of steps
+    kpi       TEXT,
+    kpi_now   TEXT,
+    kpi_target TEXT,
+    url       TEXT
+);
 """
 
 

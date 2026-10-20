@@ -22,6 +22,7 @@ class Context:
 # when BRIEF_TO_<TEAM> is set (e.g. BRIEF_TO_MARKETING), emails each team its part.
 TEAMS = {
     "amazon_ops": "Amazon operations",
+    "product": "Product & merchandising",
     "marketing": "Marketing",
     "sales": "Sales & wholesale",
     "creative": "Creative",

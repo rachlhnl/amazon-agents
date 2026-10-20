@@ -218,6 +218,26 @@ def _past_actions(today: date) -> list[dict]:
     ]
 
 
+# What the market tracker would report for the sample brand.
+MARKET_RECS = [
+    (1, "Fit & returns", "Low", "Straw Lid: buyers complain about leaks",
+     "5 of 7 1-2\u2605 reviews of the Straw Lid mention leaking.",
+     "A leak is a return and a 1\u2605 review; fixing the seal protects the bottle's rating too.",
+     ["Pull the latest lid batch and test the seal.", "Add a fit note to the listing."],
+     "Share of 1-2\u2605 reviews about leaks", "71%", "\u2264 30%"),
+    (3, "Product", "High", "No new colors in 90 days",
+     "0 new colors in 90 days; similar brands launched a median of 3.",
+     "New colors bring back past buyers and give ads something new to say.",
+     ["Pick 2 colors from the best-selling family.", "Plan a launch email and ad set."],
+     "New colors in 90 days", "0", "\u2265 2"),
+    (2, "Marketing", "Low", "The best-rated bottles are ready to be pushed",
+     "The 32oz Black and Sage rate 4.6\u2605+ on 200+ reviews.",
+     "Proven products convert paid traffic best.",
+     ["Feature them in the next email.", "Give them their own ad set."],
+     "Share of ad spend on 4.5\u2605+ products", "40%", "\u2265 60%"),
+]
+
+
 def seed(wh: Warehouse, today: date | None = None) -> None:
     today = today or date.today()
     cols_p = ["sku", "asin", "title", "price", "landed_cost", "fees", "units_on_hand",
@@ -269,3 +289,8 @@ def seed(wh: Warehouse, today: date | None = None) -> None:
         "url page_type sku perf_mobile perf_desktop accessibility lcp_ms_mobile cls_mobile "
         "sessions_30d purchases_30d", WEB_PAGES)])
     wh.insert_many("web_funnel", _web_funnel(today))
+    wh.insert_many("market_recs", [
+        {"date": today.isoformat(), "rank": rank, "area": area, "effort": effort, "title": t,
+         "see": see, "why": why, "actions": json.dumps(steps), "kpi": kpi, "kpi_now": now,
+         "kpi_target": target, "url": None}
+        for rank, area, effort, t, see, why, steps, kpi, now, target in MARKET_RECS])

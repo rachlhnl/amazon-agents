@@ -53,7 +53,8 @@ def test_every_action_has_sku_and_goal_tags_make_sense(ctx):
     _, submitted = run(ctx)
     for _, a in submitted:
         site_wide = (a.kind == "opportunity" and a.target.endswith("/all")) or \
-            a.kind in ("fix_funnel_step", "improve_page_speed", "fix_accessibility")
+            a.kind in ("fix_funnel_step", "improve_page_speed", "fix_accessibility") or \
+            a.agent == "product"  # store styles, not Amazon SKUs
         assert a.sku or site_wide, a
     tags = {(a.kind, a.target): a.goal for _, a in submitted}
     assert tags[("add_negative", "c3/ag3")] == "serves: Keep TACoS under 12%"

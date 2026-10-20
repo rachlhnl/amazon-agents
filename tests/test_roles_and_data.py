@@ -155,7 +155,7 @@ def test_team_briefs_written_and_emailed(ctx, tmp_path, monkeypatch):
 
     orch, submitted = run(ctx)
     paths = orch.team_briefs(submitted, out_dir=str(tmp_path))
-    assert set(paths) == {"amazon_ops", "marketing", "sales", "creative", "ux"}
+    assert set(paths) == {"amazon_ops", "product", "marketing", "sales", "creative", "ux"}
     for team, p in paths.items():
         send_brief(p.read_text(), f"{TEAMS[team]} brief", team_recipients_var(team))
     assert sent == [("mkt@x", "Marketing brief")]  # only marketing has recipients set

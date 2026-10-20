@@ -17,12 +17,14 @@ they never execute anything.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any
 
 from ..actions import Action
 from .base import Agent, Context, Role
+from .product import owned as product_owned
 
 # Assumptions behind opportunity estimates (tune with the company's own results).
 ADS_LIFT = 0.30  # extra units from advertising a SKU that has no ads, vs. organic
@@ -41,6 +43,11 @@ MIN_REVIEWS = 3
 STALE_DAYS = 2
 
 
+# Market tracker area -> the agent whose role covers it.
+MARKET_OWNER = {"Marketing": "marketing", "Pricing": "pricing", "Search": "listing",
+                "Amazon listing": "listing", "Ads": "ads", "Data": "data"}
+
+
 @dataclass
 class Opportunity:
     area: str  # short slug, e.g. "fees"
@@ -53,6 +60,8 @@ class Opportunity:
     impact_usd: float | None = None
     confidence: str = "low"
     related: list[tuple[str, str]] = field(default_factory=list)  # (kind, target)
+    when: int | None = None  # market tracker rank: 1 act this week ... 4 test
+    source: str = "data"
 
 
 class DataAgent(Agent):
@@ -76,7 +85,7 @@ class DataAgent(Agent):
         found: list[Opportunity] = []
         for check in (self._data_quality, self._unadvertised, self._fee_heavy,
                       self._ad_dependence, self._trends, self._elasticity,
-                      self._concentration, self._ratings):
+                      self._concentration, self._ratings, self._market):
             found += check()
 
         out = []
@@ -91,8 +100,30 @@ class DataAgent(Agent):
                     "title": o.title, "finding": o.finding, "recommendation": o.recommendation,
                     "owner": o.owner, "effort": o.effort, "impact_usd": o.impact_usd,
                     "confidence": o.confidence, "related": [list(r) for r in related],
+                    **({"when": o.when, "source": o.source} if o.source != "data" else {}),
                 },
                 reason=o.finding,
+            ))
+        return out
+
+    def _market(self) -> list[Opportunity]:
+        """The market tracker's findings outside product, routed to the agent that owns
+        the area (the product agent works the product ones itself)."""
+        out = []
+        for r in self.ctx.wh.query("SELECT * FROM market_recs ORDER BY rank"):
+            if product_owned(r["area"]):
+                continue
+            steps = json.loads(r["actions"] or "[]")
+            kpi = (f" Track {r['kpi']}: now {r['kpi_now']}, target {r['kpi_target']}."
+                   if r["kpi"] else "")
+            out.append(Opportunity(
+                area="market-" + re.sub(r"[^a-z0-9]+", "-", r["title"].lower()).strip("-")[:60],
+                title=r["title"], finding=r["see"],
+                recommendation=" ".join([r["why"], *steps]) + kpi,
+                owner=MARKET_OWNER.get(r["area"], self.name),
+                effort={"Low": "S", "Medium": "M", "High": "L"}.get(r["effort"], "M"),
+                confidence="medium" if r["rank"] <= 2 else "low",
+                when=r["rank"], source="market",
             ))
         return out
 
@@ -338,7 +369,8 @@ class DataAgent(Agent):
         out = []
         by_asin = {p["asin"]: sku for sku, p in self.products.items()}
         for r in self.ctx.wh.query(
-            "SELECT asin, AVG(rating) AS avg, COUNT(*) AS n FROM reviews GROUP BY asin "
+            "SELECT asin, AVG(rating) AS avg, COUNT(*) AS n FROM reviews "
+            "WHERE asin NOT LIKE 'store:%' GROUP BY asin "  # store ratings: product agent
             "HAVING n >= ? AND avg < ?", (MIN_REVIEWS, LOW_RATING)
         ):
             sku = by_asin.get(r["asin"])

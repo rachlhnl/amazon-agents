@@ -1,0 +1,33 @@
+# Who owns each team's work in the tracker. Edit for the company.
+#
+# owner: the person accountable for the team's queue (shown on every item)
+# due_days: how long an item may wait before it's overdue, by priority.
+#   now = urgent / act this week, high, medium, low, judgment = "your call"
+
+[due_days]
+now = 1
+high = 3
+medium = 7
+low = 14
+judgment = 7
+
+[team.amazon_ops]
+owner = ""
+
+[team.product]
+owner = ""
+
+[team.marketing]
+owner = ""
+
+[team.sales]
+owner = ""
+
+[team.creative]
+owner = ""
+
+[team.ux]
+owner = ""
+
+[team.data]
+owner = ""
