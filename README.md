@@ -36,6 +36,7 @@ opportunities and a plain-language read of each chart. See `market/README.md`.
 | Pricing | price, cost, fees, Buy Box | `update_price` | SP-API Listings Items |
 | Ads | keywords, search terms | `update_bid`, `add_keyword`, `add_negative` | Ads API (SP v3) |
 | Listing | search terms, review themes | `update_listing_copy` (+ LLM draft) | human |
+| Product | market tracker findings (dagacci.com stock, Judge.me reviews, other brands) | `fix_fit`, `restock_style`, `improve_product`, `plan_launch` | human |
 | Marketing | external campaigns, stock | `update_campaign_budget`, `pause_campaign`, `email_campaign` (+ LLM draft) | Meta Marketing API; human for Google/TikTok and email |
 | Sales | other channels' prices, CRM leads | `update_channel_price`, `list_on_channel`, `send_outreach` (+ LLM draft) | Shopify Admin API; human otherwise |
 | Creative | ad-level results, listing assets, brand.toml, other agents' drafts | `refresh_creative`, `pause_creative`, `new_creative_variants`, `improve_listing_assets`, `fix_listing_title` | Meta API (pause); human otherwise |
@@ -187,18 +188,38 @@ channel.
 
 ## Agent tracker
 
-`amz-agents run` (and `demo`) also writes `reports/dashboard.html`: one page
-showing every agent's health, its work over the last 30 days as a progress bar
-(done, in progress, waiting for review, rejected, failed), the results of past
-changes, and a filterable work queue (team, agent, status, priority, search)
-with each item's priority, impact, effort, ROI, status and age. Items waiting
-3+ days are highlighted.
+`amz-agents run` (and `demo`) also writes `reports/dashboard.html`. Three tabs:
+
+- **Work:** what to fix in the setup before trusting the numbers; this week's
+  contribution profit, revenue, units and TACoS against last week; the goals in
+  `goals.toml`; everything that needs a person (approvals, to-dos, failures,
+  urgent work, agents missing data); and a board of all work (To review, Being
+  done, Done, Stopped) with owner, due date and value. Click any item for its
+  reason, steps and buttons.
+- **Market & customers:** the market tracker (`market/index.html`).
+- **How the agents work together:** run order, what each agent hands the
+  others, how decisions are made (rules, hard limits, ranking, where the LLM
+  writes), and each agent's rules. Numbers come from the code and `.env`.
+
+Owners and due dates come from `teams.toml` (an owner per team, and how many
+days work may wait at each priority).
 
 `amz-agents dashboard --serve` serves it on http://127.0.0.1:8765, fresh on every
 load. Add `--allow-actions` for Approve / Reject / Mark done buttons; every change
 needs a token generated for that server process, and it listens on localhost only
 unless you pass `--host`. Approved human-only work stays "in progress" until
 someone marks it done (`amz-agents done ID`, or the button).
+
+## Daily schedule
+
+`scripts/daily.sh` refreshes data (`amz-agents ingest`, which also loads the
+market tracker's findings and the store's Judge.me reviews), runs the agents in
+approve mode, and rebuilds the briefs and tracker; it logs to `reports/daily.log`.
+`scripts/install-schedule.sh` runs it on this Mac every day at 7:00 (or at wake);
+`--remove` takes it off. It runs locally, not in GitHub Actions, because sales
+data and approvals stay in the local warehouse and the repo is public. macOS
+won't let scheduled jobs read Documents, Desktop or Downloads, so keep the repo
+elsewhere (e.g. `~/code`) or give `/bin/bash` Full Disk Access.
 
 ## Quick start
 
