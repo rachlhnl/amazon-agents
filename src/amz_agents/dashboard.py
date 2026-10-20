@@ -23,9 +23,15 @@ from pathlib import Path
 from typing import Any
 
 from .actions import HUMAN_ONLY, Action, ActionLog
+from .agents import ads, listing, pricing, reviews, sales, ux
+from .agents import chief_of_staff as cos
 from .agents import creative as cr
+from .agents import data as da
+from .agents import inventory as inv
+from .agents import marketing as mk
 from .agents.base import EFFORT_HOURS, TEAMS
 from .agents.chief_of_staff import ChiefOfStaff, _describe
+from .config import Guardrails
 from .data.warehouse import Warehouse
 
 WINDOW_DAYS = 30
@@ -119,6 +125,130 @@ def creative_walkthrough() -> list[dict[str, str]]:
     ]
 
 
+def _pct(x: float) -> str:
+    return f"{abs(x):.0%}"
+
+
+def decision_rules(g: Guardrails) -> dict[str, Any]:
+    """Each agent's rules as `when -> then`, built from the constants the agents use,
+    plus the hard limits, the chief of staff's ranking and where the LLM writes text."""
+    fu = sales.FOLLOW_UP_DAYS
+    agents = {
+        "inventory": [
+            (f"stock covers less than lead time + {inv.SAFETY_DAYS} days of sales",
+             f"Reorder enough for lead time + {inv.SAFETY_DAYS} + {inv.TARGET_DAYS_AFTER_ARRIVAL} days"),
+            ("stock runs out before a new order could arrive", "Tell everyone: low stock"),
+            (f"more than {inv.OVERSTOCK_DAYS} days of stock", "Tell everyone: overstock"),
+        ],
+        "reviews": [
+            (f"the same complaint in {reviews.MIN_MENTIONS}+ reviews of {reviews.LOW_RATING}\u2605 or less",
+             "Flag a possible defect"),
+        ],
+        "pricing": [
+            ("low stock", f"Raise {_pct(pricing.LOW_STOCK_RAISE)} to slow sales"),
+            ("Buy Box price is under yours", "Match the Buy Box"),
+            ("overstock", f"Cut {_pct(pricing.OVERSTOCK_CUT)} to sell through"),
+            ("price is under the margin floor", "Raise to the floor"),
+            ("(first match wins, in this order)", ""),
+        ],
+        "ads": [
+            (f"keyword has {ads.MIN_CLICKS_FOR_BID_CHANGE}+ clicks and 0 orders",
+             f"Cut the bid {_pct(g.max_bid_change_pct)}"),
+            (f"keyword has {ads.MIN_CLICKS_FOR_BID_CHANGE}+ clicks and orders",
+             f"Move the bid toward {_pct(g.target_acos)} ACoS (ad spend \u00f7 sales)"),
+            (f"search term has {ads.NEGATE_AFTER_CLICKS}+ clicks and 0 orders", "Block it"),
+            (f"search term has {ads.HARVEST_MIN_ORDERS}+ orders under target ACoS",
+             "Add it as an exact keyword"),
+            ("item is low on stock", "Never raise its bids"),
+        ],
+        "listing": [
+            (f"a search term with {listing.MIN_ORDERS}+ orders is missing from the title",
+             "Draft a new title and bullets"),
+            ("reviews show a recurring complaint", "Address it honestly in the copy"),
+        ],
+        "marketing": [
+            (f"campaign has under {mk.MIN_CLICKS} clicks", "Wait for more data"),
+            (f"profit per $1 spent \u2265 {mk.SCALE_AT:g}", "Raise the budget"),
+            (f"profit per $1 spent < {mk.CUT_BELOW:g} (losing money)", "Cut the budget"),
+            (f"{mk.PAUSE_AFTER_CLICKS}+ clicks and no orders", "Pause the campaign"),
+            ("campaign sells an item low on stock", "Don't scale it"),
+            ("item is overstocked", "Draft an email campaign"),
+            ("ads that send shoppers to Amazon",
+             f"Also credit Amazon's {_pct(mk.BRAND_REFERRAL_BONUS)} Brand Referral Bonus"),
+        ],
+        "sales": [
+            (f"another channel's price is more than {_pct(sales.PARITY_TOLERANCE)} under Amazon",
+             "Bring it back in line"),
+            (f"an item sells {sales.MIN_VELOCITY_TO_EXPAND:g}+ a day on Amazon",
+             "Suggest listing it on another channel"),
+            ((f"a lead is quiet for {fu['new']} days (new), {fu['negotiating']} (negotiating) "
+             f"or {fu['contacted']} (contacted)"), "Draft a follow-up"),
+        ],
+        "creative": [
+            ((f"click rate down {_pct(cr.FATIGUE_CTR_DROP)}+ and seen {cr.FATIGUE_FREQUENCY:g}+ "
+             "times a week"), "Refresh the tired ad"),
+            ((f"click rate {cr.WINNER_CTR_RATIO:g}\u00d7 its campaign's with "
+             f"{cr.WINNER_MIN_PURCHASES}+ purchases"), "Make variants of the winner"),
+            ((f"${cr.PAUSE_MIN_SPEND:.0f}+ spent, no sales this week, click rate under "
+             f"{_pct(cr.PAUSE_CTR_RATIO)} of its campaign's"), "Pause the ad"),
+            ((f"Amazon page has under {cr.MIN_IMAGES} images or {cr.MIN_BULLETS} bullets, "
+             "or no video or A+"), "Complete the page"),
+            ("any draft from another agent", "Check it against brand.toml"),
+        ],
+        "ux": [
+            ((f"a checkout step is under {_pct(ux.WEAK_STEP)} of benchmark, or down "
+             f"{_pct(ux.STEP_DROP)} vs the prior 2 weeks"), "Fix that step"),
+            (f"mobile converts at under {_pct(ux.MOBILE_GAP)} of desktop", "Fix mobile"),
+            ((f"mobile speed score under {ux.SLOW_PERF}, or main content takes over "
+             f"{ux.SLOW_LCP_MS / 1000:g}s"), "Speed up the page"),
+            (f"an ad's landing page converts under {_pct(ux.LANDING_GAP)} of the site rate",
+             "Fix the landing page"),
+            (f"an Amazon page converts under {_pct(ux.AMAZON_GAP)} of your typical page",
+             "Improve that page"),
+        ],
+        "data": [
+            ((f"an item's sales are down {_pct(da.TREND_DROP)}+ or up {_pct(da.TREND_RISE)}+ "
+             "this week"), "Raise it with the right agent"),
+            (f"Amazon fees are over {_pct(da.FEE_SHARE_HIGH)} of price", "Look for fee savings"),
+            (f"over {_pct(da.AD_DEPENDENCE_HIGH)} of sales come from ads", "Build organic rank"),
+            (f"rating under {da.LOW_RATING:g} with {da.MIN_REVIEWS}+ reviews", "Look into quality"),
+            (f"over {_pct(da.CONCENTRATION_HIGH)} of units sell on Amazon",
+             "Grow other channels"),
+            (f"data more than {da.STALE_DAYS} days old", "Warn that decisions are on stale data"),
+        ],
+        "chief_of_staff": [
+            (f"sales yesterday under {_pct(cos.ANOMALY_DROP)} of the 14-day average",
+             "Escalate to you"),
+            (f"ad spend yesterday over {cos.SPEND_SPIKE:g}\u00d7 normal", "Escalate to you"),
+            ("a suggestion works against a goal in goals.toml", "Escalate to you"),
+        ],
+    }
+    limits = [
+        ("Bid change per day", f"\u00b1{_pct(g.max_bid_change_pct)}", "MAX_BID_CHANGE_PCT"),
+        ("Bid range", f"${g.min_bid:.2f}\u2013${g.max_bid:.2f}", "MIN_BID / MAX_BID"),
+        ("Target ACoS", _pct(g.target_acos), "TARGET_ACOS"),
+        ("Campaign budget", f"up to ${g.max_daily_budget:,.0f}/day", "MAX_DAILY_BUDGET"),
+        ("Budget change", f"\u00b1{_pct(g.max_budget_change_pct)} at a time", "MAX_BUDGET_CHANGE_PCT"),
+        ("Price change", f"\u00b1{_pct(g.max_price_change_pct)} at a time", "MAX_PRICE_CHANGE_PCT"),
+        ("Price floor", f"landed cost + fees + {_pct(g.min_margin_pct)} margin", "MIN_MARGIN_PCT"),
+    ]
+    ranking = [
+        ("High", f"worth ${cos.HIGH_IMPACT:,.0f}+ over 30 days and ROI \u2265 {cos.HIGH_ROI:g}\u00d7"),
+        ("Medium", f"ROI \u2265 {cos.MEDIUM_ROI:g}\u00d7"),
+        ("Low", f"ROI under {cos.MEDIUM_ROI:g}\u00d7, or it loses money"),
+        ("Your call", "the value can't be estimated"),
+        ("Urgent", "escalations: sales drops, spend spikes, goal conflicts"),
+    ]
+    return {
+        "agents": {k: [{"when": w, "then": t} for w, t in v] for k, v in agents.items()},
+        "limits": [{"what": a, "value": b, "env": c} for a, b, c in limits],
+        "ranking": [{"level": a, "rule": b} for a, b in ranking],
+        "hourly_cost": cos.HOURLY_COST,
+        "verdict_pct": cos.VERDICT_THRESHOLD,
+        "outcome_days": cos.WINDOW,
+    }
+
+
 def _roster() -> list[dict[str, Any]]:
     from .orchestrator import DEFAULT_AGENTS
 
@@ -144,7 +274,8 @@ def _agents() -> list[tuple[str, Any]]:
     return [(a.name, a.role) for a in DEFAULT_AGENTS]
 
 
-def collect(wh: Warehouse, today: date | None = None) -> dict[str, Any]:
+def collect(wh: Warehouse, today: date | None = None,
+            guardrails: Guardrails | None = None) -> dict[str, Any]:
     """Everything the page shows, as plain JSON-able data."""
     today = today or date.today()
     run = (wh.query("SELECT * FROM runs ORDER BY id DESC LIMIT 1") or [None])[0]
@@ -222,6 +353,7 @@ def collect(wh: Warehouse, today: date | None = None) -> dict[str, Any]:
         "roster": _roster(),
         "handoffs": HANDOFFS,
         "walkthrough": creative_walkthrough(),
+        "rules": decision_rules(guardrails or Guardrails.from_env()),
     }
 
 
@@ -497,6 +629,16 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
 .role li .by { display: block; color: var(--text-3); font-size: 11.5px; }
 .role .links { font-size: 12.5px; color: var(--text-2); }
 .role .links b { color: var(--text); font-weight: 600; }
+/* Decision rules */
+.rules { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 12.5px; }
+.rules li { border-left: 2px solid var(--border); padding-left: 8px; }
+.rules .w { color: var(--text-2); } .rules .t { font-weight: 600; }
+.decide { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.decide h3 { font-size: 14px; margin: 0 0 4px; } .decide .sub { color: var(--text-3); font-size: 12.5px; margin: 0 0 10px; }
+.decide table { font-size: 13px; } .decide td { padding: 6px 8px 6px 0; border-bottom: 1px solid var(--border); }
+.decide tr:last-child td { border-bottom: 0; }
+.decide code { font-size: 11px; color: var(--text-3); }
+.decide ol { margin: 0; padding-left: 18px; font-size: 13px; color: var(--text-2); display: grid; gap: 4px; }
 @media (max-width: 600px) { .hand { grid-template-columns: 1fr; } .arrow { transform: rotate(90deg); width: 100%; text-align: center; } }
 @media (max-width: 900px) { .board { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) {
@@ -564,7 +706,9 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
     <section class="panel"><ol class="timeline" id="timeline"></ol></section>
     <div class="sec-head"><h2>Who tells whom</h2><p>What each agent passes along during a run.</p></div>
     <section class="panel" id="handoffs" style="padding-top:4px;padding-bottom:4px"></section>
-    <div class="sec-head"><h2>What each agent does</h2><p>What it can suggest, who carries that out, and the data it needs.</p></div>
+    <div class="sec-head"><h2>How decisions are made</h2><p>Rules, not guesses. Every number below comes from the code or your .env.</p></div>
+    <section class="decide" id="decide"></section>
+    <div class="sec-head"><h2>What each agent does</h2><p>Its rules, what it can suggest, who carries that out, and the data it needs.</p></div>
     <section class="roster" id="roster"></section>
   </div>
 </div>
@@ -933,6 +1077,31 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
     el('div', {}, el('div', {class: 'route'}, h.to.map(chip)), el('div', {class: 'what', style: 'margin-top:6px', text: h.what}),
       el('div', {class: 'why', text: h.why}))));
 
+  // How decisions are made
+  const RU = D.rules;
+  const ruleList = rows => el('ul', {class: 'rules'}, rows.map(r => el('li', {},
+    el('span', {class: 'w', text: r.then ? 'When ' + r.when + ' \u2192 ' : r.when}), r.then ? el('span', {class: 't', text: r.then}) : null)));
+  document.getElementById('decide').append(
+    el('div', {class: 'panel'}, el('h3', {text: '1. Each agent checks its rules'}),
+      el('p', {class: 'sub', text: 'Every run, each agent compares your latest numbers to fixed thresholds. When one is crossed it suggests a specific change and records the numbers behind it as the reason. See each agent\u2019s card below for its rules.'}),
+      el('ol', {}, el('li', {text: 'Is there enough data to judge? (e.g. a minimum number of clicks)'}),
+        el('li', {text: 'Is a threshold crossed?'}), el('li', {text: 'Does it clash with what another agent found? (e.g. low stock blocks more ad spend)'}),
+        el('li', {text: 'Suggest the change, within the hard limits.'}))),
+    el('div', {class: 'panel'}, el('h3', {text: '2. Hard limits nothing can break'}),
+      el('p', {class: 'sub', text: 'Any suggestion outside these is pulled back inside. Change them in .env.'}),
+      el('table', {}, el('tbody', {}, RU.limits.map(l => el('tr', {}, el('td', {text: l.what}),
+        el('td', {}, el('div', {style: 'font-weight:600', text: l.value}), el('code', {text: l.env}))))))),
+    el('div', {class: 'panel'}, el('h3', {text: '3. The chief of staff ranks it'}),
+      el('p', {class: 'sub', text: 'Each suggestion gets a 30-day profit estimate and a time cost (effort hours \u00d7 $' + RU.hourly_cost + '/hr). ROI = value \u00f7 time cost.'}),
+      el('table', {}, el('tbody', {}, RU.ranking.map(r => el('tr', {}, el('td', {style: 'font-weight:600;white-space:nowrap', text: r.level}), el('td', {text: r.rule}))))),
+      el('p', {class: 'sub', style: 'margin:10px 0 0', text: 'A week after a change goes live, it checks whether daily profit moved ' + Math.round(RU.verdict_pct * 100) + '%+ and marks it helped or hurt.'})),
+    el('div', {class: 'panel'}, el('h3', {text: 'Where AI (Claude) comes in'}),
+      el('p', {class: 'sub', text: 'Only for writing, never for choosing numbers. The rules run the same with or without an Anthropic key.'}),
+      el('ul', {class: 'rules'}, ['Email campaign and wholesale outreach drafts', 'Listing titles and bullets',
+        'Summaries of what reviews complain about', 'Checking drafts against your brand voice', 'The written summary at the top of the daily brief']
+        .map(t => el('li', {text: t}))),
+      el('p', {class: 'sub', style: 'margin:10px 0 0', text: 'These are generic starting numbers, not tuned to your business: set your margins and goals in .env and goals.toml.'})));
+
   // Agent cards
   const roster = document.getElementById('roster');
   const listen = n => [...new Set(D.handoffs.filter(h => h.to.includes(n)).map(h => h.from === 'everyone' ? 'every agent' : NAME(h.from)))];
@@ -943,6 +1112,7 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
       el('div', {class: 'hd'}, el('span', {class: 'avatar', text: INITIALS(r.name)}),
         el('div', {}, el('div', {class: 'nm', text: r.step + '. ' + NAME(r.name)}), el('div', {class: 'tm', text: D.teams[r.team] || 'Coordinates every team'}))),
       el('p', {text: r.mission}),
+      RU.agents[r.name] ? [el('h5', {text: 'How it decides'}), ruleList(RU.agents[r.name])] : null,
       el('h5', {text: 'Can suggest'}),
       el('ul', {}, r.proposes.map(k => el('li', {}, el('span', {text: KIND[k.kind] || k.kind.replace(/_/g, ' ')}),
         el('span', {class: 'by', text: (k.by === 'api' ? 'system, once approved' : 'a person') + (k.effort ? ' · ' + (EFFORT_LABEL[k.effort] || k.effort).toLowerCase() : '')})))),

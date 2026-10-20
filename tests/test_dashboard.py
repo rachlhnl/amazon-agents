@@ -131,3 +131,12 @@ def test_how_tab_matches_the_agents(ctx):
     steps = data["walkthrough"]
     assert any(s["who"] == "creative" for s in steps) and steps[-1]["status"] == ""
     assert "How the agents work together" in dashboard.render(data)
+
+
+def test_decision_rules_follow_settings(ctx):
+    from amz_agents.config import Guardrails
+
+    rules = dashboard.collect(ctx.wh, guardrails=Guardrails(target_acos=0.3))["rules"]
+    assert set(rules["agents"]) >= {"inventory", "ads", "creative", "chief_of_staff"}
+    assert any("30% ACoS" in r["then"] for r in rules["agents"]["ads"])
+    assert next(x for x in rules["limits"] if x["env"] == "TARGET_ACOS")["value"] == "30%"
