@@ -111,8 +111,8 @@ class DataAgent(Agent):
         the area (the product agent works the product ones itself)."""
         out = []
         for r in self.ctx.wh.query("SELECT * FROM market_recs ORDER BY rank"):
-            if product_owned(r["area"]):
-                continue
+            if product_owned(r["area"]) or r["area"] == "Website":
+                continue  # the product and UX agents work these themselves
             steps = json.loads(r["actions"] or "[]")
             kpi = (f" Track {r['kpi']}: now {r['kpi_now']}, target {r['kpi_target']}."
                    if r["kpi"] else "")

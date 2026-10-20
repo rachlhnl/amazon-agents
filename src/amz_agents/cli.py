@@ -15,6 +15,7 @@
   amz-agents market [--no-collect] [--out FILE]
                                   collect public data on the brands in market/brands.toml
                                   and write the market tracker dashboard
+  amz-agents shop [--if-due]      mystery-shop every brand's store (weekly)
 """
 
 from __future__ import annotations
@@ -60,6 +61,19 @@ def _market(args: argparse.Namespace) -> int:
     return 0
 
 
+def _shop(args: argparse.Namespace) -> int:
+    from .market import shopper
+
+    if args.if_due and not shopper.due():
+        print(f"Last mystery shop was {shopper.latest()['date']}; not due yet.")
+        return 0
+    result = shopper.shop(model=Settings.from_env().anthropic_model)
+    print(f"Mystery shop saved to {shopper.save(result)}")
+    v = result["verdict"]
+    print(f"Would buy from: {v.get('choice')} ({v.get('site')}). {v.get('why', '')}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="amz-agents")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -89,9 +103,14 @@ def main(argv: list[str] | None = None) -> int:
     p_mkt.add_argument("--no-collect", action="store_true",
                        help="rebuild the dashboard from saved history only")
     p_mkt.add_argument("--out", default="market/index.html")
+    p_shop = sub.add_parser("shop", help="mystery-shop every brand's store (weekly)")
+    p_shop.add_argument("--if-due", action="store_true",
+                        help="only if the last shop is a week old or more")
     args = ap.parse_args(argv)
     if args.cmd == "market":
         return _market(args)
+    if args.cmd == "shop":
+        return _shop(args)
 
     settings = Settings.from_env()
     if args.cmd == "demo":

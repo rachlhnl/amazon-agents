@@ -54,7 +54,7 @@ HUMAN_ONLY = {
     "fix_funnel_step", "improve_page_speed", "fix_accessibility", "fix_landing_page",
     "improve_listing_conversion",
     # product work: patterns, size charts, factory orders, launches
-    "fix_fit", "restock_style", "improve_product", "plan_launch",
+    "fix_fit", "restock_style", "improve_product", "plan_launch", "improve_shopping_experience",
 }
 
 # Statuses that mean an action is still waiting, or was carried out recently

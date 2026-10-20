@@ -63,6 +63,9 @@ HANDOFFS = [
      "what": "Findings from dagacci.com, its Judge.me reviews and competitors",
      "why": "Product works fit, stock and launches itself; the data agent routes the rest "
             "(marketing, pricing, search, ads) to the agent that owns it."},
+    {"from": "market", "to": ["ux"],
+     "what": "The weekly mystery shop of every brand's store",
+     "why": "What dagacci.com is missing that other brands show becomes UX work."},
     {"from": "reviews", "to": ["listing", "data"],
      "what": "Recurring complaints by product",
      "why": "Listing copy stays honest about known issues; the data agent sizes defects."},
@@ -222,6 +225,8 @@ def decision_rules(g: Guardrails) -> dict[str, Any]:
              "Fix the landing page"),
             (f"an Amazon page converts under {_pct(ux.AMAZON_GAP)} of your typical page",
              "Improve that page"),
+            (("the weekly mystery shop finds something on dagacci.com missing that other "
+             "brands show (size guide, fabric, free returns, fit help...)"), "Add it"),
         ],
         "data": [
             ((f"an item's sales are down {_pct(da.TREND_DROP)}+ or up {_pct(da.TREND_RISE)}+ "
@@ -420,6 +425,21 @@ def market_summary(root: Path | None = None) -> dict[str, Any] | None:
             "recs": [{k: r.get(k) for k in keep} for r in a["recs"]]}
 
 
+def shopper_view() -> dict[str, Any] | None:
+    """The latest mystery shop, plus the checklist it ran."""
+    from .market import shopper
+
+    try:
+        shop = shopper.latest()
+    except (OSError, ValueError):
+        return None
+    if not shop:
+        return None
+    return {**shop, "checks": [{"key": c.key, "label": c.yes, "category": c.category,
+                                "weight": c.weight} for c in shopper.CHECKS],
+            "categories": shopper.CATEGORIES}
+
+
 def collect(wh: Warehouse, today: date | None = None,
             guardrails: Guardrails | None = None, include_market: bool = True) -> dict[str, Any]:
     """Everything the page shows, as plain JSON-able data."""
@@ -521,6 +541,7 @@ def collect(wh: Warehouse, today: date | None = None,
         "goals": goals,
         "setup_gaps": setup_gaps(wh, goals, teams_cfg["owners"]),
         "market": market_summary() if include_market else None,
+        "shopper": shopper_view() if include_market else None,
     }
 
 
@@ -782,6 +803,34 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
 .group-label { font-size: 12px; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; margin: 10px 0 2px; }
 .mframe { width: 100%; height: calc(100vh - 140px); min-height: 600px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); margin-top: 16px; }
 @media (max-width: 900px) { .score { grid-template-columns: 1fr; } }
+/* Mystery shopper */
+.verdict { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 12px; padding: 16px; margin-top: 16px; }
+.verdict .k { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-3); }
+.verdict .v { font-size: 22px; font-weight: 650; margin: 2px 0 6px; }
+.verdict p { margin: 0; color: var(--text-2); max-width: 900px; }
+.sb td { vertical-align: middle; }
+.sb tr.me td { background: var(--accent-soft); }
+.mini { display: flex; align-items: center; gap: 6px; min-width: 92px; }
+.mini .t { flex: 1; height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
+.mini .t i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.mini span { font-size: 12px; font-variant-numeric: tabular-nums; width: 26px; text-align: right; color: var(--text-2); }
+.sites { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.site { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+.site.me { border-color: var(--accent); }
+.site .hd { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.site .nm { font-weight: 650; } .site .sc { font-weight: 650; font-variant-numeric: tabular-nums; }
+.site .pr { font-size: 12.5px; color: var(--text-3); margin: 2px 0 8px; overflow-wrap: anywhere; }
+.site p { margin: 0 0 8px; font-size: 13px; color: var(--text-2); }
+.site ul { margin: 0 0 8px; padding: 0; list-style: none; display: grid; gap: 3px; font-size: 12.5px; }
+.site li { padding-left: 18px; position: relative; }
+.site li::before { position: absolute; left: 0; font-weight: 700; }
+.site .like li::before { content: "\2713"; color: var(--good-text); }
+.site .dislike li::before { content: "\2715"; color: var(--crit-text); }
+.site .chg li::before { content: "\2192"; color: var(--accent); }
+.site h5 { margin: 6px 0 3px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-3); }
+.cl td, .cl th { text-align: center; } .cl td:first-child, .cl th:first-child { text-align: left; }
+.cl .y { color: var(--good-text); font-weight: 700; } .cl .n { color: var(--text-3); }
+.cl th.me, .cl td.me { background: var(--accent-soft); }
 /* Tabs */
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 18px 0 0; }
 .tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; margin-bottom: -1px;
@@ -864,6 +913,7 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
   <nav class="tabs" role="tablist" aria-label="Views">
     <button type="button" role="tab" id="t-work" aria-controls="tab-work" aria-selected="true">Work</button>
     <button type="button" role="tab" id="t-market" aria-controls="tab-market" aria-selected="false">Market &amp; customers</button>
+    <button type="button" role="tab" id="t-shop" aria-controls="tab-shop" aria-selected="false">Mystery shopper</button>
     <button type="button" role="tab" id="t-how" aria-controls="tab-how" aria-selected="false">How the agents work together</button>
   </nav>
   <div id="tab-work" role="tabpanel" aria-labelledby="t-work">
@@ -903,6 +953,17 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
   <div id="tab-market" role="tabpanel" aria-labelledby="t-market" hidden>
     <p class="lead" id="market-lead"></p>
     <div id="market-box"></div>
+  </div>
+  <div id="tab-shop" role="tabpanel" aria-labelledby="t-shop" hidden>
+    <p class="lead" id="shop-lead"></p>
+    <div id="shop-verdict"></div>
+    <div class="sec-head"><h2>Scoreboard</h2><p>0&ndash;10 per area, from what the shopper found. Shaded: us.</p></div>
+    <section class="table-wrap" id="shop-board"></section>
+    <div class="sec-head"><h2>Each site, as a shopper saw it</h2><p id="shop-sites-note"></p></div>
+    <section class="sites" id="shop-sites"></section>
+    <div class="sec-head"><h2>What each store shows a shopper</h2><p>The checks behind the scores, on the product page and its policies.</p></div>
+    <section class="table-wrap" id="shop-checks"></section>
+    <p class="note" id="shop-foot"></p>
   </div>
   <div id="tab-how" role="tabpanel" aria-labelledby="t-how" hidden>
     <p class="lead">Every run, the agents go in a fixed order. Each one reads what the earlier ones
@@ -1313,6 +1374,7 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
     fix_landing_page: 'Fix an ad landing page', improve_listing_conversion: 'Improve an Amazon page that converts poorly',
     fix_fit: 'Fix fit or the size chart', restock_style: 'Restock a style on dagacci.com',
     improve_product: 'Fix what buyers dislike', plan_launch: 'Plan a launch (new styles or colors)',
+    improve_shopping_experience: 'Fix what the mystery shopper missed on dagacci.com',
     opportunity: 'Raise an opportunity for another agent', escalation: 'Escalate a decision to you'};
   const TABLE = {products: 'products & costs', metrics_daily: 'daily sales', reviews: 'reviews', keywords: 'ad keywords',
     search_terms: 'search terms', external_campaigns: 'Meta / Google / TikTok campaigns', channel_listings: 'other-channel listings',
@@ -1423,8 +1485,63 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
       el('p', {class: 'note'}, el('a', {href: D.market_src, target: '_blank', rel: 'noopener', text: 'Open it full screen'})));
   };
 
+  // Mystery shopper
+  const SH = D.shopper;
+  if (!SH) document.getElementById('shop-lead').textContent = 'No mystery shop yet. Run amz-agents shop (the daily market workflow does it weekly).';
+  else {
+    const where = v => v.site === 'amazon' ? 'Amazon' : 'own site';
+    const isMe = v => v.brand === SH.self;
+    document.getElementById('shop-lead').textContent = 'The shopper is ' + SH.persona + '. Shopped ' + SH.date
+      + '. ' + (SH.voice === 'claude' ? 'The write-up is the shopper\u2019s own words (Claude), from the checks below.'
+        : 'The write-up is built from the checks below; add an Anthropic key for the shopper\u2019s own words.');
+    const V = SH.verdict, rank = (V.ranking || []).findIndex(r => r.brand === SH.self);
+    document.getElementById('shop-verdict').append(el('div', {class: 'verdict'},
+      el('div', {class: 'k', text: 'If I were buying scrubs today'}),
+      el('div', {class: 'v', text: V.choice ? V.choice + (V.site === 'amazon' ? ' on Amazon' : ' on its own site') : 'No pick'}),
+      el('p', {text: V.why || ''}),
+      rank >= 0 ? el('p', {style: 'margin-top:8px', text: SH.self + ' ranks #' + (rank + 1) + ' of ' + V.ranking.length + ' sites shopped.'}) : null));
+    const visits = [...SH.visits].sort((a, b) => (b.overall ?? -1) - (a.overall ?? -1));
+    const mini = x => x == null ? el('span', {class: 'n', text: '\u2014'}) : el('div', {class: 'mini'},
+      el('div', {class: 't'}, el('i', {style: 'width:' + x * 10 + '%'})), el('span', {text: x.toFixed(1)}));
+    document.getElementById('shop-board').append(el('table', {class: 'sb'},
+      el('thead', {}, el('tr', {}, el('th', {text: 'Site'}), el('th', {class: 'num', text: 'Overall'}),
+        SH.categories.map(c => el('th', {class: 'hide-sm', text: c})), el('th', {class: 'num', text: 'Set price'}),
+        el('th', {class: 'num hide-sm', text: 'Page'}))),
+      el('tbody', {}, visits.map(v => el('tr', {class: isMe(v) ? 'me' : ''},
+        el('td', {}, el('b', {text: v.brand}), ' \u00b7 ' + where(v)),
+        el('td', {class: 'num', style: 'font-weight:650', text: v.overall == null ? '\u2014' : v.overall.toFixed(1)}),
+        SH.categories.map(c => el('td', {class: 'hide-sm'}, mini(v.scores ? v.scores[c] : null))),
+        el('td', {class: 'num', text: usd(v.site === 'amazon' ? v.median_price : v.outfit)}),
+        el('td', {class: 'num hide-sm', text: v.page_kb ? (v.page_kb / 1024).toFixed(1) + ' MB' : '\u2014'}))))));
+    document.getElementById('shop-sites-note').textContent = 'Likes, dislikes, and what the shopper would change.';
+    const sites = document.getElementById('shop-sites');
+    for (const v of [...visits].sort((a, b) => isMe(b) - isMe(a))) {
+      const r = v.review || {}, p = v.product || {};
+      sites.append(el('div', {class: 'site' + (isMe(v) ? ' me' : '')},
+        el('div', {class: 'hd'}, el('span', {class: 'nm', text: v.brand + ' \u00b7 ' + where(v)}),
+          el('span', {class: 'sc', text: v.overall == null ? '' : v.overall.toFixed(1) + '/10'})),
+        p.url && /^https:\/\//.test(p.url) ? el('a', {class: 'pr', href: p.url, target: '_blank', rel: 'noopener', text: (p.title || '').slice(0, 80)})
+          : el('div', {class: 'pr', text: p.title || ''}),
+        el('p', {text: r.summary || ''}),
+        r.likes && r.likes.length ? [el('h5', {text: 'Likes'}), el('ul', {class: 'like'}, r.likes.map(t => el('li', {text: t})))] : null,
+        r.dislikes && r.dislikes.length ? [el('h5', {text: 'Dislikes'}), el('ul', {class: 'dislike'}, r.dislikes.map(t => el('li', {text: t})))] : null,
+        r.change && r.change.length ? [el('h5', {text: 'Would change'}), el('ul', {class: 'chg'}, r.change.map(t => el('li', {text: t})))] : null));
+    }
+    const stores = visits.filter(v => v.site === 'store' && !v.error).sort((a, b) => isMe(b) - isMe(a));
+    document.getElementById('shop-checks').append(el('table', {class: 'cl'},
+      el('thead', {}, el('tr', {}, el('th', {text: 'What a shopper looks for'}), stores.map(v => el('th', {class: isMe(v) ? 'me' : '', text: v.brand})))),
+      el('tbody', {}, SH.checks.map(c => el('tr', {}, el('td', {text: c.label}),
+        stores.map(v => el('td', {class: (isMe(v) ? 'me ' : '') + (v.found[c.key] ? 'y' : 'n'), title: v.found[c.key] || 'not found',
+          text: v.found[c.key] ? '\u2713' : '\u2013'})))),
+        el('tr', {}, el('td', {text: 'Product page weight'}), stores.map(v => el('td', {class: isMe(v) ? 'me' : '', text: (v.page_kb / 1024).toFixed(1) + ' MB'}))),
+        el('tr', {}, el('td', {text: 'Return window'}), stores.map(v => el('td', {class: isMe(v) ? 'me' : '', text: v.return_days ? v.return_days + ' days' : '\u2014'}))),
+        el('tr', {}, el('td', {text: 'Free shipping over'}), stores.map(v => el('td', {class: isMe(v) ? 'me' : '', text: v.free_ship_over ? '$' + v.free_ship_over : '\u2014'}))))));
+    document.getElementById('shop-foot').textContent = 'Not visited: ' + (SH.not_visited || []).map(n => n.where + ' (' + n.why + ')').join('; ')
+      + ' Amazon listings are judged from the market tracker\u2019s reads, not visited again. Checks read page text, so something shown only in an image counts as missing.';
+  }
+
   // Tabs (remembered in the URL hash so a link opens the right one)
-  const tabs = {work: ['t-work', 'tab-work'], market: ['t-market', 'tab-market'], how: ['t-how', 'tab-how']};
+  const tabs = {work: ['t-work', 'tab-work'], market: ['t-market', 'tab-market'], shop: ['t-shop', 'tab-shop'], how: ['t-how', 'tab-how']};
   const setTab = t => {
     for (const [k, [b, p]] of Object.entries(tabs)) {
       document.getElementById(b).setAttribute('aria-selected', String(k === t));

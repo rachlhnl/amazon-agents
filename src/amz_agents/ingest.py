@@ -397,6 +397,10 @@ def ingest_market(wh: Warehouse, root: Path | None = None) -> int:
     config = market.load_config(root)
     reviews = {k: market.reviews(k, root) for k, c in config.items() if c.get("judgeme_shop")}
     a = analyze.build(snaps, config, reviews)
+    from .market import shopper
+
+    if shop := shopper.latest(root):
+        a["recs"] += shopper.findings(shop)
     wh.execute("DELETE FROM market_recs")
     wh.insert_many("market_recs", [
         {"date": a["date"], "rank": r["when"], "area": r["area"], "effort": r["effort"],

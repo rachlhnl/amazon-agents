@@ -1,0 +1,707 @@
+{
+ "date": "2026-10-20",
+ "collected_at": "2026-10-20T17:15:50+00:00",
+ "persona": "a working nurse buying two scrub sets for 12-hour shifts, shopping on their phone between shifts; cares most about fit, comfort, pockets and price, and hates guessing sizes or paying return shipping",
+ "self": "Dagacci",
+ "visits": [
+  {
+   "brand": "Dagacci",
+   "site": "store",
+   "where": "www.dagacci.com",
+   "product": {
+    "title": "DAGACCI MEDICAL UNIFORM\u00ae Best Seller Unisex Scrub Sets",
+    "url": "https://www.dagacci.com/products/men-womens-unisex-medical-scrub-set-uniform-cotton-blended-classic-fit-v-neck-top-straight-leg-pants-breathable-wrinkle-resistant-anti-static-apparel-3-pocket-top-5-pocket-pants",
+    "price": 24.99,
+    "line": "Scrub sets",
+    "colors": 29,
+    "sizes": [
+     "XS(Men) / S (Women)",
+     "S(Men) / M (Women)",
+     "M(Men) / L(Women)",
+     "L(Men) / XL (Women)",
+     "XL(Men) / XXL(Women)",
+     "XXL(Men) / 3XL(Women)",
+     "3XL(Men) / 4XL (Women)",
+     "4XL(Men) / 5XL (Women)",
+     "5XL(Men) / 6XL (Women)"
+    ],
+    "images": 237,
+    "rating": 4.23,
+    "reviews": 139
+   },
+   "page_kb": 4894,
+   "load_s": 1.2,
+   "found": {
+    "size_guide": "SIZE GUIDE",
+    "fit_tool": null,
+    "fabric": null,
+    "care": "care instructions",
+    "model": null,
+    "pockets": "3 Pocket",
+    "lengths": "PETITE",
+    "reviews": "judgeme",
+    "free_returns": null,
+    "return_window": "14 days of your purchase date for a full refund",
+    "free_shipping": "Free Shipping",
+    "pay_later": null,
+    "help": null
+   },
+   "return_days": 14,
+   "free_ship_over": 50,
+   "outfit": 27.99,
+   "scores": {
+    "Ease of shopping": 3.5,
+    "Product information": 5.5,
+    "Trust & policies": 7.2,
+    "Price & value": 10.0
+   },
+   "overall": 6.5,
+   "review": {
+    "summary": "Shopped DAGACCI MEDICAL UNIFORM\u00ae Best Seller Unisex Scrub Sets ($24.99). Strongest on price & value, weakest on ease of shopping.",
+    "likes": [
+     "139 reviews at 4.2\u2605 on this product",
+     "Size guide right on the product page",
+     "Customer reviews on the page",
+     "Pocket count is clear",
+     "Petite and tall lengths"
+    ],
+    "dislikes": [
+     "The product page is heavy (4.8 MB): slow on a phone",
+     "Doesn't say what the fabric is made of",
+     "Returns aren't free",
+     "Nothing to help me pick a size",
+     "No model height or size to compare against"
+    ],
+    "change": [
+     "Cut the product page's weight (images, apps) to under 1.5 MB",
+     "List the fabric blend (e.g. 72% polyester, 21% rayon, 7% spandex)",
+     "Offer free exchanges at least, so sizing isn't a gamble"
+    ]
+   }
+  },
+  {
+   "brand": "Dagacci",
+   "site": "amazon",
+   "where": "Amazon",
+   "product": {
+    "title": "Dagacci Scrubs Medical Uniform Women and Man Scrubs Set Medical Scrubs Top and Pants",
+    "price": 24.99,
+    "rating": 4.0,
+    "reviews": 69281,
+    "url": "https://www.amazon.com/dp/B00FT739RA"
+   },
+   "median_price": 26.49,
+   "rating": 4.047839601403316,
+   "reviews": 87507,
+   "badge": true,
+   "error": null,
+   "scores": {
+    "Ease of shopping": 8.0,
+    "Trust & policies": 7.3,
+    "Price & value": 4.3
+   },
+   "overall": 6.5,
+   "review": {
+    "summary": "Dagacci Scrubs Medical Uniform Women and Man Scrubs Set Medical Scrubs at $24.99.",
+    "likes": [
+     "Prime shipping and Amazon's returns",
+     "Best Seller badge"
+    ],
+    "dislikes": [
+     "Rating is only 4.0\u2605",
+     "Hard to tell fit and fabric apart from other brands' listings"
+    ],
+    "change": [
+     "Put the size chart and fabric blend in the main images"
+    ]
+   }
+  },
+  {
+   "brand": "Cozyfit",
+   "site": "amazon",
+   "where": "Amazon",
+   "product": {
+    "title": "COZYFIT Scrubs for Women Set - Stretch V-Neck & Jogger Pant with 9 Pockets",
+    "price": 19.99,
+    "rating": 4.2,
+    "reviews": 14277,
+    "url": "https://www.amazon.com/dp/B0CL56RRPN"
+   },
+   "median_price": 19.99,
+   "rating": 4.245464717002971,
+   "reviews": 25919,
+   "badge": true,
+   "error": null,
+   "scores": {
+    "Ease of shopping": 8.0,
+    "Trust & policies": 8.5,
+    "Price & value": 6.4
+   },
+   "overall": 7.6,
+   "review": {
+    "summary": "COZYFIT Scrubs for Women Set - Stretch V-Neck & Jogger Pant with 9 Poc at $19.99.",
+    "likes": [
+     "Prime shipping and Amazon's returns",
+     "Best Seller badge"
+    ],
+    "dislikes": [
+     "Hard to tell fit and fabric apart from other brands' listings"
+    ],
+    "change": [
+     "Put the size chart and fabric blend in the main images"
+    ]
+   }
+  },
+  {
+   "brand": "Jaanuu",
+   "site": "store",
+   "where": "www.jaanuu.com",
+   "product": {
+    "title": "Jaanuu UltraLAST\u2122 Essential Performance Women's 6-Pocket Scrub Set - Pewter",
+    "url": "https://www.jaanuu.com/products/womens-jaanuu-ultralast-essential-performance-womens-6-pocket-scrub-set-pewter",
+    "price": 58.0,
+    "line": "Scrub sets",
+    "colors": 6,
+    "sizes": [
+     "XXS",
+     "XS",
+     "S",
+     "M",
+     "L",
+     "XL",
+     "1X",
+     "2X",
+     "3X"
+    ],
+    "images": 6,
+    "rating": null,
+    "reviews": null
+   },
+   "page_kb": 959,
+   "load_s": 1.4,
+   "found": {
+    "size_guide": "Size Guide",
+    "fit_tool": "Find My Size",
+    "fabric": "76% Polyester",
+    "care": "Machine wash",
+    "model": "Model is",
+    "pockets": "6-Pocket",
+    "lengths": null,
+    "reviews": "Yotpo",
+    "free_returns": "Free Returns",
+    "return_window": "returns and exchanges must be made within 30 days",
+    "free_shipping": "Free Shipping",
+    "pay_later": "Afterpay",
+    "help": "gorgias"
+   },
+   "return_days": 30,
+   "free_ship_over": 50,
+   "outfit": 64.5,
+   "scores": {
+    "Ease of shopping": 8.0,
+    "Product information": 10.0,
+    "Trust & policies": 10.0,
+    "Price & value": 6.9
+   },
+   "overall": 8.7,
+   "review": {
+    "summary": "Shopped Jaanuu UltraLAST\u2122 Essential Performance Women's 6-Pocket Scr ($58.00). Strongest on product information, weakest on price & value.",
+    "likes": [
+     "Size guide right on the product page",
+     "Fabric blend is spelled out: 76% Polyester",
+     "Customer reviews on the page",
+     "Free returns or exchanges",
+     "A fit finder suggests my size"
+    ],
+    "dislikes": [
+     "No petite or tall lengths"
+    ],
+    "change": [
+     "Offer or call out petite and tall lengths"
+    ]
+   }
+  },
+  {
+   "brand": "koi",
+   "site": "store",
+   "where": "www.koihappiness.com",
+   "product": {
+    "title": "Freesia Top | Betsey Johnson",
+    "url": "https://www.koihappiness.com/products/freesia-top-b101",
+    "price": 19.99,
+    "line": "Tops",
+    "colors": 4,
+    "sizes": [
+     "XXS",
+     "XS",
+     "S",
+     "M",
+     "L",
+     "XL",
+     "2X",
+     "3X"
+    ],
+    "images": 2,
+    "rating": null,
+    "reviews": null
+   },
+   "page_kb": 534,
+   "load_s": 0.4,
+   "found": {
+    "size_guide": "Size Guide",
+    "fit_tool": null,
+    "fabric": "73% polyester",
+    "care": null,
+    "model": null,
+    "pockets": null,
+    "lengths": null,
+    "reviews": "Yotpo",
+    "free_returns": null,
+    "return_window": "Returns will be accepted within 30 days",
+    "free_shipping": "Free shipping",
+    "pay_later": null,
+    "help": null
+   },
+   "return_days": 30,
+   "free_ship_over": 79,
+   "outfit": 47.98,
+   "scores": {
+    "Ease of shopping": 4.0,
+    "Product information": 5.5,
+    "Trust & policies": 6.2,
+    "Price & value": 8.5
+   },
+   "overall": 6.0,
+   "review": {
+    "summary": "Shopped Freesia Top | Betsey Johnson ($19.99). Strongest on price & value, weakest on ease of shopping.",
+    "likes": [
+     "Size guide right on the product page",
+     "Fabric blend is spelled out: 73% polyester",
+     "Customer reviews on the page",
+     "A clear return window",
+     "Free shipping is offered"
+    ],
+    "dislikes": [
+     "Returns aren't free",
+     "Nothing to help me pick a size",
+     "No model height or size to compare against",
+     "Doesn't say how many pockets",
+     "No petite or tall lengths"
+    ],
+    "change": [
+     "Offer free exchanges at least, so sizing isn't a gamble",
+     "Add a fit finder (height, weight, usual size)",
+     "Say the model's height and the size they wear"
+    ]
+   }
+  },
+  {
+   "brand": "Grey's Anatomy",
+   "site": "store",
+   "where": "www.greysanatomyscrubs.com",
+   "product": {
+    "title": "Reward Top - Wine",
+    "url": "https://www.greysanatomyscrubs.com/products/skechers-womens-3-pocket-notched-vneck-top-wine",
+    "price": 27.99,
+    "line": "Tops",
+    "colors": 1,
+    "sizes": [
+     "XXS",
+     "XS",
+     "S",
+     "M",
+     "L",
+     "XL",
+     "2XL",
+     "3XL",
+     "4XL",
+     "5XL"
+    ],
+    "images": 30,
+    "rating": null,
+    "reviews": null
+   },
+   "page_kb": 638,
+   "load_s": 0.9,
+   "found": {
+    "size_guide": null,
+    "fit_tool": "kiwiSizing",
+    "fabric": "54% Polyester",
+    "care": "Machine wash",
+    "model": null,
+    "pockets": "3 Pocket",
+    "lengths": "Petite",
+    "reviews": "Yotpo",
+    "free_returns": "free returns",
+    "return_window": "returns & exchanges within 30-days",
+    "free_shipping": "FREE SHIPPING",
+    "pay_later": "Shop Pay Installments",
+    "help": "reamaze"
+   },
+   "return_days": null,
+   "free_ship_over": null,
+   "outfit": 65.98,
+   "scores": {
+    "Ease of shopping": 10.0,
+    "Product information": 5.5,
+    "Trust & policies": 10.0,
+    "Price & value": 6.9
+   },
+   "overall": 8.1,
+   "review": {
+    "summary": "Shopped Reward Top - Wine ($27.99). Strongest on ease of shopping, weakest on product information.",
+    "likes": [
+     "Fabric blend is spelled out: 54% Polyester",
+     "Customer reviews on the page",
+     "Free returns or exchanges",
+     "A fit finder suggests my size",
+     "Pocket count is clear"
+    ],
+    "dislikes": [
+     "No size guide on the product page",
+     "No model height or size to compare against"
+    ],
+    "change": [
+     "Put the size chart on every product page",
+     "Say the model's height and the size they wear"
+    ]
+   }
+  },
+  {
+   "brand": "Cherokee",
+   "site": "store",
+   "where": "www.cherokeeuniforms.com",
+   "product": {
+    "title": "Unisex Scrub Set: V-Neck 1 Pocket Scrub Top & Drawstring 2-Pocket Cargo Scrub Pant",
+    "url": "https://www.cherokeeuniforms.com/products/unisex-scrub-set-v-neck-1-pocket-scrub-top-drawstring-2-pocket-cargo-scrub-pant",
+    "price": 32.0,
+    "line": "Scrub sets",
+    "colors": 1,
+    "sizes": [],
+    "images": 7,
+    "rating": null,
+    "reviews": null
+   },
+   "page_kb": 296,
+   "load_s": 0.7,
+   "found": {
+    "size_guide": "Size Guide",
+    "fit_tool": null,
+    "fabric": "100% polyester",
+    "care": null,
+    "model": null,
+    "pockets": "1 Pocket",
+    "lengths": "Tall",
+    "reviews": "yotpo",
+    "free_returns": "Free Return",
+    "return_window": "30 days Free Return",
+    "free_shipping": "Free shipping",
+    "pay_later": null,
+    "help": null
+   },
+   "return_days": 30,
+   "free_ship_over": 79,
+   "outfit": 63.0,
+   "scores": {
+    "Ease of shopping": 5.3,
+    "Product information": 7.3,
+    "Trust & policies": 10.0,
+    "Price & value": 7.1
+   },
+   "overall": 7.4,
+   "review": {
+    "summary": "Shopped Unisex Scrub Set: V-Neck 1 Pocket Scrub Top & Drawstring 2-P ($32.00). Strongest on trust & policies, weakest on ease of shopping.",
+    "likes": [
+     "Size guide right on the product page",
+     "Fabric blend is spelled out: 100% polyester",
+     "Customer reviews on the page",
+     "Free returns or exchanges",
+     "Pocket count is clear"
+    ],
+    "dislikes": [
+     "Nothing to help me pick a size",
+     "No model height or size to compare against",
+     "No washing instructions",
+     "No pay-later option",
+     "No live chat"
+    ],
+    "change": [
+     "Add a fit finder (height, weight, usual size)",
+     "Say the model's height and the size they wear",
+     "Add care instructions"
+    ]
+   }
+  },
+  {
+   "brand": "Healing Hands",
+   "site": "store",
+   "where": "www.healinghandsscrubs.com",
+   "product": {
+    "title": "Women's Scrub Set: Bree Built-In Bra Top & Blair Flare Leg Pant",
+    "url": "https://www.healinghandsscrubs.com/products/womens-scrub-set-bree-built-in-bra-top-blair-flare-leg-pant",
+    "price": 92.0,
+    "line": "Scrub sets",
+    "colors": 1,
+    "sizes": [],
+    "images": 7,
+    "rating": null,
+    "reviews": null
+   },
+   "page_kb": 284,
+   "load_s": 0.8,
+   "found": {
+    "size_guide": "Size Guide",
+    "fit_tool": null,
+    "fabric": "67% polyester",
+    "care": null,
+    "model": null,
+    "pockets": "1-Pocket",
+    "lengths": "Petite",
+    "reviews": "yotpo",
+    "free_returns": "Free Return",
+    "return_window": "30 days Free Return",
+    "free_shipping": "Free Shipping",
+    "pay_later": null,
+    "help": null
+   },
+   "return_days": 30,
+   "free_ship_over": 79,
+   "outfit": 80.5,
+   "scores": {
+    "Ease of shopping": 5.3,
+    "Product information": 7.3,
+    "Trust & policies": 10.0,
+    "Price & value": 6.2
+   },
+   "overall": 7.2,
+   "review": {
+    "summary": "Shopped Women's Scrub Set: Bree Built-In Bra Top & Blair Flare Leg P ($92.00). Strongest on trust & policies, weakest on ease of shopping.",
+    "likes": [
+     "Size guide right on the product page",
+     "Fabric blend is spelled out: 67% polyester",
+     "Customer reviews on the page",
+     "Free returns or exchanges",
+     "Pocket count is clear"
+    ],
+    "dislikes": [
+     "Nothing to help me pick a size",
+     "No model height or size to compare against",
+     "No washing instructions",
+     "No pay-later option",
+     "No live chat"
+    ],
+    "change": [
+     "Add a fit finder (height, weight, usual size)",
+     "Say the model's height and the size they wear",
+     "Add care instructions"
+    ]
+   }
+  },
+  {
+   "brand": "Mandala",
+   "site": "store",
+   "where": "www.mandalascrubs.com",
+   "product": {
+    "title": "Multi Wear Collar Top Eggplant",
+    "url": "https://www.mandalascrubs.com/products/multi-wear-collar-top-eggplant",
+    "price": 19.99,
+    "line": "Tops",
+    "colors": 1,
+    "sizes": [
+     "XXS",
+     "XS",
+     "S",
+     "M",
+     "L",
+     "XL",
+     "2XL",
+     "3XL",
+     "4XL",
+     "5XL"
+    ],
+    "images": 8,
+    "rating": null,
+    "reviews": null
+   },
+   "page_kb": 773,
+   "load_s": 0.7,
+   "found": {
+    "size_guide": "Size chart",
+    "fit_tool": null,
+    "fabric": "75% Polyester",
+    "care": "Machine Wash",
+    "model": null,
+    "pockets": "6 pockets",
+    "lengths": null,
+    "reviews": "Yotpo",
+    "free_returns": "FREE RETURNS",
+    "return_window": "30 Day Free Returns",
+    "free_shipping": "FREE SHIPPING",
+    "pay_later": null,
+    "help": null
+   },
+   "return_days": 30,
+   "free_ship_over": 50,
+   "outfit": 49.98,
+   "scores": {
+    "Ease of shopping": 4.0,
+    "Product information": 8.2,
+    "Trust & policies": 10.0,
+    "Price & value": 8.3
+   },
+   "overall": 7.6,
+   "review": {
+    "summary": "Shopped Multi Wear Collar Top Eggplant ($19.99). Strongest on trust & policies, weakest on ease of shopping.",
+    "likes": [
+     "Size guide right on the product page",
+     "Fabric blend is spelled out: 75% Polyester",
+     "Customer reviews on the page",
+     "Free returns or exchanges",
+     "Pocket count is clear"
+    ],
+    "dislikes": [
+     "Nothing to help me pick a size",
+     "No model height or size to compare against",
+     "No petite or tall lengths",
+     "No pay-later option",
+     "No live chat"
+    ],
+    "change": [
+     "Add a fit finder (height, weight, usual size)",
+     "Say the model's height and the size they wear",
+     "Offer or call out petite and tall lengths"
+    ]
+   }
+  },
+  {
+   "brand": "Medelita",
+   "site": "store",
+   "where": "www.medelita.com",
+   "product": {
+    "title": "Women's Scrub Set: Taiga Welt Pocket Top & Bosque Jogger Pant",
+    "url": "https://www.medelita.com/products/womens-scrub-set-taiga-welt-pocket-top-bosque-jogger-pant",
+    "price": 108.0,
+    "line": "Scrub sets",
+    "colors": 1,
+    "sizes": [],
+    "images": 9,
+    "rating": null,
+    "reviews": null
+   },
+   "page_kb": 286,
+   "load_s": 0.7,
+   "found": {
+    "size_guide": "Size Guide",
+    "fit_tool": null,
+    "fabric": "40% polyester",
+    "care": "Wash cold",
+    "model": null,
+    "pockets": "5-Pocket",
+    "lengths": null,
+    "reviews": "yotpo",
+    "free_returns": "Free Return",
+    "return_window": "30 days Free Return",
+    "free_shipping": "Free Shipping",
+    "pay_later": null,
+    "help": null
+   },
+   "return_days": 30,
+   "free_ship_over": 79,
+   "outfit": 108.0,
+   "scores": {
+    "Ease of shopping": 3.3,
+    "Product information": 8.2,
+    "Trust & policies": 10.0,
+    "Price & value": 4.9
+   },
+   "overall": 6.6,
+   "review": {
+    "summary": "Shopped Women's Scrub Set: Taiga Welt Pocket Top & Bosque Jogger Pan ($108.00). Strongest on trust & policies, weakest on ease of shopping.",
+    "likes": [
+     "Size guide right on the product page",
+     "Fabric blend is spelled out: 40% polyester",
+     "Customer reviews on the page",
+     "Free returns or exchanges",
+     "Pocket count is clear"
+    ],
+    "dislikes": [
+     "Nothing to help me pick a size",
+     "No model height or size to compare against",
+     "No petite or tall lengths",
+     "No pay-later option",
+     "No live chat"
+    ],
+    "change": [
+     "Add a fit finder (height, weight, usual size)",
+     "Say the model's height and the size they wear",
+     "Offer or call out petite and tall lengths"
+    ]
+   }
+  }
+ ],
+ "verdict": {
+  "choice": "Jaanuu",
+  "site": "store",
+  "score": 8.7,
+  "why": "Jaanuu on its own site (8.7/10): size guide right on the product page; fabric blend is spelled out: 76% Polyester; customer reviews on the page. Dagacci's best is 6.5/10 (its site): the product page is heavy (4.8 MB): slow on a phone; doesn't say what the fabric is made of. Dagacci is the cheaper buy ($27.99 vs $64.50 a set), so a shopper on a tight budget would still pick it.",
+  "ranking": [
+   {
+    "brand": "Jaanuu",
+    "site": "store",
+    "overall": 8.7
+   },
+   {
+    "brand": "Grey's Anatomy",
+    "site": "store",
+    "overall": 8.1
+   },
+   {
+    "brand": "Cozyfit",
+    "site": "amazon",
+    "overall": 7.6
+   },
+   {
+    "brand": "Mandala",
+    "site": "store",
+    "overall": 7.6
+   },
+   {
+    "brand": "Cherokee",
+    "site": "store",
+    "overall": 7.4
+   },
+   {
+    "brand": "Healing Hands",
+    "site": "store",
+    "overall": 7.2
+   },
+   {
+    "brand": "Medelita",
+    "site": "store",
+    "overall": 6.6
+   },
+   {
+    "brand": "Dagacci",
+    "site": "store",
+    "overall": 6.5
+   },
+   {
+    "brand": "Dagacci",
+    "site": "amazon",
+    "overall": 6.5
+   },
+   {
+    "brand": "koi",
+    "site": "store",
+    "overall": 6.0
+   }
+  ]
+ },
+ "voice": "checks",
+ "not_visited": [
+  {
+   "where": "Walmart",
+   "why": "Walmart blocks automated visits and its terms forbid them; check it by hand or connect Walmart Marketplace."
+  }
+ ]
+}

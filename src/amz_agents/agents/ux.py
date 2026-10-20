@@ -15,6 +15,8 @@ Everything here is work for a person (designers, developers); nothing executes.
 
 from __future__ import annotations
 
+import json
+import re
 from datetime import date, timedelta
 from urllib.parse import urlsplit
 
@@ -56,10 +58,12 @@ class UXAgent(Agent):
     name = "ux"
     role = Role(
         mission="Turn more visits into sales: store funnel, mobile, page speed and "
-                "accessibility, campaign landing pages, Amazon detail-page conversion.",
+                "accessibility, campaign landing pages, Amazon detail-page conversion, and a "
+                "weekly mystery shop of our store against the other brands.",
         team="ux",
         proposes={"fix_funnel_step": "L", "improve_page_speed": "M", "fix_accessibility": "M",
-                  "fix_landing_page": "M", "improve_listing_conversion": "M"},
+                  "fix_landing_page": "M", "improve_listing_conversion": "M",
+                  "improve_shopping_experience": "S"},
         needs=("web_funnel", "web_pages", "asin_traffic"),
     )
 
@@ -71,7 +75,23 @@ class UXAgent(Agent):
         self.aov, self.margin = self._store_economics()
         self.site_cr = self._site_conversion()
         return (self._funnel() + self._pages() + self._landing_pages()
-                + self._amazon_conversion())
+                + self._amazon_conversion() + self._mystery_shop())
+
+    def _mystery_shop(self) -> list[Action]:
+        """What the mystery shopper missed on our store that other brands show."""
+        out = []
+        for r in self.ctx.wh.query("SELECT * FROM market_recs WHERE area='Website' ORDER BY rank"):
+            out.append(Action(
+                agent=self.name, kind="improve_shopping_experience",
+                target=re.sub(r"[^a-z0-9]+", "-", r["title"].lower()).strip("-")[:80],
+                before=None,
+                after={"title": r["title"], "when": r["rank"], "area": r["area"],
+                       "steps": json.loads(r["actions"] or "[]"), "kpi": r["kpi"],
+                       "kpi_target": r["kpi_target"], "url": r["url"], "source": "market"},
+                reason=f"{r['see']} {r['why']}".strip(),
+                notes=f"{r['kpi']} now {r['kpi_now']}" if r["kpi"] and r["kpi_now"] else "",
+            ))
+        return out
 
     # -------------------------------------------------------------- helpers
     def _window(self, start_ago: int, end_ago: int, device: str | None = None) -> dict:

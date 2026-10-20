@@ -28,10 +28,15 @@ jobs:
           SP_API_CLIENT_SECRET: ${{ secrets.SP_API_CLIENT_SECRET }}
           SP_API_REFRESH_TOKEN: ${{ secrets.SP_API_REFRESH_TOKEN }}
         run: amz-agents market
+      - name: Mystery shop (weekly)
+        env:
+          # Optional: with this set, the shopper's write-up is in its own words.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: amz-agents shop --if-due
       - name: Commit snapshot and dashboard
         run: |
           git config user.name "market-tracker[bot]"
           git config user.email "market-tracker@users.noreply.github.com"
-          git add market/history market/reviews market/index.html
+          git add market/history market/reviews market/shopper market/index.html
           git diff --cached --quiet || git commit -m "Market snapshot $(date -u +%F)"
           git push

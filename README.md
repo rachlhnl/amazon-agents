@@ -210,6 +210,22 @@ needs a token generated for that server process, and it listens on localhost onl
 unless you pass `--host`. Approved human-only work stays "in progress" until
 someone marks it done (`amz-agents done ID`, or the button).
 
+## Mystery shopper
+
+`amz-agents shop` (weekly, from the Market tracker workflow) shops every brand's
+store the way a working nurse buying scrubs on their phone would: the product a
+shopper is likeliest to land on, its details, and the shipping and returns
+policies. It checks what a buyer looks for (size guide, fit help, fabric, care,
+model size, pockets, petite/tall, reviews, free returns, return window, free
+shipping, pay later, live chat, page weight), scores four areas (ease of
+shopping, product information, trust and policies, price and value), writes what
+the shopper likes, dislikes and would change, and says where they'd buy. With
+`ANTHROPIC_API_KEY` set the write-up is in the shopper's own words. Amazon
+listings are judged from the market tracker's reads, not visited again; Walmart
+isn't visited (it blocks automated visits and its terms forbid them). Results go
+to `market/shopper/`; what our own store is missing becomes UX work and shows in
+the tracker's Mystery shopper tab.
+
 ## Daily schedule
 
 `scripts/daily.sh` refreshes data (`amz-agents ingest`, which also loads the
