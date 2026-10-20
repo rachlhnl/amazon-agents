@@ -96,7 +96,7 @@ def _post(url, body, token):
 def test_server_read_only_refuses_changes(ctx):
     srv, url, _ = _server(ctx, allow=False)
     try:
-        assert "Agent tracker" in urllib.request.urlopen(url).read().decode()
+        assert "Agent work tracker" in urllib.request.urlopen(url).read().decode()
         with pytest.raises(urllib.error.HTTPError) as e:
             _post(url, {"id": 3, "op": "reject"}, "guess")
         assert e.value.code == 403
