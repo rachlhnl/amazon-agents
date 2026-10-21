@@ -148,13 +148,15 @@ def update_velocity(wh: Warehouse, today: date | None = None) -> None:
 
 
 def ingest_metrics_daily(
-    wh: Warehouse, sp: SPAPIClient, ads: AdsClient, days: int = BACKFILL_DAYS,
+    wh: Warehouse, sp: SPAPIClient, ads: AdsClient | None, days: int = BACKFILL_DAYS,
     today: date | None = None,
 ) -> int:
     """metrics_daily (date, sku, units, revenue, ad_spend, ad_sales).
     Units and revenue -> GET_FLAT_FILE_ALL_ORDERS_DATA_BY_ORDER_DATE_GENERAL (one report
     for the whole window, cancelled orders excluded). Ad spend/sales -> Ads Reporting v3
-    spAdvertisedProduct, daily by advertisedSku (7-day attribution)."""
+    spAdvertisedProduct, daily by advertisedSku (7-day attribution). Without Ads API
+    access (`ads` None, e.g. an agency runs the ads), only units and revenue are written
+    and ad columns already loaded with `amz-agents import metrics_daily` are kept."""
     today = today or date.today()
     start, end = today - timedelta(days=days), today - timedelta(days=1)
     by_day: dict[tuple[str, str], dict[str, float]] = defaultdict(
@@ -174,15 +176,22 @@ def ingest_metrics_daily(
             m["units"] += int(r.get("quantity") or 0)
             m["revenue"] += float(r.get("item-price") or 0)  # blank while pending
 
-        for r in ads.report(
+        for r in (ads.report(
             "spAdvertisedProduct", a.isoformat(), b.isoformat(),
             group_by=["advertiser"], columns=["date", "advertisedSku", "cost", "sales7d"],
             time_unit="DAILY",
-        ):
+        ) if ads else []):
             m = by_day[(r["date"], r["advertisedSku"])]
             m["ad_spend"] += float(r.get("cost") or 0)
             m["ad_sales"] += float(r.get("sales7d") or 0)
 
+    if ads is None:
+        wh.conn.executemany(
+            "INSERT INTO metrics_daily (date, sku, units, revenue) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(date, sku) DO UPDATE SET units=excluded.units, revenue=excluded.revenue",
+            [(d, sku, m["units"], round(m["revenue"], 2)) for (d, sku), m in sorted(by_day.items())])
+        wh.conn.commit()
+        return len(by_day)
     wh.insert_many("metrics_daily", [
         {"date": d, "sku": sku, **{k: round(v, 2) for k, v in m.items()}}
         for (d, sku), m in sorted(by_day.items())
@@ -670,8 +679,11 @@ def run_all(wh: Warehouse, only: set[str] | None = None) -> dict[str, Any]:
         except Exception as e:  # noqa: BLE001 - report and continue with other jobs
             results[name] = f"failed: {e!r}"
 
-    if os.getenv("SP_API_REFRESH_TOKEN") and os.getenv("ADS_API_REFRESH_TOKEN"):
-        sp, ads = SPAPIClient.from_env(), AdsClient.from_env()
+    if os.getenv("SP_API_REFRESH_TOKEN"):
+        # Ads API is optional: without it, ad spend comes from an import (e.g. an agency's
+        # report) and the ads job is skipped.
+        sp = SPAPIClient.from_env()
+        ads = AdsClient.from_env() if os.getenv("ADS_API_REFRESH_TOKEN") else None
         seller = os.getenv("SP_API_SELLER_ID", "")
         if want("products"):
             run("products", lambda: ingest_products(wh, sp, seller))
@@ -679,7 +691,7 @@ def run_all(wh: Warehouse, only: set[str] | None = None) -> dict[str, Any]:
             run("metrics", lambda: ingest_metrics_daily(wh, sp, ads))
         if want("inventory"):
             run("inventory", lambda: ingest_inventory(wh, sp))
-        if want("ads"):
+        if want("ads") and ads:
             run("ads", lambda: ingest_ads(wh, ads))
         if want("listing_assets"):
             run("listing_assets", lambda: ingest_listing_assets(wh, sp))

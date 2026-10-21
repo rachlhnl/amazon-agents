@@ -182,6 +182,18 @@ def test_metrics_daily_from_orders_and_ads(amazon, wh):
     assert fake.polls >= 2  # waited for the report
 
 
+def test_metrics_daily_without_ads_api_keeps_imported_ad_spend(amazon, wh):
+    _, sp, _ = amazon
+    wh.insert_many("metrics_daily", [{"date": "2026-10-17", "sku": "SKU1", "units": 0,
+                                      "revenue": 0, "ad_spend": 7.5, "ad_sales": 30.0}])
+    ingest_metrics_daily(wh, sp, None, days=10, today=TODAY)
+    m = {(r["date"], r["sku"]): r for r in wh.query("SELECT * FROM metrics_daily")}
+    assert m[("2026-10-17", "SKU1")]["units"] == 3
+    assert m[("2026-10-17", "SKU1")]["revenue"] == 89.97
+    assert m[("2026-10-17", "SKU1")]["ad_spend"] == 7.5  # from the agency's report
+    assert m[("2026-10-18", "SKU2")]["ad_spend"] is None
+
+
 def test_long_backfill_is_split_into_report_sized_chunks(amazon, wh):
     fake, sp, ads = amazon
     ingest_metrics_daily(wh, sp, ads, days=60, today=TODAY)

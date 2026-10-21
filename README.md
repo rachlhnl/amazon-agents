@@ -271,7 +271,10 @@ and the narrative in the daily brief. Everything else runs without it.
 1. Register as an SP-API developer and an Amazon Ads API partner. For a single
    company's own account, a self-authorized private SP-API app is enough.
 2. Fill in `.env` (LWA client ID/secret and refresh tokens for both APIs,
-   Ads profile ID, `SP_API_SELLER_ID`).
+   Ads profile ID, `SP_API_SELLER_ID`). SP-API alone is enough for sales, stock
+   and listings; if an agency runs your ads and you have no Ads API access, load
+   their daily spend with `amz-agents import metrics_daily FILE` (columns `date`,
+   `sku`, `ad_spend`, `ad_sales`) and the nightly ingest keeps it.
 3. Load data with `amz-agents ingest --costs costs.csv` (nightly, before `run`).
    It runs every job whose credentials are set:
 
