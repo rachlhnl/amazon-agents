@@ -51,6 +51,10 @@ class Orchestrator:
         self.outcomes: list[dict] = []
 
     def run(self) -> list[tuple[int, Action]]:
+        from . import assumptions
+
+        # Blank costs, fees and lead times get the brand's averages, flagged as assumed.
+        assumptions.apply(self.ctx.wh)
         # Judge last week's changes first, so today's brief reflects them.
         self.outcomes = self.chief.evaluate_outcomes()
 

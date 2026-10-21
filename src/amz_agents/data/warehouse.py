@@ -288,6 +288,8 @@ class Warehouse:
                         ("goal", "TEXT"), ("executed_at", "TEXT"), ("team", "TEXT"),
                         ("effort", "TEXT"), ("roi", "REAL"), ("priority", "TEXT"),
                         ("done_at", "TEXT")],
+            # fields filled by amz_agents.assumptions, e.g. "fees landed_cost"
+            "products": [("assumed", "TEXT")],
         }
         for table, cols in added.items():
             have = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}

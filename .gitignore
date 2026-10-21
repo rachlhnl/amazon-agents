@@ -11,3 +11,4 @@ data/*.db
 data/*.duckdb
 reports/
 plan.local.toml
+goals.local.toml

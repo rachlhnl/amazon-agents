@@ -84,6 +84,9 @@ def ingest_products(wh: Warehouse, sp: SPAPIClient, seller_id: str) -> int:
             "units_on_hand": old.get("units_on_hand", 0),
             "units_inbound": old.get("units_inbound", 0),
             "daily_velocity": old.get("daily_velocity", 0),
+            # fees are real now; an assumed landed cost or lead time stays flagged
+            "assumed": " ".join(f for f in (old.get("assumed") or "").split() if f != "fees")
+                       or None,
         })
     wh.insert_many("products", rows)
     return len(rows)
@@ -262,6 +265,8 @@ def ingest_ads(wh: Warehouse, ads: AdsClient, today: date | None = None) -> tupl
 def ingest_costs_csv(wh: Warehouse, path: str | Path) -> int:
     """landed_cost and lead_time_days from your ERP/COGS sheet: columns
     sku, landed_cost, lead_time_days."""
+    from . import assumptions
+
     n = 0
     with open(path, newline="") as f:
         for r in csv.DictReader(f):
@@ -269,6 +274,7 @@ def ingest_costs_csv(wh: Warehouse, path: str | Path) -> int:
                 "UPDATE products SET landed_cost=?, lead_time_days=? WHERE sku=?",
                 (float(r["landed_cost"]), int(r["lead_time_days"]), r["sku"]),
             ).rowcount
+            assumptions.clear(wh, r["sku"], "landed_cost", "lead_time_days")
     wh.conn.commit()
     return n
 

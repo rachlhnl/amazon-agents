@@ -84,7 +84,14 @@ class Goal:
 
 
 def load_goals(path: str | Path | None = None) -> list[Goal]:
-    path = Path(path or os.getenv("GOALS_PATH", "goals.toml"))
+    """GOALS_PATH, else goals.local.toml (git-ignored: the company's real targets), else
+    the example goals.toml."""
+    if not path:
+        # A GOALS_PATH still on the shipped example (copied from .env.example) doesn't
+        # hide the company's own goals.local.toml.
+        local, env = Path("goals.local.toml"), os.getenv("GOALS_PATH")
+        path = env if env and env != "goals.toml" else (local if local.exists() else "goals.toml")
+    path = Path(path)
     if not path.exists():
         return []
     with path.open("rb") as f:
@@ -148,12 +155,14 @@ class ChiefOfStaff:
         return effort
 
     def _priority(self, a: Action) -> tuple[float | None, str]:
+        # The proposer says it can't wait (market tracker, a best seller out of stock).
+        urgent = isinstance(a.after, dict) and a.after.get("when") == 1
         if a.impact_usd is None:
-            # No dollar estimate, but the market tracker says it can't wait.
-            urgent = isinstance(a.after, dict) and a.after.get("when") == 1
             return None, "now" if urgent else "judgment"
         hours = EFFORT_HOURS.get(a.effort)
         roi = round(a.impact_usd / (hours * HOURLY_COST), 1) if hours else None
+        if urgent and a.impact_usd > 0:
+            return roi, "now"
         if a.impact_usd <= 0:
             return roi, "low"
         if a.impact_usd >= HIGH_IMPACT and (roi is None or roi >= HIGH_ROI):
@@ -264,7 +273,7 @@ class ChiefOfStaff:
                     if "fair pricing" in a.reason else "")
             return round(impact, 2), "low", note
 
-        if a.kind == "reorder" and p and p["lead_time_days"] is not None:
+        if a.kind == "reorder" and p and p["lead_time_days"] is not None and "lines" not in a.after:
             gap = max(0.0, p["lead_time_days"] + SAFETY_DAYS - days_of_cover(p))
             at_risk = gap * p["daily_velocity"] * self._unit_profit(p)
             return round(at_risk, 2), "high", f"{gap:.0f} days of sales at risk if not ordered"
@@ -278,12 +287,15 @@ class ChiefOfStaff:
             sku = None if g.scope == "all" else g.scope
             cur = self._window(sku, WINDOW, 1)
             if g.metric == "tacos":
-                value = cur["ad_spend"] / cur["revenue"] if cur["revenue"] else None
+                # no ad spend recorded (no Ads API) is unknown, not 0%
+                value = cur["ad_spend"] / cur["revenue"] if cur["revenue"] and cur["ad_spend"] \
+                    else None
                 on_track = value is not None and value <= g.target
                 out.append({
                     "goal": g, "target": f"≤ {g.target:.0%}",
                     "actual": f"{value:.1%}" if value is not None else "n/a",
-                    "status": "on track" if on_track else "behind", "pct": value,
+                    "status": "no data" if value is None else "on track" if on_track else "behind",
+                    "pct": value,
                 })
                 continue
             base = self._window(sku, 28, 15)
@@ -778,7 +790,7 @@ def _describe(a: Action) -> str:
     if a.kind == "add_keyword":
         return f"Add exact '{a.after['keyword']}' at {a.after['bid']:.2f}"
     if a.kind == "reorder":
-        return f"Reorder {a.after['order_units']:,} × {a.target}"
+        return a.after.get("title") or f"Reorder {a.after['order_units']:,} × {a.target}"
     if a.kind == "update_listing_copy":
         return f"Revise listing {a.target}"
     if a.kind == "flag_defect":

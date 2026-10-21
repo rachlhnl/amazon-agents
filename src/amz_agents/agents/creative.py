@@ -247,6 +247,7 @@ class CreativeAgent(Agent):
         assets = {r["sku"]: r for r in ctx.wh.query("SELECT * FROM listing_assets")}
         traffic = {r["sku"]: r for r in ctx.wh.query("SELECT * FROM asin_traffic")}
         out: list[Action] = []
+        same_fix: dict[tuple[str, ...], list[dict[str, Any]]] = {}
         for p in ctx.wh.query("SELECT * FROM products ORDER BY sku"):
             a = assets.get(p["sku"])
             if a:
@@ -277,15 +278,24 @@ class CreativeAgent(Agent):
                     ))
             issues = review_copy(p["title"] or "", "listing_title", self.brand)
             if issues:
-                out.append(Action(
-                    agent=self.name, kind="fix_listing_title", target=p["sku"], sku=p["sku"],
-                    before={"title": p["title"]},
-                    after={"title": f"Fix the {p['sku']} title", "issues": issues,
-                           "recommendation": "Rewrite without the flagged words; Amazon can "
-                                             "suppress listings for promotional claims.",
-                           "impact_usd": None, "confidence": "medium"},
-                    reason="title " + "; ".join(issues),
-                ))
+                same_fix.setdefault(tuple(issues), []).append(p)
+        # One piece of work per problem, not one card per size and color.
+        for issues, ps in same_fix.items():
+            skus = [p["sku"] for p in sorted(ps, key=lambda p: -(p["daily_velocity"] or 0))]
+            out.append(Action(
+                agent=self.name, kind="fix_listing_title",
+                target=skus[0] if len(skus) == 1 else f"titles/{len(skus)}:{skus[0]}",
+                sku=skus[0] if len(skus) == 1 else None,
+                before={"title": ps[0]["title"], "skus": skus},
+                after={"title": (f"Fix the {skus[0]} title" if len(skus) == 1 else
+                                 f"Fix {len(skus)} listing titles ({'; '.join(issues)})"),
+                       "issues": list(issues), "skus": skus,
+                       "recommendation": "Rewrite without the flagged words; Amazon can "
+                                         "suppress listings for promotional claims.",
+                       "impact_usd": None, "confidence": "medium"},
+                reason="title " + "; ".join(issues) + (f" on {len(skus)} listings, best seller "
+                                                       f"{skus[0]}" if len(skus) > 1 else ""),
+            ))
         return out
 
 

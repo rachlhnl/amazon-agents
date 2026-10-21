@@ -90,3 +90,26 @@ def test_outline_drafts_are_rewritten_once_claude_is_available(ctx, tmp_path, mo
     monkeypatch.setattr(plan.llm, "complete", lambda *a, **k: "A written memo.")
     plan.sync(ctx.wh, model="claude-test")
     assert after()["draft_text"] == {"by": "product", "voice": "claude", "text": "A written memo."}
+
+
+def test_items_taken_out_of_the_plan_leave_the_tracker(ctx, tmp_path, monkeypatch):
+    path = tmp_path / "plan.toml"
+    path.write_text(PLAN + PLAN.replace('"sizing"', '"other"').replace("rank = 1", "rank = 2"))
+    plan.sync(ctx.wh, path=path)
+    assert ctx.wh.query("SELECT COUNT(*) AS n FROM actions WHERE agent='ceo' AND "
+                        "status='acknowledged'")[0]["n"] == 2
+    path.write_text(PLAN)
+    plan.sync(ctx.wh, path=path)
+    rows = {r["target"]: r["status"] for r in ctx.wh.query("SELECT * FROM actions WHERE agent='ceo'")}
+    assert rows == {"plan/sizing": "acknowledged", "plan/other": "superseded"}
+
+
+def test_stock_kpi_counts_out_of_stock_best_sellers(ctx):
+    ctx.wh.execute("UPDATE products SET units_on_hand=0 WHERE sku='BTL-32-BLK'")
+    m = plan.measure({"measure": "stock:core_out", "target": "0"}, wh=ctx.wh)
+    assert m["now"] == "1" and m["met"] is False
+
+
+def test_units_kpi_reads_the_last_seven_days(ctx):
+    m = plan.measure({"measure": "units7:BTL-32-BLK", "target": "≥ 5/day"}, wh=ctx.wh)
+    assert m["now"].endswith("/day") and m["met"] is not None

@@ -25,7 +25,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
 
-from . import quartile
+from . import assumptions, quartile
 from .actions import HUMAN_ONLY, Action, ActionLog
 from .agents import ads, listing, pricing, reviews, sales, ux
 from .agents import chief_of_staff as cos
@@ -337,21 +337,38 @@ def scorecard(wh: Warehouse) -> dict[str, Any] | None:
         return None
     end = date.fromisoformat(last)
 
-    def week(ago: int) -> dict[str, float | None]:
+    # Without daily ad spend (no Ads API), use an agency export's daily average.
+    q = wh.query("SELECT period_start, period_end, SUM(ad_spend) AS spend FROM ad_products "
+                 "GROUP BY period_start, period_end ORDER BY period_end DESC LIMIT 1")
+    agency_day = (q[0]["spend"] / ((date.fromisoformat(q[0]["period_end"])
+                                    - date.fromisoformat(q[0]["period_start"])).days + 1)
+                  if q and q[0]["spend"] else None)
+
+    def week(ago: int) -> dict[str, Any]:
         hi, lo = end - timedelta(days=ago), end - timedelta(days=ago + 6)
         rows = wh.query(
             "SELECT COALESCE(SUM(m.units),0) AS units, COALESCE(SUM(m.revenue),0) AS revenue, "
             "COALESCE(SUM(m.ad_spend),0) AS ad_spend, "
             "SUM(m.units * (p.landed_cost + p.fees)) AS cogs, "
-            "SUM(CASE WHEN p.landed_cost IS NULL OR p.fees IS NULL THEN m.units END) AS uncosted "
+            "SUM(CASE WHEN p.landed_cost IS NOT NULL AND p.fees IS NOT NULL THEN m.revenue END) "
+            "AS costed_rev, "
+            "SUM(CASE WHEN COALESCE(p.assumed, '') != '' THEN m.units END) AS assumed_units "
             "FROM metrics_daily m LEFT JOIN products p ON p.sku = m.sku "
             "WHERE m.date BETWEEN ? AND ?", (lo.isoformat(), hi.isoformat()))[0]
         rev, spend = rows["revenue"], rows["ad_spend"]
-        profit = rev - rows["cogs"] - spend if rows["cogs"] is not None and not rows["uncosted"] \
-            else None
+        spend_used = spend or (agency_day * 7 if agency_day else 0)
+        covered = (rows["costed_rev"] or 0) / rev if rev else 0
+        # Profit once 90% of sales have a cost (real or assumed); the rest is left out.
+        profit = (rows["costed_rev"] - rows["cogs"] - spend_used * covered
+                  if rows["cogs"] is not None and covered >= 0.9 else None)
+        notes = [n for n in (
+            "estimate: assumed costs" if rows["assumed_units"] else "",
+            "ad spend from Quartile's daily average" if not spend and agency_day else "",
+            f"{1 - covered:.0%} of sales have no cost" if profit is not None and covered < 0.995 else "",
+        ) if n]
         # No ad spend recorded (no Ads API; an agency's export has no days): unknown, not 0%.
         return {"revenue": rev, "units": rows["units"], "ad_spend": spend, "profit": profit,
-                "tacos": spend / rev if rev and spend else None}
+                "profit_note": "; ".join(notes), "tacos": spend / rev if rev and spend else None}
 
     return {"through": last, "now": week(0), "prior": week(7)}
 
@@ -388,9 +405,17 @@ def setup_gaps(wh: Warehouse, goals: list[dict[str, Any]],
     else:
         uncosted = wh.query("SELECT COUNT(*) AS n FROM products "
                             "WHERE landed_cost IS NULL OR fees IS NULL")[0]["n"]
+        assumed = wh.query("SELECT COUNT(*) AS n FROM products "
+                           "WHERE COALESCE(assumed, '') != ''")[0]["n"]
+        if assumed:
+            d = assumptions.defaults()
+            gaps.append(f"{assumed:,} products use assumed costs (landed cost {d['landed_cost']:.0%} "
+                        f"of price, Amazon fees {d['fees']:.1%}, {d['lead_time_days']:.0f}-day lead "
+                        "time): profit, ROI and reorder sizes are estimates, and prices aren't "
+                        "changed for them. Load COSTS_CSV with real landed costs and lead times.")
         if uncosted:
-            gaps.append(f"{uncosted} products have no landed cost, so profit, price floors "
-                        "and ROI can't be worked out for them: load COSTS_CSV.")
+            gaps.append(f"{uncosted:,} products have no price or cost at all, so they're left out "
+                        "of profit and ROI.")
     if not goals:
         gaps.append("No company goals: add them to goals.toml so the chief of staff can "
                     "rank work by what matters.")
@@ -1157,7 +1182,10 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
   meta.append(el('span', {text: 'Sales data through ' + (D.data_through || 'n/a')}));
 
   // Setup problems: decisions are only as good as these.
-  const gaps = [...(D.sample ? ['This is sample data (a water-bottle company from amz-agents demo), not Dagacci.'] : []), ...D.setup_gaps];
+  // An agent that only lacks a data feed is a setup gap, not a decision: one line here.
+  const waiting = D.agents.filter(a => a.problems.length && a.problems.every(p => p.startsWith('no data in')));
+  const gaps = [...(D.sample ? ['This is sample data (a water-bottle company from amz-agents demo), not Dagacci.'] : []), ...D.setup_gaps,
+    ...(waiting.length ? ['Agents idle until their data is connected: ' + waiting.map(a => NAME(a.name) + ' (' + a.problems.map(p => p.replace('no data in ', '')).join(', ') + ')').join('; ') + '.'] : [])];
   if (gaps.length) document.getElementById('setup').append(el('div', {class: 'warn-box'},
     el('b', {text: 'Fix before trusting these numbers: '}), 'the agents are only as good as the data and goals they get.',
     el('ul', {}, gaps.map(g => el('li', {text: g})))));
@@ -1176,7 +1204,7 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
   const biz = el('div', {class: 'panel'}, el('h2', {text: S ? 'This week (7 days to ' + S.through + ')' : 'This week'}));
   if (S) {
     biz.append(el('div', {class: 'kpis', style: 'margin-top:12px'},
-      stile('Contribution profit', usd(S.now.profit), chg(S.now.profit, S.prior.profit), S.now.profit == null ? 'needs product costs' : null),
+      stile('Contribution profit', usd(S.now.profit), chg(S.now.profit, S.prior.profit), S.now.profit == null ? 'needs product costs' : S.now.profit_note || null),
       stile('Revenue', usd(S.now.revenue), chg(S.now.revenue, S.prior.revenue)),
       stile('Units', fmt(S.now.units), chg(S.now.units, S.prior.units)),
       S.now.tacos == null && D.ads
@@ -1194,7 +1222,7 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
   } else biz.append(el('p', {class: 'optim', text: 'No sales data yet. Once Seller Central is connected this shows revenue, profit, units and ad efficiency each week.'}));
   biz.append(el('p', {class: 'optim'}, el('b', {text: 'What the agents optimize: '}),
     'contribution profit (sales \u2212 product cost \u2212 Amazon fees \u2212 ad spend). Every suggestion is ranked by how much profit it should add over 30 days per hour of your team\u2019s time, then checked against the goals on the right.'));
-  const gl = el('div', {class: 'panel'}, el('h2', {text: 'Goals'}), el('p', {class: 'optim', style: 'margin-top:2px', text: 'From goals.toml. Last 7 days vs days 15\u201328 ago.'}));
+  const gl = el('div', {class: 'panel'}, el('h2', {text: 'Goals'}), el('p', {class: 'optim', style: 'margin-top:2px', text: 'From the goals file (goals.local.toml). Last 7 days vs days 15\u201328 ago.'}));
   const GS = {'on track': 'good', behind: 'you', 'off track': 'bad', 'no data': ''};
   if (!D.goals.length) gl.append(el('p', {class: 'optim', text: 'No goals set. Add them to goals.toml.'}));
   for (const g of D.goals) gl.append(el('div', {class: 'goal'}, el('div', {text: g.name}),
@@ -1241,7 +1269,7 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
   // Work only a person can move goes first, then the best ideas.
   const mustAct = a => needsOk(a) || needsDone(a) || a.status === 'failed' ? 0 : 1;
   const todos = D.actions.filter(isTodo).sort((x, y) => mustAct(x) - mustAct(y) || byPri(x, y));
-  const sick = D.agents.filter(a => a.problems.length);
+  const sick = D.agents.filter(a => a.problems.some(p => !p.startsWith('no data in')));
   const hl = document.getElementById('headline');
   if (!D.run) {
     hl.append('Nothing to track yet. Run ', el('b', {text: 'amz-agents run'}),
@@ -1508,7 +1536,7 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
     update_listing_copy: 'Rewrite listing copy', update_campaign_budget: 'Change a campaign budget',
     pause_campaign: 'Pause a campaign', email_campaign: 'Draft an email campaign',
     update_channel_price: 'Change a price on another channel', list_on_channel: 'List on a new channel',
-    send_outreach: 'Draft wholesale outreach', refresh_creative: 'Refresh a tired ad', pause_creative: 'Pause an ad',
+    send_outreach: 'Draft wholesale outreach', review_channel_pricing: 'Set a pricing rule across channels', refresh_creative: 'Refresh a tired ad', pause_creative: 'Pause an ad',
     new_creative_variants: 'Make variants of a winning ad', improve_listing_assets: 'Add Amazon images, video or A+',
     fix_listing_title: 'Fix a listing title', fix_funnel_step: 'Fix a store checkout step',
     improve_page_speed: 'Speed up a page', fix_accessibility: 'Fix an accessibility issue',
