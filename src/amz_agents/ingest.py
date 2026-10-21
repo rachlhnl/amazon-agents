@@ -186,12 +186,9 @@ def ingest_metrics_daily(
             m["ad_sales"] += float(r.get("sales7d") or 0)
 
     if ads is None:
-        wh.conn.executemany(
-            "INSERT INTO metrics_daily (date, sku, units, revenue) VALUES (?, ?, ?, ?) "
-            "ON CONFLICT(date, sku) DO UPDATE SET units=excluded.units, revenue=excluded.revenue",
-            [(d, sku, m["units"], round(m["revenue"], 2)) for (d, sku), m in sorted(by_day.items())])
-        wh.conn.commit()
-        return len(by_day)
+        return wh.upsert("metrics_daily", [
+            {"date": d, "sku": sku, "units": m["units"], "revenue": round(m["revenue"], 2)}
+            for (d, sku), m in sorted(by_day.items())], ["date", "sku"])
     wh.insert_many("metrics_daily", [
         {"date": d, "sku": sku, **{k: round(v, 2) for k, v in m.items()}}
         for (d, sku), m in sorted(by_day.items())
@@ -654,13 +651,7 @@ def import_csv(wh: Warehouse, table: str, path: str | Path) -> int:
     if not rows:
         return 0
     if pk and set(pk) <= set(rows[0]):
-        fields = list(rows[0])
-        updates = [c for c in fields if c not in pk] or fields[:1]
-        sql = (f"INSERT INTO {table} ({','.join(fields)}) VALUES ({','.join('?' * len(fields))}) "
-               f"ON CONFLICT({','.join(pk)}) DO UPDATE SET "
-               + ",".join(f"{c}=excluded.{c}" for c in updates))
-        wh.conn.executemany(sql, [tuple(r[c] for c in fields) for r in rows])
-        wh.conn.commit()
+        wh.upsert(table, rows, pk)
     else:
         wh.insert_many(table, rows)
     return len(rows)

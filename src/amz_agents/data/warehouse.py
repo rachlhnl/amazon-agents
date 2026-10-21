@@ -296,6 +296,22 @@ class Warehouse:
                     self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
         self.conn.commit()
 
+    def upsert(self, table: str, rows: list[dict[str, Any]], key: list[str]) -> int:
+        """Insert rows, or update only the columns each row gives when its key exists,
+        so other columns (costs, ad spend loaded from elsewhere) are kept."""
+        by_cols: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+        for r in rows:
+            by_cols.setdefault(tuple(r), []).append(r)
+        for cols, group in by_cols.items():
+            sets = [c for c in cols if c not in key] or [cols[0]]
+            self.conn.executemany(
+                f"INSERT INTO {table} ({','.join(cols)}) VALUES ({','.join('?' * len(cols))}) "
+                f"ON CONFLICT({','.join(key)}) DO UPDATE SET "
+                + ",".join(f"{c}=excluded.{c}" for c in sets),
+                [tuple(r[c] for c in cols) for r in group])
+        self.conn.commit()
+        return len(rows)
+
     def query(self, sql: str, params: tuple | dict = ()) -> list[dict[str, Any]]:
         return [dict(r) for r in self.conn.execute(sql, params).fetchall()]
 

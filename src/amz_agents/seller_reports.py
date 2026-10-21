@@ -64,15 +64,10 @@ def kind(rows: list[dict[str, str]]) -> str | None:
 
 
 def _upsert_products(wh: Warehouse, rows: list[dict[str, Any]]) -> None:
-    """Add or update products without wiping costs, stock or other columns."""
-    for r in rows:
-        cols = [c for c in r if r[c] not in (None, "")]
-        sets = ", ".join(f"{c}=excluded.{c}" for c in cols if c != "sku")
-        wh.conn.execute(
-            f"INSERT INTO products ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))}) "
-            f"ON CONFLICT(sku) DO UPDATE SET {sets or 'sku=excluded.sku'}",
-            [r[c] for c in cols])
-    wh.conn.commit()
+    """Add or update products without wiping costs, stock or other columns; a blank
+    field in a report doesn't overwrite what's known."""
+    wh.upsert("products", [{c: v for c, v in r.items() if v not in (None, "")} for r in rows],
+              ["sku"])
 
 
 def load_orders(wh: Warehouse, rows: list[dict[str, str]],
@@ -101,11 +96,8 @@ def load_orders(wh: Warehouse, rows: list[dict[str, str]],
         names.setdefault(r["sku"], {"sku": r["sku"], "asin": r.get("asin", ""),
                                     "title": r.get("product-name", "")})
     _upsert_products(wh, list(names.values()))
-    wh.conn.executemany(
-        "INSERT INTO metrics_daily (date, sku, units, revenue) VALUES (?, ?, ?, ?) "
-        "ON CONFLICT(date, sku) DO UPDATE SET units=excluded.units, revenue=excluded.revenue",
-        [(d, s, int(u), round(rev, 2)) for (d, s), (u, rev) in sorted(by_day.items())])
-    wh.conn.commit()
+    wh.upsert("metrics_daily", [{"date": d, "sku": s, "units": int(u), "revenue": round(rev, 2)}
+                                for (d, s), (u, rev) in sorted(by_day.items())], ["date", "sku"])
     days = sorted({d for d, _ in by_day})
     return {"rows": len(by_day), "skus": len(names), "channel": channel,
             "skipped": dict(skipped),

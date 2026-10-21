@@ -275,6 +275,17 @@ and the narrative in the daily brief. Everything else runs without it.
    and listings; if an agency runs your ads and you have no Ads API access, load
    their daily spend with `amz-agents import metrics_daily FILE` (columns `date`,
    `sku`, `ad_spend`, `ad_sales`) and the nightly ingest keeps it.
+
+   **Without API access** (SP-API not approved yet, or an agency runs the ads), load
+   the same data from downloads:
+
+   | Command | File | Fills |
+   |---|---|---|
+   | `amz-agents seller FILE ...` | Seller Central: All Orders, Business Report (detail page sales and traffic by child item), Manage FBA Inventory, All Listings | `metrics_daily` (Amazon.com only, today left out), `asin_traffic`, `products` |
+   | `amz-agents quartile FILE` | Quartile portal: Amazon Products > ASIN Analysis > Export data | `ad_products` (period totals), the tracker's Amazon ads tab |
+
+   Real figures belong in git-ignored files: `plan.local.toml` (read instead of
+   `plan.toml` when it exists) and `data/`.
 3. Load data with `amz-agents ingest --costs costs.csv` (nightly, before `run`).
    It runs every job whose credentials are set:
 
