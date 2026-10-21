@@ -323,3 +323,25 @@ def test_meta_adsets_by_naming_convention(wh):
     assert c["as1"]["orders_30d"] == 12  # Amazon sales kept for Attribution to fill
     assert c["as2"]["status"] == "paused" and c["as2"]["orders_30d"] == 5
     assert c["as2"]["sales_30d"] == 139.95 and c["as2"]["destination"] == "shopify"
+
+
+def test_shopify_dev_dashboard_app_exchanges_client_credentials(monkeypatch):
+    calls = []
+
+    def handle(req: httpx.Request) -> httpx.Response:
+        calls.append(req)
+        if req.url.path == "/admin/oauth/access_token":
+            assert json.loads(req.content)["grant_type"] == "client_credentials"
+            return httpx.Response(200, json={"access_token": "tok-1", "expires_in": 86399})
+        assert req.headers["X-Shopify-Access-Token"] == "tok-1"
+        return httpx.Response(200, json={"data": {"shop": {"name": "Dagacci"}}})
+
+    monkeypatch.delenv("SHOPIFY_ACCESS_TOKEN", raising=False)
+    monkeypatch.setenv("SHOPIFY_SHOP", "dagacci.myshopify.com")
+    monkeypatch.setenv("SHOPIFY_CLIENT_ID", "cid")
+    monkeypatch.setenv("SHOPIFY_CLIENT_SECRET", "secret")
+    assert ShopifyClient.configured()
+    shop = ShopifyClient.from_env(http=httpx.Client(transport=httpx.MockTransport(handle)))
+    assert shop.graphql("{ shop { name } }") == {"shop": {"name": "Dagacci"}}
+    shop.graphql("{ shop { name } }")
+    assert [c.url.path for c in calls].count("/admin/oauth/access_token") == 1  # token reused

@@ -699,7 +699,7 @@ def run_all(wh: Warehouse, only: set[str] | None = None) -> dict[str, Any]:
             run("asin_traffic", lambda: ingest_asin_traffic(wh, sp))
     if os.getenv("COSTS_CSV") and want("costs"):
         run("costs", lambda: ingest_costs_csv(wh, os.environ["COSTS_CSV"]))
-    if os.getenv("SHOPIFY_ACCESS_TOKEN") and want("shopify"):
+    if ShopifyClient.configured() and want("shopify"):
         run("shopify", lambda: ingest_shopify(wh, ShopifyClient.from_env()))
     if os.getenv("META_ACCESS_TOKEN") and want("meta"):
         meta = MetaAdsClient.from_env()
