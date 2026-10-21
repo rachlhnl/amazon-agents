@@ -16,6 +16,10 @@
                                   collect public data on the brands in market/brands.toml
                                   and write the market tracker dashboard
   amz-agents shop [--if-due]      mystery-shop every brand's store (weekly)
+  amz-agents seller FILE [FILE ...]
+                                  load Seller Central reports downloaded by hand (All
+                                  Orders, Business Report by child item, Manage FBA
+                                  Inventory, All Listings), when SP-API isn't connected
   amz-agents quartile FILE [--start D --end D]
                                   load a Quartile ASIN Analysis export (.xlsx or .csv): ad
                                   spend and sales by product, shown in the Amazon ads tab
@@ -109,6 +113,8 @@ def main(argv: list[str] | None = None) -> int:
     p_shop = sub.add_parser("shop", help="mystery-shop every brand's store (weekly)")
     p_shop.add_argument("--if-due", action="store_true",
                         help="only if the last shop is a week old or more")
+    sub.add_parser("seller", help="load Seller Central report downloads").add_argument(
+        "files", nargs="+")
     p_q = sub.add_parser("quartile", help="load a Quartile ASIN Analysis export")
     p_q.add_argument("file")
     p_q.add_argument("--start", help="YYYY-MM-DD, if the export doesn't say its dates")
@@ -165,6 +171,12 @@ def main(argv: list[str] | None = None) -> int:
             print("No credentials configured; nothing to ingest. See .env.example.")
         for job, result in results.items():
             print(f"{job}: {result}")
+    elif args.cmd == "seller":
+        from . import dashboard, seller_reports
+
+        for r in seller_reports.load(wh, args.files):
+            print(json.dumps(r))
+        print(f"Agent tracker written to {dashboard.write(wh)}")
     elif args.cmd == "quartile":
         from . import dashboard, quartile
 

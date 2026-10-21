@@ -1,0 +1,169 @@
+"""Seller Central reports downloaded by hand, for when SP-API access isn't available.
+
+`amz-agents seller FILE [FILE ...]` reads each file, works out which report it is from
+its header, and loads it into the same tables the SP-API ingest fills:
+
+  All Orders (Reports > Fulfillment > All Orders, or Order Reports)
+      -> metrics_daily units and revenue by day and SKU, and products (SKU, ASIN, name).
+         Ad spend already loaded (e.g. from an agency) is kept.
+  Business Report "Detail Page Sales and Traffic by Child Item" (Reports > Business
+  Reports), for the last 30 days
+      -> asin_traffic: sessions, page views, units and Buy Box % per SKU.
+  Manage FBA Inventory (Reports > Fulfillment > Manage FBA Inventory, or Inventory
+  Reports)
+      -> products units on hand and inbound.
+  All Listings (Inventory Reports > All Listings Report)
+      -> products SKU, ASIN, name and price.
+"""
+
+from __future__ import annotations
+
+import csv
+import io
+import re
+from collections import defaultdict
+from pathlib import Path
+from typing import Any
+
+from .data.warehouse import Warehouse
+from .ingest import _decode, update_velocity
+
+
+def _rows(path: Path) -> list[dict[str, str]]:
+    text = _decode(path.read_bytes())
+    first = text.split("\n", 1)[0]
+    delim = "\t" if first.count("\t") >= first.count(",") else ","
+    return [{_key(k): (v or "").strip() for k, v in r.items() if k}
+            for r in csv.DictReader(io.StringIO(text), delimiter=delim)]
+
+
+def _key(k: str) -> str:
+    """Header names as Amazon spells them, minus BOMs, quotes and dash variants."""
+    return re.sub(r"\s+", " ", k.replace("﻿", "").replace("–", "-").replace("—", "-")
+                  .strip().strip('"')).lower()
+
+
+def _num(v: str | None) -> float:
+    v = re.sub(r"[^0-9.\-]", "", v or "")
+    return float(v) if v not in ("", "-", ".") else 0.0
+
+
+def kind(rows: list[dict[str, str]]) -> str | None:
+    cols = set(rows[0]) if rows else set()
+    if {"amazon-order-id", "purchase-date", "sku"} <= cols:
+        return "orders"
+    if any(c.startswith("sessions") for c in cols) and ("(child) asin" in cols or "sku" in cols):
+        return "traffic"
+    if {"sku", "afn-fulfillable-quantity"} <= cols:
+        return "inventory"
+    if {"seller-sku", "asin1"} <= cols:
+        return "listings"
+    return None
+
+
+def _upsert_products(wh: Warehouse, rows: list[dict[str, Any]]) -> None:
+    """Add or update products without wiping costs, stock or other columns."""
+    for r in rows:
+        cols = [c for c in r if r[c] not in (None, "")]
+        sets = ", ".join(f"{c}=excluded.{c}" for c in cols if c != "sku")
+        wh.conn.execute(
+            f"INSERT INTO products ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))}) "
+            f"ON CONFLICT(sku) DO UPDATE SET {sets or 'sku=excluded.sku'}",
+            [r[c] for c in cols])
+    wh.conn.commit()
+
+
+def load_orders(wh: Warehouse, rows: list[dict[str, str]]) -> dict[str, Any]:
+    by_day: dict[tuple[str, str], list[float]] = defaultdict(lambda: [0, 0.0])
+    names: dict[str, dict[str, str]] = {}
+    for r in rows:
+        if r.get("order-status") == "Cancelled" or not r.get("sku"):
+            continue
+        d = by_day[(r["purchase-date"][:10], r["sku"])]
+        d[0] += int(_num(r.get("quantity")))
+        d[1] += _num(r.get("item-price"))  # blank while pending
+        names.setdefault(r["sku"], {"sku": r["sku"], "asin": r.get("asin", ""),
+                                    "title": r.get("product-name", "")})
+    _upsert_products(wh, list(names.values()))
+    wh.conn.executemany(
+        "INSERT INTO metrics_daily (date, sku, units, revenue) VALUES (?, ?, ?, ?) "
+        "ON CONFLICT(date, sku) DO UPDATE SET units=excluded.units, revenue=excluded.revenue",
+        [(d, s, int(u), round(rev, 2)) for (d, s), (u, rev) in sorted(by_day.items())])
+    wh.conn.commit()
+    days = sorted({d for d, _ in by_day})
+    return {"rows": len(by_day), "skus": len(names),
+            "from": days[0] if days else None, "to": days[-1] if days else None,
+            "units": int(sum(u for u, _ in by_day.values())),
+            "revenue": round(sum(r for _, r in by_day.values()), 2)}
+
+
+def load_traffic(wh: Warehouse, rows: list[dict[str, str]]) -> dict[str, Any]:
+    asin_to_sku = {p["asin"]: p["sku"] for p in wh.query(
+        "SELECT sku, asin FROM products WHERE asin IS NOT NULL AND asin != ''")}
+
+    def col(r: dict[str, str], *names: str) -> str:
+        return next((r[n] for n in names if r.get(n) not in (None, "")), "")
+
+    out, unmatched = [], 0
+    for r in rows:
+        sku = r.get("sku") or asin_to_sku.get(col(r, "(child) asin", "asin"))
+        if not sku:
+            unmatched += 1
+            continue
+        bb = col(r, "featured offer (buy box) percentage", "buy box percentage",
+                 "featured offer percentage")
+        out.append({
+            "sku": sku,
+            "sessions_30d": int(_num(col(r, "sessions - total", "sessions"))),
+            "page_views_30d": int(_num(col(r, "page views - total", "page views"))),
+            "units_30d": int(_num(col(r, "units ordered"))),
+            "buy_box_pct": _num(bb) / 100 if bb else None,
+        })
+    wh.insert_many("asin_traffic", out)
+    return {"rows": len(out), "unmatched": unmatched,
+            "note": "ASINs with no SKU yet; load an All Orders or All Listings report first"
+            if unmatched else ""}
+
+
+def load_inventory(wh: Warehouse, rows: list[dict[str, str]]) -> dict[str, Any]:
+    _upsert_products(wh, [{"sku": r["sku"], "asin": r.get("asin", ""),
+                           "title": r.get("product-name", "")} for r in rows if r.get("sku")])
+    n = 0
+    for r in rows:
+        inbound = sum(_num(r.get(k)) for k in ("afn-inbound-working-quantity",
+                                                "afn-inbound-shipped-quantity",
+                                                "afn-inbound-receiving-quantity"))
+        n += wh.conn.execute("UPDATE products SET units_on_hand=?, units_inbound=? WHERE sku=?",
+                             (int(_num(r.get("afn-fulfillable-quantity"))), int(inbound),
+                              r["sku"])).rowcount
+    wh.conn.commit()
+    return {"rows": n}
+
+
+def load_listings(wh: Warehouse, rows: list[dict[str, str]]) -> dict[str, Any]:
+    items = [{"sku": r["seller-sku"], "asin": r.get("asin1", ""), "title": r.get("item-name", ""),
+              "price": _num(r.get("price")) or None} for r in rows if r.get("seller-sku")]
+    _upsert_products(wh, items)
+    return {"rows": len(items)}
+
+
+LOADERS = {"orders": load_orders, "traffic": load_traffic, "inventory": load_inventory,
+           "listings": load_listings}
+ORDER = ["listings", "orders", "inventory", "traffic"]  # traffic needs ASIN -> SKU
+
+
+def load(wh: Warehouse, paths: list[str | Path]) -> list[dict[str, Any]]:
+    """Load each report; returns one summary per file."""
+    found = []
+    for p in map(Path, paths):
+        rows = _rows(p)
+        found.append((p, kind(rows), rows))
+    found.sort(key=lambda f: ORDER.index(f[1]) if f[1] in ORDER else len(ORDER))
+    out = []
+    for p, k, rows in found:
+        if not k:
+            out.append({"file": p.name, "report": None, "error": "not a report I recognize"})
+            continue
+        out.append({"file": p.name, "report": k, **LOADERS[k](wh, rows)})
+    update_velocity(wh)
+    return out
