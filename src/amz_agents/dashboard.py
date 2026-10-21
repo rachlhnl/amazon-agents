@@ -449,7 +449,7 @@ def plan_view(wh: Warehouse, actions: list[dict[str, Any]], owners: dict[str, st
             "loe": item.get("loe", ""),
             "gain_low": item.get("gain_low", 0), "gain_high": item.get("gain_high", 0),
             "kpi": item["kpi"], "baseline": item["baseline"], "target": item["target"],
-            "score": plan.measure(item, today), "action_id": a["id"] if a else None,
+            "score": plan.measure(item, today, wh), "action_id": a["id"] if a else None,
             "status": a["status"] if a else None, "due": a["due"] if a else None,
             "overdue": a["overdue"] if a else False, "merged": merged.get(str(item["rank"]), 0),
         })
@@ -991,7 +991,7 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
   <div id="tab-work" role="tabpanel" aria-labelledby="t-work">
   <div id="setup"></div>
   <section class="score" id="score" aria-label="This week"></section>
-  <div class="sec-head"><h2>CEO plan</h2><p id="plan-note">From plan.toml. Approved work, in priority order.</p></div>
+  <div class="sec-head"><h2>CEO plan</h2><p id="plan-note">From the CEO plan file. Approved work, in priority order.</p></div>
   <section class="table-wrap" id="plan"></section>
   <div class="sec-head"><h2>Agent work</h2><p></p></div>
   <p class="headline" id="headline" style="margin-top:0"></p>
