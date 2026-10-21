@@ -349,8 +349,9 @@ def scorecard(wh: Warehouse) -> dict[str, Any] | None:
         rev, spend = rows["revenue"], rows["ad_spend"]
         profit = rev - rows["cogs"] - spend if rows["cogs"] is not None and not rows["uncosted"] \
             else None
+        # No ad spend recorded (no Ads API; an agency's export has no days): unknown, not 0%.
         return {"revenue": rev, "units": rows["units"], "ad_spend": spend, "profit": profit,
-                "tacos": spend / rev if rev else None}
+                "tacos": spend / rev if rev and spend else None}
 
     return {"through": last, "now": week(0), "prior": week(7)}
 
@@ -1178,7 +1179,9 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
       stile('Contribution profit', usd(S.now.profit), chg(S.now.profit, S.prior.profit), S.now.profit == null ? 'needs product costs' : null),
       stile('Revenue', usd(S.now.revenue), chg(S.now.revenue, S.prior.revenue)),
       stile('Units', fmt(S.now.units), chg(S.now.units, S.prior.units)),
-      stile('TACoS', pct(S.now.tacos), chg(S.now.tacos, S.prior.tacos, true), 'ad spend \u00f7 revenue')));
+      S.now.tacos == null && D.ads
+        ? stile('TACoS', pct(D.ads.totals.tacos), null, 'Quartile, ' + day(D.ads.start) + ' \u2013 ' + day(D.ads.end) + ' (no daily ad spend)')
+        : stile('TACoS', pct(S.now.tacos), chg(S.now.tacos, S.prior.tacos, true), 'ad spend \u00f7 revenue')));
   } else if (D.ads) {
     const T = D.ads.totals;
     biz.querySelector('h2').textContent = 'Amazon, ' + day(D.ads.start) + ' \u2013 ' + day(D.ads.end) + ' (Quartile)';
