@@ -250,6 +250,22 @@ CREATE TABLE IF NOT EXISTS market_recs (
     kpi_target TEXT,
     url       TEXT
 );
+
+-- Ad results per product for a whole date range, from an agency report
+-- (amz-agents quartile FILE). Daily figures come from metrics_daily instead.
+CREATE TABLE IF NOT EXISTS ad_products (
+    period_start TEXT,
+    period_end   TEXT,
+    asin         TEXT,
+    parent_asin  TEXT,
+    name         TEXT,
+    total_sales  REAL,   -- all sales of the ASIN, ads or not
+    ad_sales     REAL,   -- sales attributed to its ads (can include other ASINs: halo)
+    ad_spend     REAL,
+    ad_types     TEXT,   -- which ad types the report covers, e.g. "Sponsored Products"
+    source       TEXT,
+    PRIMARY KEY (period_start, period_end, asin)
+);
 """
 
 

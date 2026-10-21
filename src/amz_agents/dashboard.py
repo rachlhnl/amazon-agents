@@ -25,6 +25,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
 
+from . import quartile
 from .actions import HUMAN_ONLY, Action, ActionLog
 from .agents import ads, listing, pricing, reviews, sales, ux
 from .agents import chief_of_staff as cos
@@ -377,7 +378,11 @@ def setup_gaps(wh: Warehouse, goals: list[dict[str, Any]],
         gaps.append(f"No owner in teams.toml for {', '.join(unowned)}, so nobody is "
                     "accountable for that work.")
     if not wh.query("SELECT 1 FROM products LIMIT 1"):
-        gaps.append("No product or sales data yet: connect Seller Central (SP-API) and "
+        gaps.append(("No daily sales or product data yet (the Amazon ads tab has Quartile's "
+                     "totals for a period): connect Seller Central (SP-API) and run amz-agents "
+                     "ingest, then amz-agents run.")
+                    if wh.query("SELECT 1 FROM ad_products LIMIT 1") else
+                    "No product or sales data yet: connect Seller Central (SP-API) and "
                     "run amz-agents ingest, then amz-agents run.")
     else:
         uncosted = wh.query("SELECT COUNT(*) AS n FROM products "
@@ -575,6 +580,7 @@ def collect(wh: Warehouse, today: date | None = None,
         "market": market_summary() if include_market else None,
         "shopper": shopper_view() if include_market else None,
         "plan": plan_view(wh, actions, teams_cfg["owners"], today) if include_market else [],
+        "ads": quartile.view(wh),
     }
 
 
@@ -873,6 +879,29 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
 .cl td, .cl th { text-align: center; } .cl td:first-child, .cl th:first-child { text-align: left; }
 .cl .y { color: var(--good-text); font-weight: 700; } .cl .n { color: var(--text-3); }
 .cl th.me, .cl td.me { background: var(--accent-soft); }
+/* Amazon ads */
+.ads .kpis { margin-top: 16px; }
+.finds { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.find { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 12px; padding: 14px; }
+.find.risk { border-left-color: var(--crit); } .find.plan { border-left-color: var(--warn); }
+.find .hd { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.find .ttl { font-weight: 650; } .find p { margin: 6px 0 0; font-size: 13px; color: var(--text-2); }
+.find .do { color: var(--text); }
+.find details { margin-top: 8px; font-size: 12.5px; } .find summary { cursor: pointer; color: var(--accent); }
+.find details table { font-size: 12px; margin-top: 6px; } .find details td, .find details th { padding: 4px 6px; }
+.bar { display: flex; align-items: center; gap: 8px; min-width: 120px; }
+.bar .t { flex: 1; height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+.bar .t i { display: block; height: 100%; background: var(--accent); border-radius: 0 4px 4px 0; }
+.bar span { font-size: 12px; font-variant-numeric: tabular-nums; width: 40px; text-align: right; color: var(--text-2); }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.hbars { display: grid; gap: 6px; margin-top: 10px; }
+.hbars .row { display: grid; grid-template-columns: 110px 1fr 70px; gap: 8px; align-items: center; font-size: 12.5px; }
+.hbars .row .lab { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbars .row .v { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-2); }
+.hbars .t { height: 14px; background: var(--surface-2); border-radius: 0 4px 4px 0; }
+.hbars .t i { display: block; height: 100%; background: var(--accent); border-radius: 0 4px 4px 0; min-width: 2px; }
+.sty { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 900px) { .two { grid-template-columns: 1fr; } }
 /* Tabs */
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 18px 0 0; }
 .tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; margin-bottom: -1px;
@@ -954,6 +983,7 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
   </header>
   <nav class="tabs" role="tablist" aria-label="Views">
     <button type="button" role="tab" id="t-work" aria-controls="tab-work" aria-selected="true">Work</button>
+    <button type="button" role="tab" id="t-ads" aria-controls="tab-ads" aria-selected="false">Amazon ads</button>
     <button type="button" role="tab" id="t-market" aria-controls="tab-market" aria-selected="false">Market &amp; customers</button>
     <button type="button" role="tab" id="t-shop" aria-controls="tab-shop" aria-selected="false">Mystery shopper</button>
     <button type="button" role="tab" id="t-how" aria-controls="tab-how" aria-selected="false">How the agents work together</button>
@@ -993,6 +1023,21 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
   <div class="sec-head"><h2>The team</h2><p>Click an agent to see only their work.</p></div>
   <section class="team" id="team" aria-label="Agents"></section>
   <p class="note" id="foot"></p>
+  </div>
+  <div id="tab-ads" class="ads" role="tabpanel" aria-labelledby="t-ads" hidden>
+    <p class="lead" id="ads-lead"></p>
+    <section class="kpis" id="ads-kpis" aria-label="Amazon totals"></section>
+    <div class="sec-head"><h2>What to do about it</h2><p>Bids and budgets are Quartile&rsquo;s: take the ad findings to them.</p></div>
+    <section class="finds" id="ads-finds"></section>
+    <div class="sec-head"><h2>Styles</h2><p>Each parent listing with its variants. &ldquo;From ads&rdquo;: share of its sales that ads brought in.</p></div>
+    <section class="table-wrap" id="ads-styles"></section>
+    <div class="two" style="margin-top:12px">
+      <div class="panel"><h2>Sales by size</h2><div class="hbars" id="ads-sizes"></div></div>
+      <div class="panel"><h2>Sales by color (top 12)</h2><div class="hbars" id="ads-colors"></div></div>
+    </div>
+    <div class="sec-head"><h2>Top 25 products</h2><p id="ads-top-note"></p></div>
+    <section class="table-wrap" id="ads-top"></section>
+    <p class="note" id="ads-foot"></p>
   </div>
   <div id="tab-market" role="tabpanel" aria-labelledby="t-market" hidden>
     <p class="lead" id="market-lead"></p>
@@ -1134,6 +1179,15 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
       stile('Revenue', usd(S.now.revenue), chg(S.now.revenue, S.prior.revenue)),
       stile('Units', fmt(S.now.units), chg(S.now.units, S.prior.units)),
       stile('TACoS', pct(S.now.tacos), chg(S.now.tacos, S.prior.tacos, true), 'ad spend \u00f7 revenue')));
+  } else if (D.ads) {
+    const T = D.ads.totals;
+    biz.querySelector('h2').textContent = 'Amazon, ' + day(D.ads.start) + ' \u2013 ' + day(D.ads.end) + ' (Quartile)';
+    biz.append(el('div', {class: 'kpis', style: 'margin-top:12px'},
+      stile('Sales', usd(T.sales), null, '\u2248 ' + usd(T.monthly) + ' a month'),
+      stile('Ad spend', usd(T.spend), null, D.ads.ad_types),
+      stile('TACoS', pct(T.tacos), null, 'ad spend \u00f7 sales'),
+      stile('ACoS', pct(T.acos), null, 'ad spend \u00f7 ad sales')),
+      el('p', {class: 'optim', text: 'Period totals from Quartile, not this week. Once Seller Central is connected this shows revenue, profit, units and ad efficiency each week.'}));
   } else biz.append(el('p', {class: 'optim', text: 'No sales data yet. Once Seller Central is connected this shows revenue, profit, units and ad efficiency each week.'}));
   biz.append(el('p', {class: 'optim'}, el('b', {text: 'What the agents optimize: '}),
     'contribution profit (sales \u2212 product cost \u2212 Amazon fees \u2212 ad spend). Every suggestion is ranked by how much profit it should add over 30 days per hour of your team\u2019s time, then checked against the goals on the right.'));
@@ -1643,8 +1697,76 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
       + ' Amazon listings are judged from the market tracker\u2019s reads, not visited again. Checks read page text, so something shown only in an image counts as missing.';
   }
 
+  // Amazon ads (Quartile export)
+  const A = D.ads;
+  const pc = v => v == null ? '\u2014' : (v * 100).toFixed(1) + '%';
+  const bar = (v, label) => v == null ? el('span', {class: 'n', text: '\u2014'}) : el('div', {class: 'bar'},
+    el('div', {class: 't'}, el('i', {style: 'width:' + Math.min(100, v * 100).toFixed(1) + '%'})), el('span', {text: label || pc(v)}));
+  const hbars = (id, rows, key) => {
+    const max = Math.max(...rows.map(r => r.sales)), sum = rows.reduce((t, r) => t + r.sales, 0);
+    document.getElementById(id).append(...rows.map(r => {
+      const row = el('div', {class: 'row'}, el('span', {class: 'lab', text: r[key], title: r[key]}),
+        el('div', {class: 't'}, el('i', {style: 'width:' + (r.sales / max * 100).toFixed(1) + '%'})),
+        el('span', {class: 'v', text: usd(r.sales)}));
+      row.addEventListener('mousemove', e => showTip(e, r[key] + ': ' + usd(r.sales) + ' \u00b7 ' + pc(r.sales / sum) + ' of these'));
+      row.addEventListener('mouseleave', hideTip);
+      return row;
+    }));
+  };
+  const asinTable = rows => el('table', {},
+    el('thead', {}, el('tr', {}, el('th', {text: 'Product'}), el('th', {class: 'num', text: 'Sales'}),
+      el('th', {class: 'num', text: 'Ad spend'}), el('th', {class: 'num', text: 'Ad sales'}),
+      el('th', {class: 'num', text: 'ACoS'}), el('th', {class: 'num hide-sm', text: 'TACoS'}))),
+    el('tbody', {}, rows.map(r => el('tr', {},
+      el('td', {}, el('a', {href: 'https://www.amazon.com/dp/' + r.asin, target: '_blank', rel: 'noopener', text: r.asin}),
+        el('div', {class: 'sty', style: 'font-size:12px;color:var(--text-3)', title: r.name, text: r.name})),
+      el('td', {class: 'num', text: usd(r.sales)}), el('td', {class: 'num', text: usd(r.spend)}),
+      el('td', {class: 'num', text: usd(r.ad_sales)}), el('td', {class: 'num', text: pc(r.acos)}),
+      el('td', {class: 'num hide-sm', text: pc(r.tacos)})))));
+  if (!A) {
+    document.getElementById('ads-lead').textContent = 'No ad data yet. In portal.quartile.com: Reports \u2192 Product Performance \u2192 Amazon Products \u2192 ASIN Analysis, then \u22ef on the ASIN Performance table \u2192 Export data. Load it with amz-agents quartile FILE.';
+  } else {
+    const T = A.totals;
+    document.getElementById('ads-lead').textContent = 'From ' + A.source + '\u2019s ASIN Analysis export: ' + day(A.start) + ' \u2013 ' + day(A.end)
+      + ' (' + A.days + ' days), ' + A.ad_types + ', ' + fmt(T.asins) + ' products. Totals for the period, not daily: daily figures come once Seller Central is connected.';
+    document.getElementById('ads-kpis').append(
+      stile('Amazon sales', usd(T.sales), null, '\u2248 ' + usd(T.monthly) + ' a month'),
+      stile('Ad spend', usd(T.spend), null, usd(T.spend * 30 / A.days) + ' a month'),
+      stile('ACoS', pc(T.acos), null, 'ad spend \u00f7 ad sales \u00b7 ROAS ' + (T.roas || 0).toFixed(1)),
+      stile('TACoS', pc(T.tacos), null, 'ad spend \u00f7 all sales'),
+      stile('Sales from ads', pc(T.ad_sales / T.sales), null, usd(T.ad_sales) + ' credited to ads'),
+      stile('Products selling', fmt(T.selling), null, 'of ' + fmt(T.asins) + ' \u00b7 top 10 = ' + pc(T.top10_share) + ' of sales'));
+    const WHO = {risk: 'Risk', listing: 'Listing work', ask_agency: 'Ask Quartile', catalog: 'Catalog', plan: 'CEO plan'};
+    document.getElementById('ads-finds').append(...A.findings.map(f => el('div', {class: 'find ' + f.kind},
+      el('div', {class: 'hd'}, el('span', {class: 'ttl', text: f.title}), el('span', {class: 'tag', text: WHO[f.kind] || f.kind})),
+      f.see ? el('p', {text: f.see}) : null,
+      el('p', {class: 'do', text: f.do}),
+      el('p', {text: 'Owner: ' + f.who + (f.gain ? ' \u00b7 est. ' + usd(f.gain) + '/mo' : '')}),
+      f.items && f.items.some(a => A.asins[a]) ? el('details', {}, el('summary', {text: 'Show ' + plural(f.items.filter(a => A.asins[a]).length, 'product')}),
+        el('div', {class: 'table-wrap'}, asinTable(f.items.map(a => A.asins[a]).filter(Boolean)))) : null)));
+    document.getElementById('ads-styles').append(el('table', {},
+      el('thead', {}, el('tr', {}, el('th', {text: 'Style'}), el('th', {class: 'num', text: 'Sales'}),
+        el('th', {text: 'Share of sales'}), el('th', {text: 'From ads'}), el('th', {class: 'num', text: 'Ad spend'}),
+        el('th', {class: 'num', text: 'ACoS'}), el('th', {class: 'num hide-sm', text: 'Variants selling'}))),
+      el('tbody', {}, A.styles.filter(x => x.sales >= 1000).map(x => el('tr', {},
+        el('td', {}, el('div', {class: 'sty', title: x.name, text: x.name}), el('div', {style: 'font-size:12px;color:var(--text-3)', text: x.parent})),
+        el('td', {class: 'num', text: usd(x.sales)}), el('td', {}, bar(x.share)), el('td', {}, bar(x.ad_share)),
+        el('td', {class: 'num', text: usd(x.spend)}), el('td', {class: 'num', text: pc(x.acos)}),
+        el('td', {class: 'num hide-sm', text: x.selling + ' of ' + x.asins}))))));
+    const small = A.styles.filter(x => x.sales < 1000);
+    if (small.length) document.getElementById('ads-styles').append(el('p', {class: 'note', style: 'padding:0 12px 10px',
+      text: plural(small.length, 'more style') + ' sold under $1,000 each (' + usd(small.reduce((t, x) => t + x.sales, 0)) + ' together).'}));
+    hbars('ads-sizes', A.sizes, 'size');
+    hbars('ads-colors', A.colors, 'color');
+    document.getElementById('ads-top-note').textContent = 'By sales. Links open the Amazon page.';
+    document.getElementById('ads-top').append(asinTable(A.top));
+    document.getElementById('ads-foot').textContent = 'Ad sales can be higher than a product\u2019s own sales: Amazon credits an ad with other products bought after the click. '
+      + 'Sizes and colors are read from product names; ' + (A.ad_types === 'Sponsored Products' ? 'Sponsored Brands and Display aren\u2019t in this export, so real ad spend is higher. ' : '')
+      + 'Load a new export with amz-agents quartile FILE.';
+  }
+
   // Tabs (remembered in the URL hash so a link opens the right one)
-  const tabs = {work: ['t-work', 'tab-work'], market: ['t-market', 'tab-market'], shop: ['t-shop', 'tab-shop'], how: ['t-how', 'tab-how']};
+  const tabs = {work: ['t-work', 'tab-work'], ads: ['t-ads', 'tab-ads'], market: ['t-market', 'tab-market'], shop: ['t-shop', 'tab-shop'], how: ['t-how', 'tab-how']};
   const setTab = t => {
     for (const [k, [b, p]] of Object.entries(tabs)) {
       document.getElementById(b).setAttribute('aria-selected', String(k === t));
