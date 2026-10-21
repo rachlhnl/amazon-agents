@@ -35,7 +35,7 @@ AD_DEPENDENCE_HIGH = 0.40  # ad-attributed share of revenue that signals weak or
 ORGANIC_SAVING = 0.20  # share of ad spend better listings/ratings could replace
 TREND_DROP = -0.15  # last 7 days vs prior 4 weeks
 TREND_RISE = 0.20
-MIN_UNITS_FOR_TREND = 3.0
+MIN_UNITS_FOR_TREND = 10.0  # units/day over the prior 4 weeks: below it, a week is noise
 ELASTICITY_GAP = 1.0  # measured vs assumed price elasticity worth reporting
 CONCENTRATION_HIGH = 0.75  # Amazon share of units
 LOW_RATING = 4.0
@@ -136,11 +136,13 @@ class DataAgent(Agent):
     def _metrics(self, sku: str | None, start_ago: int, end_ago: int) -> dict[str, float]:
         start = (self.today - timedelta(days=start_ago)).isoformat()
         end = (self.today - timedelta(days=end_ago)).isoformat()
-        sql = ("SELECT COUNT(DISTINCT date) AS days, COALESCE(SUM(units),0) AS units, "
+        # days = days the feed covers, not days this SKU sold: a day with no sales has no row.
+        sql = ("SELECT (SELECT COUNT(DISTINCT date) FROM metrics_daily WHERE date BETWEEN ? "
+               "AND ?) AS days, COALESCE(SUM(units),0) AS units, "
                "COALESCE(SUM(revenue),0) AS revenue, COALESCE(SUM(ad_spend),0) AS ad_spend, "
                "COALESCE(SUM(ad_sales),0) AS ad_sales FROM metrics_daily "
                "WHERE date BETWEEN ? AND ?")
-        params: tuple = (start, end)
+        params: tuple = (start, end, start, end)
         if sku:
             sql += " AND sku=?"
             params += (sku,)

@@ -44,6 +44,8 @@ DEFAULT_LIMITS = {"email_subject_chars": 60, "email_body_words": 150, "outreach_
                   "listing_title_chars": 200, "max_exclamations": 1}
 
 
+SIZE_CODE = re.compile(r"X*[SML]|X+L|X+S")  # XXXL, XXS: sizes, not shouting
+
 def load_brand(path: str | Path | None = None) -> dict[str, Any]:
     path = Path(path or os.getenv("BRAND_PATH", "brand.toml"))
     brand: dict[str, Any] = {}
@@ -70,7 +72,8 @@ def review_copy(text: str, kind: str, brand: dict[str, Any]) -> list[str]:
             issues.append(f"names competitor '{c}'")
     if text.count("!") > lim["max_exclamations"]:
         issues.append(f"{text.count('!')} exclamation marks (max {lim['max_exclamations']})")
-    shouting = [w for w in re.findall(r"\b[A-Z]{4,}\b", text) if not re.search(r"\d", w)]
+    shouting = [w for w in re.findall(r"\b[A-Z]{4,}\b", text)
+                if not re.search(r"\d", w) and not SIZE_CODE.fullmatch(w)]
     if shouting:
         issues.append(f"all-caps words: {', '.join(sorted(set(shouting))[:3])}")
 

@@ -117,3 +117,15 @@ def test_brief_has_all_sections(ctx):
         assert f"## {section}" in text
     assert "amz-agents approve" in text
     assert "(see action [" in text  # anomaly links to the pricing action
+
+
+def test_averages_count_days_with_no_sales(ctx):
+    """A SKU with no row on a day sold zero that day; it mustn't raise its average."""
+    cos = ChiefOfStaff(ctx)
+    end = cos.today - timedelta(days=2)
+    ctx.wh.insert_many("metrics_daily", [
+        {"date": (end - timedelta(days=i)).isoformat(), "sku": "RARE-1", "units": 6,
+         "revenue": 60.0, "ad_spend": 0.0, "ad_sales": 0.0} for i in (0, 7)])
+    w = cos._window("RARE-1", 15, 2)
+    covered = cos._window(None, 15, 2)["days"]
+    assert w["units"] == 12 and w["days"] == covered and covered >= 2

@@ -23,6 +23,7 @@ import io
 import os
 import re
 from collections import defaultdict
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -74,10 +75,13 @@ def _upsert_products(wh: Warehouse, rows: list[dict[str, Any]]) -> None:
     wh.conn.commit()
 
 
-def load_orders(wh: Warehouse, rows: list[dict[str, str]]) -> dict[str, Any]:
+def load_orders(wh: Warehouse, rows: list[dict[str, str]],
+                today: date | None = None) -> dict[str, Any]:
     """Only the marketplace in SELLER_SALES_CHANNEL (default Amazon.com): other
     marketplaces are in their own currency (MXN, CAD...), and "Non-Amazon" lines are
-    other channels' orders shipped from FBA stock, counted by those channels."""
+    other channels' orders shipped from FBA stock, counted by those channels. Today is
+    left out: a report pulled mid-day would read as a sales drop."""
+    today_iso = (today or date.today()).isoformat()
     channel = os.getenv("SELLER_SALES_CHANNEL", "Amazon.com")
     by_day: dict[tuple[str, str], list[float]] = defaultdict(lambda: [0, 0.0])
     names: dict[str, dict[str, str]] = {}
@@ -87,6 +91,9 @@ def load_orders(wh: Warehouse, rows: list[dict[str, str]]) -> dict[str, Any]:
             continue
         if r.get("sales-channel") and r["sales-channel"] != channel:
             skipped[r["sales-channel"]] += 1
+            continue
+        if r["purchase-date"][:10] >= today_iso:
+            skipped["today (partial)"] += 1
             continue
         d = by_day[(r["purchase-date"][:10], r["sku"])]
         d[0] += int(_num(r.get("quantity")))
@@ -108,8 +115,14 @@ def load_orders(wh: Warehouse, rows: list[dict[str, str]]) -> dict[str, Any]:
 
 
 def load_traffic(wh: Warehouse, rows: list[dict[str, str]]) -> dict[str, Any]:
-    asin_to_sku = {p["asin"]: p["sku"] for p in wh.query(
-        "SELECT sku, asin FROM products WHERE asin IS NOT NULL AND asin != ''")}
+    # Several SKUs can share an ASIN (Amazon's amzn.gr.* resale SKUs, relabels): the
+    # page's traffic belongs to the one that sells the most.
+    asin_to_sku: dict[str, str] = {}
+    for p in wh.query(
+            "SELECT p.sku, p.asin, COALESCE(SUM(m.units), 0) AS units FROM products p "
+            "LEFT JOIN metrics_daily m ON m.sku = p.sku WHERE p.asin IS NOT NULL AND "
+            "p.asin != '' GROUP BY p.sku ORDER BY p.sku LIKE 'amzn.gr.%', units DESC"):
+        asin_to_sku.setdefault(p["asin"], p["sku"])
 
     def col(r: dict[str, str], *names: str) -> str:
         return next((r[n] for n in names if r.get(n) not in (None, "")), "")

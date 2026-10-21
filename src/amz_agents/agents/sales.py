@@ -25,6 +25,7 @@ from .base import Agent, Context, Role
 
 PARITY_TOLERANCE = 0.02  # off-Amazon price may sit this far below Amazon's
 MIN_VELOCITY_TO_EXPAND = 5.0  # Amazon units/day before suggesting another channel
+SKU_MATCH_MIN = 0.25  # share of Amazon's top 20 SKUs a channel must list to compare
 FOLLOW_UP_DAYS = {"new": 2, "contacted": 7, "negotiating": 3}
 
 
@@ -85,6 +86,12 @@ class SalesAgent(Agent):
                     ctx.wh.query("SELECT DISTINCT channel FROM channel_listings ORDER BY channel")]
         live = {(r["channel"], r["sku"]) for r in
                 ctx.wh.query("SELECT channel, sku FROM channel_listings WHERE listed = 1")}
+        # A channel that has none of Amazon's best sellers under the same SKU most likely
+        # names SKUs differently; "not listed" would be wrong for all of them.
+        top = [p["sku"] for p in ctx.wh.query(
+            "SELECT sku FROM products ORDER BY daily_velocity DESC LIMIT 20")]
+        channels = [ch for ch in channels
+                    if not top or sum((ch, s) in live for s in top) >= len(top) * SKU_MATCH_MIN]
         out: list[Action] = []
         for p in ctx.wh.query("SELECT * FROM products ORDER BY daily_velocity DESC"):
             if (p["daily_velocity"] or 0) < MIN_VELOCITY_TO_EXPAND or p["sku"] in low:

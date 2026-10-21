@@ -17,6 +17,7 @@ person can see why something ranked where it did. Use them to rank, not forecast
 
 from __future__ import annotations
 
+import math
 import os
 import tomllib
 from collections import defaultdict
@@ -39,6 +40,8 @@ SAFETY_DAYS = 14
 WINDOW = 7  # days, for goal progress and outcome checks
 VERDICT_THRESHOLD = 0.03  # +/- change in daily profit that counts as helped/hurt
 ANOMALY_DROP = 0.5  # yesterday's units below this share of the 14-day average
+ANOMALY_P = 0.02  # ...and that few would happen by chance under 2% of days (Poisson):
+# across a 1,000-variant catalog, small sellers have slow days every day.
 SPEND_SPIKE = 2.0  # yesterday's ad spend above this multiple of average
 
 # Priority: ROI = 30-day impact / cost of the person's time the action takes.
@@ -57,6 +60,15 @@ EXTERNAL_KINDS = {"update_campaign_budget", "pause_campaign", "email_campaign",
                   "refresh_creative", "pause_creative", "new_creative_variants",
                   "fix_funnel_step", "improve_page_speed", "fix_accessibility",
                   "fix_landing_page"}
+
+
+def _poisson_cdf(k: int, lam: float) -> float:
+    """P(X <= k) for X ~ Poisson(lam)."""
+    term = total = math.exp(-lam)
+    for i in range(1, int(k) + 1):
+        term *= lam / i
+        total += term
+    return total
 
 
 @dataclass
@@ -351,7 +363,8 @@ class ChiefOfStaff:
             avg_units = hist["units"] / hist["days"]
             avg_spend = hist["ad_spend"] / hist["days"]
 
-            if avg_units >= 3 and y["units"] < avg_units * ANOMALY_DROP:
+            if (avg_units >= 3 and y["units"] < avg_units * ANOMALY_DROP
+                    and _poisson_cdf(y["units"], avg_units) < ANOMALY_P):
                 causes = []
                 if p["units_on_hand"] <= 0:
                     causes.append("out of stock")
@@ -675,10 +688,12 @@ class ChiefOfStaff:
         return self._sum(sku, start, end)
 
     def _sum(self, sku: str | None, start: str, end: str) -> dict[str, float]:
-        sql = ("SELECT COUNT(DISTINCT date) AS days, COALESCE(SUM(units),0) AS units, "
+        # days = days the feed covers, not days this SKU sold: a day with no sales has no row.
+        sql = ("SELECT (SELECT COUNT(DISTINCT date) FROM metrics_daily WHERE date BETWEEN ? "
+               "AND ?) AS days, COALESCE(SUM(units),0) AS units, "
                "COALESCE(SUM(revenue),0) AS revenue, COALESCE(SUM(ad_spend),0) AS ad_spend, "
                "COALESCE(SUM(ad_sales),0) AS ad_sales FROM metrics_daily WHERE date BETWEEN ? AND ?")
-        params: tuple = (start, end)
+        params: tuple = (start, end, start, end)
         if sku:
             sql += " AND sku=?"
             params += (sku,)

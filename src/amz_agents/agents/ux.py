@@ -40,7 +40,7 @@ LANDING_MIN_SESSIONS = 200
 LANDING_GAP = 0.5  # landing page converts under half the site rate
 LANDING_TARGET = 0.8
 
-AMAZON_MIN_SESSIONS = 300
+AMAZON_MIN_SESSIONS = 1500  # 30-day sessions before a page is judged against the catalog
 AMAZON_GAP = 0.6  # unit session % under this share of the catalog median
 AMAZON_TARGET = 0.8
 BUY_BOX_OK = 0.8
