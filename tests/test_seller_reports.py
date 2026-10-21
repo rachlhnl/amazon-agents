@@ -2,11 +2,13 @@ from amz_agents import seller_reports
 from amz_agents.data.warehouse import Warehouse
 
 ORDERS = (
-    "amazon-order-id\tpurchase-date\torder-status\tproduct-name\tsku\tasin\tquantity\titem-price\n"
-    "111\t2026-10-17T10:00:00+00:00\tShipped\tScrub Set Navy M\tSET-NAVY-M\tB001\t2\t49.98\n"
-    "112\t2026-10-17T12:00:00+00:00\tPending\tScrub Set Navy M\tSET-NAVY-M\tB001\t1\t\n"
-    "113\t2026-10-18T09:00:00+00:00\tCancelled\tScrub Set Navy M\tSET-NAVY-M\tB001\t1\t24.99\n"
-    "114\t2026-10-18T09:30:00+00:00\tShipped\tJogger Black S\tJOG-BLK-S\tB002\t1\t29.99\n"
+    "amazon-order-id\tpurchase-date\torder-status\tsales-channel\tproduct-name\tsku\tasin\tquantity\titem-price\n"
+    "111\t2026-10-17T10:00:00+00:00\tShipped\tAmazon.com\tScrub Set Navy M\tSET-NAVY-M\tB001\t2\t49.98\n"
+    "112\t2026-10-17T12:00:00+00:00\tPending\tAmazon.com\tScrub Set Navy M\tSET-NAVY-M\tB001\t1\t\n"
+    "113\t2026-10-18T09:00:00+00:00\tCancelled\tAmazon.com\tScrub Set Navy M\tSET-NAVY-M\tB001\t1\t24.99\n"
+    "114\t2026-10-18T09:30:00+00:00\tShipped\tAmazon.com\tJogger Black S\tJOG-BLK-S\tB002\t1\t29.99\n"
+    "115\t2026-10-18T10:00:00+00:00\tShipped\tAmazon.com.mx\tJogger Black S\tJOG-BLK-S\tB002\t1\t599.00\n"
+    "116\t2026-10-18T11:00:00+00:00\tShipped\tNon-Amazon\tJogger Black S\tJOG-BLK-S\tB002\t1\t\n"
 )
 TRAFFIC = (
     '"(Parent) ASIN","(Child) ASIN","Title","Sessions – Total","Page Views – Total",'
@@ -29,7 +31,8 @@ def test_loads_each_report_in_the_right_order(tmp_path):
         (tmp_path / name).write_text(text, encoding="utf-8")
         files.append(tmp_path / name)
     out = {r["report"]: r for r in seller_reports.load(wh, files)}
-    assert out["orders"]["units"] == 4 and out["orders"]["revenue"] == 79.97
+    assert out["orders"]["units"] == 4 and out["orders"]["revenue"] == 79.97  # US only
+    assert out["orders"]["skipped"] == {"Amazon.com.mx": 1, "Non-Amazon": 1}
     assert out["traffic"] == {"file": "traffic.csv", "report": "traffic", "rows": 1, "unmatched": 1,
                               "note": out["traffic"]["note"]}
     m = {(r["date"], r["sku"]): r for r in wh.query("SELECT * FROM metrics_daily")}

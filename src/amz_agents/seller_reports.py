@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import csv
 import io
+import os
 import re
 from collections import defaultdict
 from pathlib import Path
@@ -74,10 +75,18 @@ def _upsert_products(wh: Warehouse, rows: list[dict[str, Any]]) -> None:
 
 
 def load_orders(wh: Warehouse, rows: list[dict[str, str]]) -> dict[str, Any]:
+    """Only the marketplace in SELLER_SALES_CHANNEL (default Amazon.com): other
+    marketplaces are in their own currency (MXN, CAD...), and "Non-Amazon" lines are
+    other channels' orders shipped from FBA stock, counted by those channels."""
+    channel = os.getenv("SELLER_SALES_CHANNEL", "Amazon.com")
     by_day: dict[tuple[str, str], list[float]] = defaultdict(lambda: [0, 0.0])
     names: dict[str, dict[str, str]] = {}
+    skipped: dict[str, int] = defaultdict(int)
     for r in rows:
         if r.get("order-status") == "Cancelled" or not r.get("sku"):
+            continue
+        if r.get("sales-channel") and r["sales-channel"] != channel:
+            skipped[r["sales-channel"]] += 1
             continue
         d = by_day[(r["purchase-date"][:10], r["sku"])]
         d[0] += int(_num(r.get("quantity")))
@@ -91,7 +100,8 @@ def load_orders(wh: Warehouse, rows: list[dict[str, str]]) -> dict[str, Any]:
         [(d, s, int(u), round(rev, 2)) for (d, s), (u, rev) in sorted(by_day.items())])
     wh.conn.commit()
     days = sorted({d for d, _ in by_day})
-    return {"rows": len(by_day), "skus": len(names),
+    return {"rows": len(by_day), "skus": len(names), "channel": channel,
+            "skipped": dict(skipped),
             "from": days[0] if days else None, "to": days[-1] if days else None,
             "units": int(sum(u for u, _ in by_day.values())),
             "revenue": round(sum(r for _, r in by_day.values()), 2)}
