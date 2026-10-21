@@ -929,7 +929,8 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
 .sty { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 900px) { .two { grid-template-columns: 1fr; } }
 /* Tabs */
-.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 18px 0 0; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 18px 0 0; overflow-x: auto; scrollbar-width: none; }
+.tabs button { flex: none; white-space: nowrap; }
 .tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; margin-bottom: -1px;
   font-size: 14px; color: var(--text-2); cursor: pointer; }
 .tabs button[aria-selected=true] { color: var(--text); border-bottom-color: var(--accent); font-weight: 650; }
