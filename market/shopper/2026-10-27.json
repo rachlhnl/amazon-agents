@@ -1,0 +1,102 @@
+{
+ "date": "2026-10-27",
+ "collected_at": "2026-10-27T13:43:52+00:00",
+ "persona": "a working nurse buying two scrub sets for 12-hour shifts, shopping on their phone between shifts; cares most about fit, comfort, pockets and price, and hates guessing sizes or paying return shipping",
+ "self": "Dagacci",
+ "visits": [
+  {
+   "brand": "Dagacci",
+   "site": "store",
+   "where": "www.dagacci.com",
+   "error": "product page: HTTP 429",
+   "outfit": 27.99,
+   "scores": {},
+   "overall": null,
+   "review": {
+    "summary": "Couldn't shop here: product page: HTTP 429.",
+    "likes": [],
+    "dislikes": [],
+    "change": []
+   }
+  },
+  {
+   "brand": "Dagacci",
+   "site": "amazon",
+   "where": "Amazon",
+   "product": null,
+   "median_price": null,
+   "rating": null,
+   "reviews": null,
+   "badge": false,
+   "error": "no Amazon listing could be read",
+   "scores": {},
+   "overall": null,
+   "review": {
+    "summary": "Couldn't shop here: no Amazon listing could be read.",
+    "likes": [],
+    "dislikes": [],
+    "change": []
+   }
+  },
+  {
+   "brand": "Cozyfit",
+   "site": "amazon",
+   "where": "Amazon",
+   "product": null,
+   "median_price": null,
+   "rating": null,
+   "reviews": null,
+   "badge": false,
+   "error": "no Amazon listing could be read",
+   "scores": {},
+   "overall": null,
+   "review": {
+    "summary": "Couldn't shop here: no Amazon listing could be read.",
+    "likes": [],
+    "dislikes": [],
+    "change": []
+   }
+  },
+  {
+   "brand": "Jaanuu",
+   "site": "store",
+   "where": "www.jaanuu.com",
+   "error": "product page: HTTP 429",
+   "outfit": 68.24,
+   "scores": {},
+   "overall": null,
+   "review": {
+    "summary": "Couldn't shop here: product page: HTTP 429.",
+    "likes": [],
+    "dislikes": [],
+    "change": []
+   }
+  },
+  {
+   "brand": "koi",
+   "site": "store",
+   "where": "www.koihappiness.com",
+   "error": "product page: HTTP 429",
+   "outfit": 46.98,
+   "scores": {},
+   "overall": null,
+   "review": {
+    "summary": "Couldn't shop here: product page: HTTP 429.",
+    "likes": [],
+    "dislikes": [],
+    "change": []
+   }
+  }
+ ],
+ "verdict": {
+  "choice": null,
+  "why": "No store could be shopped."
+ },
+ "voice": "checks",
+ "not_visited": [
+  {
+   "where": "Walmart",
+   "why": "Walmart blocks automated visits and its terms forbid them; check it by hand or connect Walmart Marketplace."
+  }
+ ]
+}
