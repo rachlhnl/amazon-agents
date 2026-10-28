@@ -18,15 +18,19 @@ from __future__ import annotations
 
 import json
 import re
+import statistics
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any
 
 from ..actions import Action
+from ..styles import styles
 from .base import Agent, Context, Role
 from .product import owned as product_owned
 
 # Assumptions behind opportunity estimates (tune with the company's own results).
+MIN_VELOCITY_TO_ADVERTISE = 1.0  # units/day: below it, ads on one variant won't pay back
 ADS_LIFT = 0.30  # extra units from advertising a SKU that has no ads, vs. organic
 FEE_SHARE_HIGH = 0.35  # Amazon fees above this share of price are worth a look
 REFERRAL_FEE_PCT = 0.15  # most categories; fixed, so only fulfillment fees can shrink
@@ -35,7 +39,7 @@ AD_DEPENDENCE_HIGH = 0.40  # ad-attributed share of revenue that signals weak or
 ORGANIC_SAVING = 0.20  # share of ad spend better listings/ratings could replace
 TREND_DROP = -0.15  # last 7 days vs prior 4 weeks
 TREND_RISE = 0.20
-MIN_UNITS_FOR_TREND = 3.0
+MIN_UNITS_FOR_TREND = 10.0  # units/day over the prior 4 weeks: below it, a week is noise
 ELASTICITY_GAP = 1.0  # measured vs assumed price elasticity worth reporting
 CONCENTRATION_HIGH = 0.75  # Amazon share of units
 LOW_RATING = 4.0
@@ -62,6 +66,7 @@ class Opportunity:
     related: list[tuple[str, str]] = field(default_factory=list)  # (kind, target)
     when: int | None = None  # market tracker rank: 1 act this week ... 4 test
     source: str = "data"
+    key: str | None = None  # what it's about when that's not one SKU, e.g. a style
 
 
 class DataAgent(Agent):
@@ -94,7 +99,7 @@ class DataAgent(Agent):
                 o.recommendation += f" (No {o.owner} agent is running; assign it to someone.)"
             related = list(dict.fromkeys(o.related))  # dedupe, keep order
             out.append(Action(
-                agent=self.name, kind="opportunity", target=f"{o.area}/{o.sku or 'all'}",
+                agent=self.name, kind="opportunity", target=f"{o.area}/{o.sku or o.key or 'all'}",
                 sku=o.sku, before=None,
                 after={
                     "title": o.title, "finding": o.finding, "recommendation": o.recommendation,
@@ -136,11 +141,13 @@ class DataAgent(Agent):
     def _metrics(self, sku: str | None, start_ago: int, end_ago: int) -> dict[str, float]:
         start = (self.today - timedelta(days=start_ago)).isoformat()
         end = (self.today - timedelta(days=end_ago)).isoformat()
-        sql = ("SELECT COUNT(DISTINCT date) AS days, COALESCE(SUM(units),0) AS units, "
+        # days = days the feed covers, not days this SKU sold: a day with no sales has no row.
+        sql = ("SELECT (SELECT COUNT(DISTINCT date) FROM metrics_daily WHERE date BETWEEN ? "
+               "AND ?) AS days, COALESCE(SUM(units),0) AS units, "
                "COALESCE(SUM(revenue),0) AS revenue, COALESCE(SUM(ad_spend),0) AS ad_spend, "
                "COALESCE(SUM(ad_sales),0) AS ad_sales FROM metrics_daily "
                "WHERE date BETWEEN ? AND ?")
-        params: tuple = (start, end)
+        params: tuple = (start, end, start, end)
         if sku:
             sql += " AND sku=?"
             params += (sku,)
@@ -167,13 +174,14 @@ class DataAgent(Agent):
                 owner=self.name, effort="S", confidence="high",
             ))
         missing = sorted(s for s, p in self.products.items()
-                         if None in (p["landed_cost"], p["lead_time_days"], p["fees"]))
+                         if None in (p["landed_cost"], p["lead_time_days"], p["fees"])
+                         or (p.get("assumed") or "").strip())
         if missing:
             out.append(Opportunity(
                 "data", "Products missing cost data",
-                f"{len(missing)} SKUs have no landed cost, fees or lead time "
-                f"({', '.join(missing[:5])}{'…' if len(missing) > 5 else ''}); pricing, "
-                "inventory and every profit estimate skip them.",
+                f"{len(missing)} SKUs have no real landed cost, fees or lead time "
+                f"({', '.join(missing[:5])}{'…' if len(missing) > 5 else ''}); profit, "
+                "reorders and ROI use assumed averages for them, and pricing skips them.",
                 "Add them to the costs CSV and run `amz-agents ingest --costs FILE`.",
                 owner=self.name, effort="S", confidence="high",
             ))
@@ -210,11 +218,16 @@ class DataAgent(Agent):
         low = self.ctx.shared.get("low_stock", set())
         over = self.ctx.shared.get("overstock", set())
         advertised = {r["sku"] for r in self.ctx.wh.query("SELECT DISTINCT sku FROM keywords")}
+        # An agency's report (ad_products, by ASIN) counts too.
+        advertised |= {r["sku"] for r in self.ctx.wh.query(
+            "SELECT p.sku FROM products p JOIN ad_products a ON a.asin = p.asin "
+            "WHERE a.ad_spend > 0")}
         g = self.ctx.settings.guardrails
         out = []
         for sku, p in self.products.items():
             v = p["daily_velocity"] or 0
-            if v <= 0 or sku in low or sku in advertised or not self._complete(p):
+            if v < MIN_VELOCITY_TO_ADVERTISE or sku in low or sku in advertised \
+                    or not self._complete(p):
                 continue
             if self._metrics(sku, 30, 1)["ad_spend"] > 0:
                 continue  # advertised some other way (auto, product targeting)
@@ -238,8 +251,8 @@ class DataAgent(Agent):
     def _fee_heavy(self) -> list[Opportunity]:
         out = []
         for sku, p in self.products.items():
-            if not self._complete(p) or not p["price"]:
-                continue
+            if not self._complete(p) or not p["price"] or "fees" in (p.get("assumed") or ""):
+                continue  # an assumed fee is the brand average, not this product's
             share = p["fees"] / p["price"]
             if share < FEE_SHARE_HIGH:
                 continue
@@ -275,37 +288,65 @@ class DataAgent(Agent):
         return out
 
     def _trends(self) -> list[Opportunity]:
+        """Last week vs the median of the three weeks before it, so one promotion week
+        (Prime Day) doesn't make every product look like it collapsed. Drops are reported
+        once per style."""
         low = self.ctx.shared.get("low_stock", set())
-        out = []
+        style = styles(self.ctx.wh)
+        out: list[Opportunity] = []
+        drops: dict[str, list[dict]] = defaultdict(list)
         for sku, p in self.products.items():
-            recent, prior = self._metrics(sku, 7, 1), self._metrics(sku, 35, 8)
-            if not recent["days"] or not prior["days"]:
+            recent = self._metrics(sku, 7, 1)
+            weeks = [self._metrics(sku, 7 * w + 7, 7 * w + 1) for w in (1, 2, 3)]
+            weeks = [w["units"] / w["days"] for w in weeks if w["days"] >= 5]
+            if not recent["days"] or len(weeks) < 2:
                 continue
-            r, b = recent["units"] / recent["days"], prior["units"] / prior["days"]
+            r, b = recent["units"] / recent["days"], statistics.median(weeks)
             if b < MIN_UNITS_FOR_TREND:
                 continue
             change = r / b - 1
             if change <= TREND_DROP:
                 lost = (b - r) * 30 * (self._unit_profit(p) if self._complete(p) else 0)
-                out.append(Opportunity(
-                    "trend", f"{sku} sales down {abs(change):.0%}",
-                    f"{r:.1f}/day over the last week vs {b:.1f}/day over the four before.",
-                    "Check the Buy Box, price changes by competitors, listing suppression and "
-                    "new negative reviews.",
-                    owner="pricing", effort="M", sku=sku, impact_usd=round(lost, 2) or None,
-                    confidence="medium",
-                    related=self._related(sku, {"update_price", "update_listing_copy"}),
-                ))
+                drops[style.get(sku, (sku, sku))[0]].append(
+                    {"sku": sku, "r": r, "b": b, "change": change, "lost": lost,
+                     "name": style.get(sku, (sku, sku))[1]})
             elif change >= TREND_RISE and sku not in low:
                 out.append(Opportunity(
                     "trend", f"{sku} sales up {change:.0%}",
-                    f"{r:.1f}/day over the last week vs {b:.1f}/day over the four before, "
-                    "with stock to spare.",
+                    f"{r:.1f}/day over the last week vs {b:.1f}/day (median of the three weeks "
+                    "before), with stock to spare.",
                     "Lean in: check bids aren't capping impressions and that stock covers the "
                     "new pace through the next reorder.",
                     owner="ads", effort="S", sku=sku, confidence="medium",
                     related=self._related(sku, {"update_bid", "add_keyword", "reorder"}),
                 ))
+        for key, ds in drops.items():
+            ds.sort(key=lambda d: -d["lost"])
+            lost = round(sum(d["lost"] for d in ds), 2) or None
+            if len(ds) == 1:
+                d = ds[0]
+                out.append(Opportunity(
+                    "trend", f"{d['sku']} sales down {abs(d['change']):.0%}",
+                    f"{d['r']:.1f}/day over the last week vs {d['b']:.1f}/day (median of the "
+                    "three weeks before).",
+                    "Check stock, the Buy Box, competitors' prices, listing suppression and "
+                    "new negative reviews.",
+                    owner="pricing", effort="M", sku=d["sku"], impact_usd=lost,
+                    confidence="medium",
+                    related=self._related(d["sku"], {"update_price", "update_listing_copy", "reorder"}),
+                ))
+                continue
+            lo, hi = min(abs(d["change"]) for d in ds), max(abs(d["change"]) for d in ds)
+            out.append(Opportunity(
+                "trend", f"{ds[0]['name']}: {len(ds)} variants down {lo:.0%}–{hi:.0%} last week",
+                "Last week vs the median of the three before: "
+                + ", ".join(f"{d['sku']} {d['r']:.1f}/day (was {d['b']:.1f})" for d in ds[:5])
+                + ("…" if len(ds) > 5 else "") + ".",
+                "Check the style as a whole first: stock on these sizes, the Buy Box, a price "
+                "change, a suppressed parent listing, or new negative reviews.",
+                owner="pricing", effort="M", impact_usd=lost, confidence="medium", key=key,
+                related=self._related(ds[0]["sku"], {"update_price", "update_listing_copy", "reorder"}),
+            ))
         return out
 
     def _elasticity(self) -> list[Opportunity]:

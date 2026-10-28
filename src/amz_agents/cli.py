@@ -16,6 +16,13 @@
                                   collect public data on the brands in market/brands.toml
                                   and write the market tracker dashboard
   amz-agents shop [--if-due]      mystery-shop every brand's store (weekly)
+  amz-agents seller FILE [FILE ...]
+                                  load Seller Central reports downloaded by hand (All
+                                  Orders, Business Report by child item, Manage FBA
+                                  Inventory, All Listings), when SP-API isn't connected
+  amz-agents quartile FILE [--start D --end D]
+                                  load a Quartile ASIN Analysis export (.xlsx or .csv): ad
+                                  spend and sales by product, shown in the Amazon ads tab
 """
 
 from __future__ import annotations
@@ -106,6 +113,12 @@ def main(argv: list[str] | None = None) -> int:
     p_shop = sub.add_parser("shop", help="mystery-shop every brand's store (weekly)")
     p_shop.add_argument("--if-due", action="store_true",
                         help="only if the last shop is a week old or more")
+    sub.add_parser("seller", help="load Seller Central report downloads").add_argument(
+        "files", nargs="+")
+    p_q = sub.add_parser("quartile", help="load a Quartile ASIN Analysis export")
+    p_q.add_argument("file")
+    p_q.add_argument("--start", help="YYYY-MM-DD, if the export doesn't say its dates")
+    p_q.add_argument("--end", help="YYYY-MM-DD, if the export doesn't say its dates")
     args = ap.parse_args(argv)
     if args.cmd == "market":
         return _market(args)
@@ -158,6 +171,21 @@ def main(argv: list[str] | None = None) -> int:
             print("No credentials configured; nothing to ingest. See .env.example.")
         for job, result in results.items():
             print(f"{job}: {result}")
+    elif args.cmd == "seller":
+        from . import dashboard, seller_reports
+
+        for r in seller_reports.load(wh, args.files):
+            print(json.dumps(r))
+        print(f"Agent tracker written to {dashboard.write(wh)}")
+    elif args.cmd == "quartile":
+        from . import dashboard, quartile
+
+        got = quartile.load(wh, args.file, args.start, args.end)
+        t = quartile.view(wh)["totals"]
+        print(f"{got['rows']} products, {got['start']} to {got['end']} ({got['ad_types']}): "
+              f"sales ${t['sales']:,.0f}, ad spend ${t['spend']:,.0f}, "
+              f"ACoS {t['acos']:.1%}, TACoS {t['tacos']:.1%}")
+        print(f"Agent tracker written to {dashboard.write(wh)} (Amazon ads tab)")
     elif args.cmd == "import":
         from .ingest import import_csv
 

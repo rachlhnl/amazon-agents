@@ -47,7 +47,7 @@ class Executor(Protocol):
 
 # Customer-facing or real-world actions that always need a human, even in auto mode.
 HUMAN_ONLY = {
-    "update_listing_copy", "reorder", "flag_defect", "escalation",
+    "update_listing_copy", "reorder", "flag_defect", "escalation", "review_channel_pricing",
     "list_on_channel", "send_outreach", "email_campaign", "opportunity",
     # creative and UX work is done by designers, copywriters and developers
     "refresh_creative", "new_creative_variants", "improve_listing_assets", "fix_listing_title",

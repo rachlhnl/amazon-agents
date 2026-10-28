@@ -84,6 +84,9 @@ def ingest_products(wh: Warehouse, sp: SPAPIClient, seller_id: str) -> int:
             "units_on_hand": old.get("units_on_hand", 0),
             "units_inbound": old.get("units_inbound", 0),
             "daily_velocity": old.get("daily_velocity", 0),
+            # fees are real now; an assumed landed cost or lead time stays flagged
+            "assumed": " ".join(f for f in (old.get("assumed") or "").split() if f != "fees")
+                       or None,
         })
     wh.insert_many("products", rows)
     return len(rows)
@@ -148,13 +151,15 @@ def update_velocity(wh: Warehouse, today: date | None = None) -> None:
 
 
 def ingest_metrics_daily(
-    wh: Warehouse, sp: SPAPIClient, ads: AdsClient, days: int = BACKFILL_DAYS,
+    wh: Warehouse, sp: SPAPIClient, ads: AdsClient | None, days: int = BACKFILL_DAYS,
     today: date | None = None,
 ) -> int:
     """metrics_daily (date, sku, units, revenue, ad_spend, ad_sales).
     Units and revenue -> GET_FLAT_FILE_ALL_ORDERS_DATA_BY_ORDER_DATE_GENERAL (one report
     for the whole window, cancelled orders excluded). Ad spend/sales -> Ads Reporting v3
-    spAdvertisedProduct, daily by advertisedSku (7-day attribution)."""
+    spAdvertisedProduct, daily by advertisedSku (7-day attribution). Without Ads API
+    access (`ads` None, e.g. an agency runs the ads), only units and revenue are written
+    and ad columns already loaded with `amz-agents import metrics_daily` are kept."""
     today = today or date.today()
     start, end = today - timedelta(days=days), today - timedelta(days=1)
     by_day: dict[tuple[str, str], dict[str, float]] = defaultdict(
@@ -174,15 +179,19 @@ def ingest_metrics_daily(
             m["units"] += int(r.get("quantity") or 0)
             m["revenue"] += float(r.get("item-price") or 0)  # blank while pending
 
-        for r in ads.report(
+        for r in (ads.report(
             "spAdvertisedProduct", a.isoformat(), b.isoformat(),
             group_by=["advertiser"], columns=["date", "advertisedSku", "cost", "sales7d"],
             time_unit="DAILY",
-        ):
+        ) if ads else []):
             m = by_day[(r["date"], r["advertisedSku"])]
             m["ad_spend"] += float(r.get("cost") or 0)
             m["ad_sales"] += float(r.get("sales7d") or 0)
 
+    if ads is None:
+        return wh.upsert("metrics_daily", [
+            {"date": d, "sku": sku, "units": m["units"], "revenue": round(m["revenue"], 2)}
+            for (d, sku), m in sorted(by_day.items())], ["date", "sku"])
     wh.insert_many("metrics_daily", [
         {"date": d, "sku": sku, **{k: round(v, 2) for k, v in m.items()}}
         for (d, sku), m in sorted(by_day.items())
@@ -256,6 +265,8 @@ def ingest_ads(wh: Warehouse, ads: AdsClient, today: date | None = None) -> tupl
 def ingest_costs_csv(wh: Warehouse, path: str | Path) -> int:
     """landed_cost and lead_time_days from your ERP/COGS sheet: columns
     sku, landed_cost, lead_time_days."""
+    from . import assumptions
+
     n = 0
     with open(path, newline="") as f:
         for r in csv.DictReader(f):
@@ -263,6 +274,7 @@ def ingest_costs_csv(wh: Warehouse, path: str | Path) -> int:
                 "UPDATE products SET landed_cost=?, lead_time_days=? WHERE sku=?",
                 (float(r["landed_cost"]), int(r["lead_time_days"]), r["sku"]),
             ).rowcount
+            assumptions.clear(wh, r["sku"], "landed_cost", "lead_time_days")
     wh.conn.commit()
     return n
 
@@ -645,13 +657,7 @@ def import_csv(wh: Warehouse, table: str, path: str | Path) -> int:
     if not rows:
         return 0
     if pk and set(pk) <= set(rows[0]):
-        fields = list(rows[0])
-        updates = [c for c in fields if c not in pk] or fields[:1]
-        sql = (f"INSERT INTO {table} ({','.join(fields)}) VALUES ({','.join('?' * len(fields))}) "
-               f"ON CONFLICT({','.join(pk)}) DO UPDATE SET "
-               + ",".join(f"{c}=excluded.{c}" for c in updates))
-        wh.conn.executemany(sql, [tuple(r[c] for c in fields) for r in rows])
-        wh.conn.commit()
+        wh.upsert(table, rows, pk)
     else:
         wh.insert_many(table, rows)
     return len(rows)
@@ -670,8 +676,11 @@ def run_all(wh: Warehouse, only: set[str] | None = None) -> dict[str, Any]:
         except Exception as e:  # noqa: BLE001 - report and continue with other jobs
             results[name] = f"failed: {e!r}"
 
-    if os.getenv("SP_API_REFRESH_TOKEN") and os.getenv("ADS_API_REFRESH_TOKEN"):
-        sp, ads = SPAPIClient.from_env(), AdsClient.from_env()
+    if os.getenv("SP_API_REFRESH_TOKEN"):
+        # Ads API is optional: without it, ad spend comes from an import (e.g. an agency's
+        # report) and the ads job is skipped.
+        sp = SPAPIClient.from_env()
+        ads = AdsClient.from_env() if os.getenv("ADS_API_REFRESH_TOKEN") else None
         seller = os.getenv("SP_API_SELLER_ID", "")
         if want("products"):
             run("products", lambda: ingest_products(wh, sp, seller))
@@ -679,7 +688,7 @@ def run_all(wh: Warehouse, only: set[str] | None = None) -> dict[str, Any]:
             run("metrics", lambda: ingest_metrics_daily(wh, sp, ads))
         if want("inventory"):
             run("inventory", lambda: ingest_inventory(wh, sp))
-        if want("ads"):
+        if want("ads") and ads:
             run("ads", lambda: ingest_ads(wh, ads))
         if want("listing_assets"):
             run("listing_assets", lambda: ingest_listing_assets(wh, sp))
@@ -687,7 +696,7 @@ def run_all(wh: Warehouse, only: set[str] | None = None) -> dict[str, Any]:
             run("asin_traffic", lambda: ingest_asin_traffic(wh, sp))
     if os.getenv("COSTS_CSV") and want("costs"):
         run("costs", lambda: ingest_costs_csv(wh, os.environ["COSTS_CSV"]))
-    if os.getenv("SHOPIFY_ACCESS_TOKEN") and want("shopify"):
+    if ShopifyClient.configured() and want("shopify"):
         run("shopify", lambda: ingest_shopify(wh, ShopifyClient.from_env()))
     if os.getenv("META_ACCESS_TOKEN") and want("meta"):
         meta = MetaAdsClient.from_env()

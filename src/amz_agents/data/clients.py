@@ -278,21 +278,56 @@ class AdsClient(_Base):
 
 
 class ShopifyClient:
-    """Shopify Admin GraphQL API with a custom-app access token.
+    """Shopify Admin GraphQL API.
+
+    Auth, either:
+      - SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET: an app made in the Shopify Dev
+        Dashboard (the only kind since 2026-01-01) and installed on our own store. The
+        pair is exchanged for an access token (client credentials grant) that lasts
+        about 24 hours, and refreshed before it expires.
+      - SHOPIFY_ACCESS_TOKEN: a legacy custom app's permanent token (shpat_...), made in
+        the store admin before 2026; these keep working.
 
     Verify against https://shopify.dev/docs/api/admin-graphql before going live.
     """
 
-    def __init__(self, shop: str, token: str, api_version: str = "2025-10",
+    def __init__(self, shop: str, token: str | Callable[[], str], api_version: str = "2026-07",
                  http: httpx.Client | None = None):
         self.url = f"https://{shop}/admin/api/{api_version}/graphql.json"
-        self.token = token
+        self._token = token
         self.http = http or httpx.Client(timeout=30)
 
+    @property
+    def token(self) -> str:
+        return self._token() if callable(self._token) else self._token
+
+    @staticmethod
+    def configured() -> bool:
+        return bool(os.getenv("SHOPIFY_SHOP") and (
+            os.getenv("SHOPIFY_ACCESS_TOKEN")
+            or (os.getenv("SHOPIFY_CLIENT_ID") and os.getenv("SHOPIFY_CLIENT_SECRET"))))
+
     @classmethod
-    def from_env(cls) -> ShopifyClient:
-        return cls(os.environ["SHOPIFY_SHOP"], os.environ["SHOPIFY_ACCESS_TOKEN"],
-                   os.getenv("SHOPIFY_API_VERSION", "2025-10"))
+    def from_env(cls, http: httpx.Client | None = None) -> ShopifyClient:
+        shop, version = os.environ["SHOPIFY_SHOP"], os.getenv("SHOPIFY_API_VERSION", "2026-07")
+        http = http or httpx.Client(timeout=30)
+        if os.getenv("SHOPIFY_ACCESS_TOKEN"):
+            return cls(shop, os.environ["SHOPIFY_ACCESS_TOKEN"], version, http)
+        client_id, secret = os.environ["SHOPIFY_CLIENT_ID"], os.environ["SHOPIFY_CLIENT_SECRET"]
+        cache: dict[str, Any] = {"token": None, "until": 0.0}
+
+        def token() -> str:
+            if not cache["token"] or time.time() > cache["until"]:
+                r = http.post(f"https://{shop}/admin/oauth/access_token",
+                              json={"client_id": client_id, "client_secret": secret,
+                                    "grant_type": "client_credentials"})
+                r.raise_for_status()
+                body = r.json()
+                cache["token"] = body["access_token"]
+                cache["until"] = time.time() + int(body.get("expires_in") or 86399) - 300
+            return cache["token"]
+
+        return cls(shop, token, version, http)
 
     def graphql(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
         for attempt in range(5):

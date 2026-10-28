@@ -25,6 +25,7 @@ from .base import Agent, Context, Role
 
 PARITY_TOLERANCE = 0.02  # off-Amazon price may sit this far below Amazon's
 MIN_VELOCITY_TO_EXPAND = 5.0  # Amazon units/day before suggesting another channel
+SKU_MATCH_MIN = 0.25  # share of Amazon's top 20 SKUs a channel must list to compare
 FOLLOW_UP_DAYS = {"new": 2, "contacted": 7, "negotiating": 3}
 
 
@@ -34,7 +35,8 @@ class SalesAgent(Agent):
         mission="Grow sales outside Amazon (own store, other marketplaces, wholesale) "
                 "without undercutting the Amazon Buy Box.",
         team="sales",
-        proposes={"update_channel_price": "XS", "list_on_channel": "L", "send_outreach": "S"},
+        proposes={"update_channel_price": "XS", "review_channel_pricing": "S",
+                  "list_on_channel": "L", "send_outreach": "S"},
         needs=("channel_listings", "leads"),
     )
 
@@ -48,8 +50,10 @@ class SalesAgent(Agent):
         g = ctx.settings.guardrails
         pending = ctx.shared.get("amazon_price_proposals", {})
         out: list[Action] = []
+        gaps: list[dict] = []  # parity gaps on products whose costs are assumed
         for r in ctx.wh.query(
-            "SELECT c.*, p.price AS amazon_price, p.landed_cost FROM channel_listings c "
+            "SELECT c.*, p.price AS amazon_price, p.landed_cost, p.assumed, p.daily_velocity "
+            "FROM channel_listings c "
             "JOIN products p ON p.sku = c.sku WHERE c.listed = 1 AND p.landed_cost IS NOT NULL "
             "AND c.fees IS NOT NULL ORDER BY c.channel, c.sku"
         ):
@@ -57,6 +61,12 @@ class SalesAgent(Agent):
             # pricing agent just proposed, so the two agents don't pull in opposite directions.
             price = r["price"]
             amazon = min(r["amazon_price"], pending.get(r["sku"], r["amazon_price"]))
+            if "landed_cost" in (r["assumed"] or ""):
+                # Margin floors on an assumed cost aren't safe to act on per SKU: report
+                # the parity gaps once, for a person to decide.
+                if price < amazon * (1 - PARITY_TOLERANCE):
+                    gaps.append(r)
+                continue
             c = clamp_price(g, price, price, r["landed_cost"], r["fees"])
             if c.value != price:  # below the margin floor on this channel
                 proposed, why = c.value, f"below margin floor after {r['channel']} fees"
@@ -77,6 +87,19 @@ class SalesAgent(Agent):
                        "margin": round((proposed - r["landed_cost"] - r["fees"]) / proposed, 3)},
                 reason=why,
             ))
+        if gaps:
+            gaps.sort(key=lambda r: -((r["daily_velocity"] or 0) + (r["units_30d"] or 0) / 30))
+            ex = ", ".join(f"{r['sku']} {r['price']:.2f} vs {r['amazon_price']:.2f}" for r in gaps[:3])
+            out.append(Action(
+                agent=self.name, kind="review_channel_pricing",
+                target=f"{gaps[0]['channel']}/parity", before={"skus": len(gaps)},
+                after={"title": f"{len(gaps)} SKUs cost less on {gaps[0]['channel']} than on Amazon",
+                       "skus": [r["sku"] for r in gaps[:50]]},
+                reason=(f"{len(gaps)} SKUs are priced more than {PARITY_TOLERANCE:.0%} below "
+                        f"Amazon on {gaps[0]['channel']} (e.g. {ex}). Amazon can drop the Buy Box "
+                        "when the same item is cheaper elsewhere. Decide one rule: match Amazon, "
+                        "or keep the site cheaper on purpose."),
+            ))
         return out
 
     def _expand(self, ctx: Context) -> list[Action]:
@@ -85,6 +108,12 @@ class SalesAgent(Agent):
                     ctx.wh.query("SELECT DISTINCT channel FROM channel_listings ORDER BY channel")]
         live = {(r["channel"], r["sku"]) for r in
                 ctx.wh.query("SELECT channel, sku FROM channel_listings WHERE listed = 1")}
+        # A channel that has none of Amazon's best sellers under the same SKU most likely
+        # names SKUs differently; "not listed" would be wrong for all of them.
+        top = [p["sku"] for p in ctx.wh.query(
+            "SELECT sku FROM products ORDER BY daily_velocity DESC LIMIT 20")]
+        channels = [ch for ch in channels
+                    if not top or sum((ch, s) in live for s in top) >= len(top) * SKU_MATCH_MIN]
         out: list[Action] = []
         for p in ctx.wh.query("SELECT * FROM products ORDER BY daily_velocity DESC"):
             if (p["daily_velocity"] or 0) < MIN_VELOCITY_TO_EXPAND or p["sku"] in low:

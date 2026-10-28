@@ -1,0 +1,7 @@
+{
+ "_comment": "Weekly scorecard targets on the dashboard's Summary tab. 'better': which direction is good.",
+ "weekly_sales": {"label": "Weekly sales", "target": 240000, "better": "up", "unit": "$"},
+ "return_rate": {"label": "Return rate", "target": 8.0, "better": "down", "unit": "%"},
+ "search_purchase_share": {"label": "Purchase share, top searches", "target": 7.0, "better": "up", "unit": "%"},
+ "repeat_rate": {"label": "Repeat customer rate", "target": 11.0, "better": "up", "unit": "%"}
+}

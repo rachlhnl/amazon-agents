@@ -1,0 +1,9 @@
+{
+  "_comment": "Copy to ~/dagacci/config/spapi.json and fill in. Never commit or share the filled file.",
+  "region": "na",
+  "marketplace_id": "ATVPDKIKX0DER",
+  "client_id": "amzn1.application-oa2-client.REPLACE_ME",
+  "client_secret": "REPLACE_ME",
+  "refresh_token": "Atzr|REPLACE_ME",
+  "asins": ["B00FT77746", "B00FT74D3E", "B00FT74H5S", "B00FT739RA", "B00FT732LS"]
+}

@@ -38,7 +38,7 @@ def from_env(wh: Warehouse) -> dict[str, Executor]:
         wh,
         ads=AdsClient.from_env() if amazon else None,
         sp=SPAPIClient.from_env() if amazon else None,
-        shopify=ShopifyClient.from_env() if has("SHOPIFY_ACCESS_TOKEN") else None,
+        shopify=ShopifyClient.from_env() if ShopifyClient.configured() else None,
         meta=MetaAdsClient.from_env() if has("META_ACCESS_TOKEN") else None,
     )
 

@@ -25,6 +25,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
 
+from . import assumptions, quartile
 from .actions import HUMAN_ONLY, Action, ActionLog
 from .agents import ads, listing, pricing, reviews, sales, ux
 from .agents import chief_of_staff as cos
@@ -336,20 +337,38 @@ def scorecard(wh: Warehouse) -> dict[str, Any] | None:
         return None
     end = date.fromisoformat(last)
 
-    def week(ago: int) -> dict[str, float | None]:
+    # Without daily ad spend (no Ads API), use an agency export's daily average.
+    q = wh.query("SELECT period_start, period_end, SUM(ad_spend) AS spend FROM ad_products "
+                 "GROUP BY period_start, period_end ORDER BY period_end DESC LIMIT 1")
+    agency_day = (q[0]["spend"] / ((date.fromisoformat(q[0]["period_end"])
+                                    - date.fromisoformat(q[0]["period_start"])).days + 1)
+                  if q and q[0]["spend"] else None)
+
+    def week(ago: int) -> dict[str, Any]:
         hi, lo = end - timedelta(days=ago), end - timedelta(days=ago + 6)
         rows = wh.query(
             "SELECT COALESCE(SUM(m.units),0) AS units, COALESCE(SUM(m.revenue),0) AS revenue, "
             "COALESCE(SUM(m.ad_spend),0) AS ad_spend, "
             "SUM(m.units * (p.landed_cost + p.fees)) AS cogs, "
-            "SUM(CASE WHEN p.landed_cost IS NULL OR p.fees IS NULL THEN m.units END) AS uncosted "
+            "SUM(CASE WHEN p.landed_cost IS NOT NULL AND p.fees IS NOT NULL THEN m.revenue END) "
+            "AS costed_rev, "
+            "SUM(CASE WHEN COALESCE(p.assumed, '') != '' THEN m.units END) AS assumed_units "
             "FROM metrics_daily m LEFT JOIN products p ON p.sku = m.sku "
             "WHERE m.date BETWEEN ? AND ?", (lo.isoformat(), hi.isoformat()))[0]
         rev, spend = rows["revenue"], rows["ad_spend"]
-        profit = rev - rows["cogs"] - spend if rows["cogs"] is not None and not rows["uncosted"] \
-            else None
+        spend_used = spend or (agency_day * 7 if agency_day else 0)
+        covered = (rows["costed_rev"] or 0) / rev if rev else 0
+        # Profit once 90% of sales have a cost (real or assumed); the rest is left out.
+        profit = (rows["costed_rev"] - rows["cogs"] - spend_used * covered
+                  if rows["cogs"] is not None and covered >= 0.9 else None)
+        notes = [n for n in (
+            "estimate: assumed costs" if rows["assumed_units"] else "",
+            "ad spend from Quartile's daily average" if not spend and agency_day else "",
+            f"{1 - covered:.0%} of sales have no cost" if profit is not None and covered < 0.995 else "",
+        ) if n]
+        # No ad spend recorded (no Ads API; an agency's export has no days): unknown, not 0%.
         return {"revenue": rev, "units": rows["units"], "ad_spend": spend, "profit": profit,
-                "tacos": spend / rev if rev else None}
+                "profit_note": "; ".join(notes), "tacos": spend / rev if rev and spend else None}
 
     return {"through": last, "now": week(0), "prior": week(7)}
 
@@ -377,14 +396,26 @@ def setup_gaps(wh: Warehouse, goals: list[dict[str, Any]],
         gaps.append(f"No owner in teams.toml for {', '.join(unowned)}, so nobody is "
                     "accountable for that work.")
     if not wh.query("SELECT 1 FROM products LIMIT 1"):
-        gaps.append("No product or sales data yet: connect Seller Central (SP-API) and "
+        gaps.append(("No daily sales or product data yet (the Amazon ads tab has Quartile's "
+                     "totals for a period): connect Seller Central (SP-API) and run amz-agents "
+                     "ingest, then amz-agents run.")
+                    if wh.query("SELECT 1 FROM ad_products LIMIT 1") else
+                    "No product or sales data yet: connect Seller Central (SP-API) and "
                     "run amz-agents ingest, then amz-agents run.")
     else:
         uncosted = wh.query("SELECT COUNT(*) AS n FROM products "
                             "WHERE landed_cost IS NULL OR fees IS NULL")[0]["n"]
+        assumed = wh.query("SELECT COUNT(*) AS n FROM products "
+                           "WHERE COALESCE(assumed, '') != ''")[0]["n"]
+        if assumed:
+            d = assumptions.defaults()
+            gaps.append(f"{assumed:,} products use assumed costs (landed cost {d['landed_cost']:.0%} "
+                        f"of price, Amazon fees {d['fees']:.1%}, {d['lead_time_days']:.0f}-day lead "
+                        "time): profit, ROI and reorder sizes are estimates, and prices aren't "
+                        "changed for them. Load COSTS_CSV with real landed costs and lead times.")
         if uncosted:
-            gaps.append(f"{uncosted} products have no landed cost, so profit, price floors "
-                        "and ROI can't be worked out for them: load COSTS_CSV.")
+            gaps.append(f"{uncosted:,} products have no price or cost at all, so they're left out "
+                        "of profit and ROI.")
     if not goals:
         gaps.append("No company goals: add them to goals.toml so the chief of staff can "
                     "rank work by what matters.")
@@ -444,7 +475,7 @@ def plan_view(wh: Warehouse, actions: list[dict[str, Any]], owners: dict[str, st
             "loe": item.get("loe", ""),
             "gain_low": item.get("gain_low", 0), "gain_high": item.get("gain_high", 0),
             "kpi": item["kpi"], "baseline": item["baseline"], "target": item["target"],
-            "score": plan.measure(item, today), "action_id": a["id"] if a else None,
+            "score": plan.measure(item, today, wh), "action_id": a["id"] if a else None,
             "status": a["status"] if a else None, "due": a["due"] if a else None,
             "overdue": a["overdue"] if a else False, "merged": merged.get(str(item["rank"]), 0),
         })
@@ -575,6 +606,7 @@ def collect(wh: Warehouse, today: date | None = None,
         "market": market_summary() if include_market else None,
         "shopper": shopper_view() if include_market else None,
         "plan": plan_view(wh, actions, teams_cfg["owners"], today) if include_market else [],
+        "ads": quartile.view(wh),
     }
 
 
@@ -873,8 +905,32 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
 .cl td, .cl th { text-align: center; } .cl td:first-child, .cl th:first-child { text-align: left; }
 .cl .y { color: var(--good-text); font-weight: 700; } .cl .n { color: var(--text-3); }
 .cl th.me, .cl td.me { background: var(--accent-soft); }
+/* Amazon ads */
+.ads .kpis { margin-top: 16px; }
+.finds { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.find { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 12px; padding: 14px; }
+.find.risk { border-left-color: var(--crit); } .find.plan { border-left-color: var(--warn); }
+.find .hd { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.find .ttl { font-weight: 650; } .find p { margin: 6px 0 0; font-size: 13px; color: var(--text-2); }
+.find .do { color: var(--text); }
+.find details { margin-top: 8px; font-size: 12.5px; } .find summary { cursor: pointer; color: var(--accent); }
+.find details table { font-size: 12px; margin-top: 6px; } .find details td, .find details th { padding: 4px 6px; }
+.bar { display: flex; align-items: center; gap: 8px; min-width: 120px; }
+.bar .t { flex: 1; height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+.bar .t i { display: block; height: 100%; background: var(--accent); border-radius: 0 4px 4px 0; }
+.bar span { font-size: 12px; font-variant-numeric: tabular-nums; width: 40px; text-align: right; color: var(--text-2); }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.hbars { display: grid; gap: 6px; margin-top: 10px; }
+.hbars .row { display: grid; grid-template-columns: 110px 1fr 70px; gap: 8px; align-items: center; font-size: 12.5px; }
+.hbars .row .lab { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbars .row .v { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-2); }
+.hbars .t { height: 14px; background: var(--surface-2); border-radius: 0 4px 4px 0; }
+.hbars .t i { display: block; height: 100%; background: var(--accent); border-radius: 0 4px 4px 0; min-width: 2px; }
+.sty { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 900px) { .two { grid-template-columns: 1fr; } }
 /* Tabs */
-.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 18px 0 0; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 18px 0 0; overflow-x: auto; scrollbar-width: none; }
+.tabs button { flex: none; white-space: nowrap; }
 .tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; margin-bottom: -1px;
   font-size: 14px; color: var(--text-2); cursor: pointer; }
 .tabs button[aria-selected=true] { color: var(--text); border-bottom-color: var(--accent); font-weight: 650; }
@@ -954,6 +1010,7 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
   </header>
   <nav class="tabs" role="tablist" aria-label="Views">
     <button type="button" role="tab" id="t-work" aria-controls="tab-work" aria-selected="true">Work</button>
+    <button type="button" role="tab" id="t-ads" aria-controls="tab-ads" aria-selected="false">Amazon ads</button>
     <button type="button" role="tab" id="t-market" aria-controls="tab-market" aria-selected="false">Market &amp; customers</button>
     <button type="button" role="tab" id="t-shop" aria-controls="tab-shop" aria-selected="false">Mystery shopper</button>
     <button type="button" role="tab" id="t-how" aria-controls="tab-how" aria-selected="false">How the agents work together</button>
@@ -961,7 +1018,7 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
   <div id="tab-work" role="tabpanel" aria-labelledby="t-work">
   <div id="setup"></div>
   <section class="score" id="score" aria-label="This week"></section>
-  <div class="sec-head"><h2>CEO plan</h2><p id="plan-note">From plan.toml. Approved work, in priority order.</p></div>
+  <div class="sec-head"><h2>CEO plan</h2><p id="plan-note">From the CEO plan file. Approved work, in priority order.</p></div>
   <section class="table-wrap" id="plan"></section>
   <div class="sec-head"><h2>Agent work</h2><p></p></div>
   <p class="headline" id="headline" style="margin-top:0"></p>
@@ -993,6 +1050,21 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
   <div class="sec-head"><h2>The team</h2><p>Click an agent to see only their work.</p></div>
   <section class="team" id="team" aria-label="Agents"></section>
   <p class="note" id="foot"></p>
+  </div>
+  <div id="tab-ads" class="ads" role="tabpanel" aria-labelledby="t-ads" hidden>
+    <p class="lead" id="ads-lead"></p>
+    <section class="kpis" id="ads-kpis" aria-label="Amazon totals"></section>
+    <div class="sec-head"><h2>What to do about it</h2><p>Bids and budgets are Quartile&rsquo;s: take the ad findings to them.</p></div>
+    <section class="finds" id="ads-finds"></section>
+    <div class="sec-head"><h2>Styles</h2><p>Each parent listing with its variants. &ldquo;From ads&rdquo;: share of its sales that ads brought in.</p></div>
+    <section class="table-wrap" id="ads-styles"></section>
+    <div class="two" style="margin-top:12px">
+      <div class="panel"><h2>Sales by size</h2><div class="hbars" id="ads-sizes"></div></div>
+      <div class="panel"><h2>Sales by color (top 12)</h2><div class="hbars" id="ads-colors"></div></div>
+    </div>
+    <div class="sec-head"><h2>Top 25 products</h2><p id="ads-top-note"></p></div>
+    <section class="table-wrap" id="ads-top"></section>
+    <p class="note" id="ads-foot"></p>
   </div>
   <div id="tab-market" role="tabpanel" aria-labelledby="t-market" hidden>
     <p class="lead" id="market-lead"></p>
@@ -1111,7 +1183,10 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
   meta.append(el('span', {text: 'Sales data through ' + (D.data_through || 'n/a')}));
 
   // Setup problems: decisions are only as good as these.
-  const gaps = [...(D.sample ? ['This is sample data (a water-bottle company from amz-agents demo), not Dagacci.'] : []), ...D.setup_gaps];
+  // An agent that only lacks a data feed is a setup gap, not a decision: one line here.
+  const waiting = D.agents.filter(a => a.problems.length && a.problems.every(p => p.startsWith('no data in')));
+  const gaps = [...(D.sample ? ['This is sample data (a water-bottle company from amz-agents demo), not Dagacci.'] : []), ...D.setup_gaps,
+    ...(waiting.length ? ['Agents idle until their data is connected: ' + waiting.map(a => NAME(a.name) + ' (' + a.problems.map(p => p.replace('no data in ', '')).join(', ') + ')').join('; ') + '.'] : [])];
   if (gaps.length) document.getElementById('setup').append(el('div', {class: 'warn-box'},
     el('b', {text: 'Fix before trusting these numbers: '}), 'the agents are only as good as the data and goals they get.',
     el('ul', {}, gaps.map(g => el('li', {text: g})))));
@@ -1130,14 +1205,25 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
   const biz = el('div', {class: 'panel'}, el('h2', {text: S ? 'This week (7 days to ' + S.through + ')' : 'This week'}));
   if (S) {
     biz.append(el('div', {class: 'kpis', style: 'margin-top:12px'},
-      stile('Contribution profit', usd(S.now.profit), chg(S.now.profit, S.prior.profit), S.now.profit == null ? 'needs product costs' : null),
+      stile('Contribution profit', usd(S.now.profit), chg(S.now.profit, S.prior.profit), S.now.profit == null ? 'needs product costs' : S.now.profit_note || null),
       stile('Revenue', usd(S.now.revenue), chg(S.now.revenue, S.prior.revenue)),
       stile('Units', fmt(S.now.units), chg(S.now.units, S.prior.units)),
-      stile('TACoS', pct(S.now.tacos), chg(S.now.tacos, S.prior.tacos, true), 'ad spend \u00f7 revenue')));
+      S.now.tacos == null && D.ads
+        ? stile('TACoS', pct(D.ads.totals.tacos), null, 'Quartile, ' + day(D.ads.start) + ' \u2013 ' + day(D.ads.end) + ' (no daily ad spend)')
+        : stile('TACoS', pct(S.now.tacos), chg(S.now.tacos, S.prior.tacos, true), 'ad spend \u00f7 revenue')));
+  } else if (D.ads) {
+    const T = D.ads.totals;
+    biz.querySelector('h2').textContent = 'Amazon, ' + day(D.ads.start) + ' \u2013 ' + day(D.ads.end) + ' (Quartile)';
+    biz.append(el('div', {class: 'kpis', style: 'margin-top:12px'},
+      stile('Sales', usd(T.sales), null, '\u2248 ' + usd(T.monthly) + ' a month'),
+      stile('Ad spend', usd(T.spend), null, D.ads.ad_types),
+      stile('TACoS', pct(T.tacos), null, 'ad spend \u00f7 sales'),
+      stile('ACoS', pct(T.acos), null, 'ad spend \u00f7 ad sales')),
+      el('p', {class: 'optim', text: 'Period totals from Quartile, not this week. Once Seller Central is connected this shows revenue, profit, units and ad efficiency each week.'}));
   } else biz.append(el('p', {class: 'optim', text: 'No sales data yet. Once Seller Central is connected this shows revenue, profit, units and ad efficiency each week.'}));
   biz.append(el('p', {class: 'optim'}, el('b', {text: 'What the agents optimize: '}),
     'contribution profit (sales \u2212 product cost \u2212 Amazon fees \u2212 ad spend). Every suggestion is ranked by how much profit it should add over 30 days per hour of your team\u2019s time, then checked against the goals on the right.'));
-  const gl = el('div', {class: 'panel'}, el('h2', {text: 'Goals'}), el('p', {class: 'optim', style: 'margin-top:2px', text: 'From goals.toml. Last 7 days vs days 15\u201328 ago.'}));
+  const gl = el('div', {class: 'panel'}, el('h2', {text: 'Goals'}), el('p', {class: 'optim', style: 'margin-top:2px', text: 'From the goals file (goals.local.toml). Last 7 days vs days 15\u201328 ago.'}));
   const GS = {'on track': 'good', behind: 'you', 'off track': 'bad', 'no data': ''};
   if (!D.goals.length) gl.append(el('p', {class: 'optim', text: 'No goals set. Add them to goals.toml.'}));
   for (const g of D.goals) gl.append(el('div', {class: 'goal'}, el('div', {text: g.name}),
@@ -1184,7 +1270,7 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
   // Work only a person can move goes first, then the best ideas.
   const mustAct = a => needsOk(a) || needsDone(a) || a.status === 'failed' ? 0 : 1;
   const todos = D.actions.filter(isTodo).sort((x, y) => mustAct(x) - mustAct(y) || byPri(x, y));
-  const sick = D.agents.filter(a => a.problems.length);
+  const sick = D.agents.filter(a => a.problems.some(p => !p.startsWith('no data in')));
   const hl = document.getElementById('headline');
   if (!D.run) {
     hl.append('Nothing to track yet. Run ', el('b', {text: 'amz-agents run'}),
@@ -1451,7 +1537,7 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
     update_listing_copy: 'Rewrite listing copy', update_campaign_budget: 'Change a campaign budget',
     pause_campaign: 'Pause a campaign', email_campaign: 'Draft an email campaign',
     update_channel_price: 'Change a price on another channel', list_on_channel: 'List on a new channel',
-    send_outreach: 'Draft wholesale outreach', refresh_creative: 'Refresh a tired ad', pause_creative: 'Pause an ad',
+    send_outreach: 'Draft wholesale outreach', review_channel_pricing: 'Set a pricing rule across channels', refresh_creative: 'Refresh a tired ad', pause_creative: 'Pause an ad',
     new_creative_variants: 'Make variants of a winning ad', improve_listing_assets: 'Add Amazon images, video or A+',
     fix_listing_title: 'Fix a listing title', fix_funnel_step: 'Fix a store checkout step',
     improve_page_speed: 'Speed up a page', fix_accessibility: 'Fix an accessibility issue',
@@ -1643,8 +1729,76 @@ dt { color: var(--text-3); } dd { margin: 0; overflow-wrap: anywhere; }
       + ' Amazon listings are judged from the market tracker\u2019s reads, not visited again. Checks read page text, so something shown only in an image counts as missing.';
   }
 
+  // Amazon ads (Quartile export)
+  const A = D.ads;
+  const pc = v => v == null ? '\u2014' : (v * 100).toFixed(1) + '%';
+  const bar = (v, label) => v == null ? el('span', {class: 'n', text: '\u2014'}) : el('div', {class: 'bar'},
+    el('div', {class: 't'}, el('i', {style: 'width:' + Math.min(100, v * 100).toFixed(1) + '%'})), el('span', {text: label || pc(v)}));
+  const hbars = (id, rows, key) => {
+    const max = Math.max(...rows.map(r => r.sales)), sum = rows.reduce((t, r) => t + r.sales, 0);
+    document.getElementById(id).append(...rows.map(r => {
+      const row = el('div', {class: 'row'}, el('span', {class: 'lab', text: r[key], title: r[key]}),
+        el('div', {class: 't'}, el('i', {style: 'width:' + (r.sales / max * 100).toFixed(1) + '%'})),
+        el('span', {class: 'v', text: usd(r.sales)}));
+      row.addEventListener('mousemove', e => showTip(e, r[key] + ': ' + usd(r.sales) + ' \u00b7 ' + pc(r.sales / sum) + ' of these'));
+      row.addEventListener('mouseleave', hideTip);
+      return row;
+    }));
+  };
+  const asinTable = rows => el('table', {},
+    el('thead', {}, el('tr', {}, el('th', {text: 'Product'}), el('th', {class: 'num', text: 'Sales'}),
+      el('th', {class: 'num', text: 'Ad spend'}), el('th', {class: 'num', text: 'Ad sales'}),
+      el('th', {class: 'num', text: 'ACoS'}), el('th', {class: 'num hide-sm', text: 'TACoS'}))),
+    el('tbody', {}, rows.map(r => el('tr', {},
+      el('td', {}, el('a', {href: 'https://www.amazon.com/dp/' + r.asin, target: '_blank', rel: 'noopener', text: r.asin}),
+        el('div', {class: 'sty', style: 'font-size:12px;color:var(--text-3)', title: r.name, text: r.name})),
+      el('td', {class: 'num', text: usd(r.sales)}), el('td', {class: 'num', text: usd(r.spend)}),
+      el('td', {class: 'num', text: usd(r.ad_sales)}), el('td', {class: 'num', text: pc(r.acos)}),
+      el('td', {class: 'num hide-sm', text: pc(r.tacos)})))));
+  if (!A) {
+    document.getElementById('ads-lead').textContent = 'No ad data yet. In portal.quartile.com: Reports \u2192 Product Performance \u2192 Amazon Products \u2192 ASIN Analysis, then \u22ef on the ASIN Performance table \u2192 Export data. Load it with amz-agents quartile FILE.';
+  } else {
+    const T = A.totals;
+    document.getElementById('ads-lead').textContent = 'From ' + A.source + '\u2019s ASIN Analysis export: ' + day(A.start) + ' \u2013 ' + day(A.end)
+      + ' (' + A.days + ' days), ' + A.ad_types + ', ' + fmt(T.asins) + ' products. Totals for the period, not daily: daily figures come once Seller Central is connected.';
+    document.getElementById('ads-kpis').append(
+      stile('Amazon sales', usd(T.sales), null, '\u2248 ' + usd(T.monthly) + ' a month'),
+      stile('Ad spend', usd(T.spend), null, usd(T.spend * 30 / A.days) + ' a month'),
+      stile('ACoS', pc(T.acos), null, 'ad spend \u00f7 ad sales \u00b7 ROAS ' + (T.roas || 0).toFixed(1)),
+      stile('TACoS', pc(T.tacos), null, 'ad spend \u00f7 all sales'),
+      stile('Sales from ads', pc(T.ad_sales / T.sales), null, usd(T.ad_sales) + ' credited to ads'),
+      stile('Products selling', fmt(T.selling), null, 'of ' + fmt(T.asins) + ' \u00b7 top 10 = ' + pc(T.top10_share) + ' of sales'));
+    const WHO = {risk: 'Risk', listing: 'Listing work', ask_agency: 'Ask Quartile', catalog: 'Catalog', plan: 'CEO plan'};
+    document.getElementById('ads-finds').append(...A.findings.map(f => el('div', {class: 'find ' + f.kind},
+      el('div', {class: 'hd'}, el('span', {class: 'ttl', text: f.title}), el('span', {class: 'tag', text: WHO[f.kind] || f.kind})),
+      f.see ? el('p', {text: f.see}) : null,
+      el('p', {class: 'do', text: f.do}),
+      el('p', {text: 'Owner: ' + f.who + (f.gain ? ' \u00b7 est. ' + usd(f.gain) + '/mo' : '')}),
+      f.items && f.items.some(a => A.asins[a]) ? el('details', {}, el('summary', {text: 'Show ' + plural(f.items.filter(a => A.asins[a]).length, 'product')}),
+        el('div', {class: 'table-wrap'}, asinTable(f.items.map(a => A.asins[a]).filter(Boolean)))) : null)));
+    document.getElementById('ads-styles').append(el('table', {},
+      el('thead', {}, el('tr', {}, el('th', {text: 'Style'}), el('th', {class: 'num', text: 'Sales'}),
+        el('th', {text: 'Share of sales'}), el('th', {text: 'From ads'}), el('th', {class: 'num', text: 'Ad spend'}),
+        el('th', {class: 'num', text: 'ACoS'}), el('th', {class: 'num hide-sm', text: 'Variants selling'}))),
+      el('tbody', {}, A.styles.filter(x => x.sales >= 1000).map(x => el('tr', {},
+        el('td', {}, el('div', {class: 'sty', title: x.name, text: x.name}), el('div', {style: 'font-size:12px;color:var(--text-3)', text: x.parent})),
+        el('td', {class: 'num', text: usd(x.sales)}), el('td', {}, bar(x.share)), el('td', {}, bar(x.ad_share)),
+        el('td', {class: 'num', text: usd(x.spend)}), el('td', {class: 'num', text: pc(x.acos)}),
+        el('td', {class: 'num hide-sm', text: x.selling + ' of ' + x.asins}))))));
+    const small = A.styles.filter(x => x.sales < 1000);
+    if (small.length) document.getElementById('ads-styles').append(el('p', {class: 'note', style: 'padding:0 12px 10px',
+      text: plural(small.length, 'more style') + ' sold under $1,000 each (' + usd(small.reduce((t, x) => t + x.sales, 0)) + ' together).'}));
+    hbars('ads-sizes', A.sizes, 'size');
+    hbars('ads-colors', A.colors, 'color');
+    document.getElementById('ads-top-note').textContent = 'By sales. Links open the Amazon page.';
+    document.getElementById('ads-top').append(asinTable(A.top));
+    document.getElementById('ads-foot').textContent = 'Ad sales can be higher than a product\u2019s own sales: Amazon credits an ad with other products bought after the click. '
+      + 'Sizes and colors are read from product names; ' + (A.ad_types === 'Sponsored Products' ? 'Sponsored Brands and Display aren\u2019t in this export, so real ad spend is higher. ' : '')
+      + 'Load a new export with amz-agents quartile FILE.';
+  }
+
   // Tabs (remembered in the URL hash so a link opens the right one)
-  const tabs = {work: ['t-work', 'tab-work'], market: ['t-market', 'tab-market'], shop: ['t-shop', 'tab-shop'], how: ['t-how', 'tab-how']};
+  const tabs = {work: ['t-work', 'tab-work'], ads: ['t-ads', 'tab-ads'], market: ['t-market', 'tab-market'], shop: ['t-shop', 'tab-shop'], how: ['t-how', 'tab-how']};
   const setTab = t => {
     for (const [k, [b, p]] of Object.entries(tabs)) {
       document.getElementById(b).setAttribute('aria-selected', String(k === t));

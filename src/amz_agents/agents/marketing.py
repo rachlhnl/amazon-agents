@@ -14,6 +14,7 @@ from __future__ import annotations
 from .. import llm
 from ..actions import Action
 from ..guardrails import clamp_budget_change
+from ..styles import styles
 from .base import Agent, Context, Role
 
 # Amazon credits brand-registered sellers a share of sales from external traffic
@@ -134,26 +135,38 @@ class MarketingAgent(Agent):
         )
 
     def _email(self, ctx: Context) -> list[Action]:
-        """Overstocked SKUs with no campaign behind them: draft an email to the customer list."""
+        """Overstocked styles with no campaign behind them: draft one email per style to
+        the customer list (an email sells a style, not one size of it)."""
         over = ctx.shared.get("overstock", set())
         promoted = {
             r["sku"] for r in ctx.wh.query("SELECT sku FROM external_campaigns WHERE status='enabled'")
         }
-        out: list[Action] = []
+        style = styles(ctx.wh)
+        groups: dict[str, list[dict]] = {}
         for p in ctx.wh.query("SELECT * FROM products ORDER BY sku"):
-            if p["sku"] not in over or p["sku"] in promoted:
-                continue
+            if p["sku"] in over and p["sku"] not in promoted:
+                groups.setdefault(style.get(p["sku"], (p["sku"],))[0], []).append(p)
+        out: list[Action] = []
+        for key, ps in groups.items():
+            name = style.get(ps[0]["sku"], (key, key))[1]
+            ps.sort(key=lambda p: -(p["units_on_hand"] or 0))
+            units = sum(p["units_on_hand"] or 0 for p in ps)
             draft = llm.complete(
                 "You write short, plain marketing emails for a consumer brand's own customer "
                 "list. No false urgency, no invented discounts or claims. Return a subject line "
                 "and a body under 120 words.",
-                f"Product: {p['title']}\nWe have plenty in stock. Suggest it to existing "
+                f"Product: {ps[0]['title']}\nWe have plenty in stock. Suggest it to existing "
                 "customers who might need one (e.g. a replacement or a gift).",
                 ctx.settings.anthropic_model, max_tokens=400,
             )
+            one = len(ps) == 1
             out.append(Action(
-                agent=self.name, kind="email_campaign", target=p["sku"], sku=p["sku"],
-                before=None, after={"audience": "customer list", "draft": draft},
-                reason=f"overstock ({p['units_on_hand']} on hand) and no paid campaign behind it",
+                agent=self.name, kind="email_campaign", target=ps[0]["sku"] if one else f"style/{key}",
+                sku=ps[0]["sku"] if one else None, before=None,
+                after={"audience": "customer list", "draft": draft,
+                       **({} if one else {"title": f"Email the list about {name}: {units:,} units "
+                                                   f"overstocked across {len(ps)} variants",
+                                          "skus": [p["sku"] for p in ps]})},
+                reason=f"overstock ({units} on hand) and no paid campaign behind it",
             ))
         return out

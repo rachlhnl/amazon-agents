@@ -30,8 +30,17 @@ KIND = "ceo_priority"
 FIT = "Fit & sizing"
 
 
+def plan_path() -> Path:
+    """PLAN_PATH, else plan.local.toml (git-ignored: the real plan, with real sales),
+    else the shareable example plan.toml."""
+    if os.getenv("PLAN_PATH"):
+        return Path(os.environ["PLAN_PATH"])
+    local = Path("plan.local.toml")
+    return local if local.exists() else Path("plan.toml")
+
+
 def load_plan(path: str | Path | None = None) -> list[dict[str, Any]]:
-    path = Path(path or os.getenv("PLAN_PATH", "plan.toml"))
+    path = Path(path) if path else plan_path()
     if not path.exists():
         return []
     with path.open("rb") as f:
@@ -90,12 +99,69 @@ def _met(value: float, target: str) -> bool | None:
             "≥": value >= t, ">=": value >= t, ">": value > t}[m.group(1)]
 
 
-def measure(item: dict[str, Any], today: date | None = None) -> dict[str, Any]:
+def _ads_measure(how: str, item: dict[str, Any], wh: Warehouse) -> dict[str, Any] | None:
+    """KPIs read from the latest Quartile export (amz_agents.quartile)."""
+    from . import quartile
+
+    v = quartile.view(wh)
+    if not v:
+        return None
+    src = f"Quartile export, {v['start']} to {v['end']}"
+    if how == "ads:costly":
+        f = next((f for f in v["findings"] if "cost much more per ad sale" in f["title"]), None)
+        n = len(f["items"]) if f else 0
+        return {"now": str(n), "met": _met(n, item["target"]), "source": src}
+    if how.startswith("ads:share:"):
+        want = set(how.split(":", 2)[2].split(","))
+        kids = [s for s in v["styles"] if s["parent"] in want]
+        sales = sum(s["sales"] for s in kids)
+        if not sales:
+            return None
+        share = sum(min(s["ad_sales"], s["sales"]) for s in kids) / sales
+        return {"now": f"{share:.0%}", "met": _met(share, item["target"]), "source": src}
+    return None
+
+
+CORE_SKUS = 60  # best sellers by units/day, as on the KPI dashboard
+
+
+def _stock_measure(item: dict[str, Any], wh: Warehouse) -> dict[str, Any] | None:
+    core = wh.query("SELECT units_on_hand FROM products WHERE daily_velocity > 0 AND "
+                    "units_on_hand IS NOT NULL ORDER BY daily_velocity DESC LIMIT ?", (CORE_SKUS,))
+    if not core:
+        return None
+    n = sum(1 for r in core if r["units_on_hand"] <= 0)
+    return {"now": str(n), "met": n <= int(re.sub(r"\D", "", item["target"]) or 0),
+            "source": f"FBA stock, top {len(core)} variants by units/day"}
+
+
+def _units_measure(sku: str, item: dict[str, Any], wh: Warehouse) -> dict[str, Any] | None:
+    """Units/day of one SKU over the last 7 days of sales data."""
+    last = wh.query("SELECT MAX(date) AS d FROM metrics_daily")[0]["d"]
+    if not last:
+        return None
+    start = (date.fromisoformat(last) - timedelta(days=6)).isoformat()
+    units = wh.query("SELECT COALESCE(SUM(units), 0) AS u FROM metrics_daily WHERE sku=? AND "
+                     "date BETWEEN ? AND ?", (sku, start, last))[0]["u"]
+    v = units / 7
+    return {"now": f"{v:.0f}/day", "met": _met(v, item["target"].replace("/day", "")),
+            "source": f"Seller Central orders, 7 days to {last}"}
+
+
+def measure(item: dict[str, Any], today: date | None = None,
+            wh: Warehouse | None = None) -> dict[str, Any]:
     """The KPI as it reads today: {"now": text or None, "met": bool or None, "source": ...}."""
     how = item.get("measure", "manual")
-    _, visit, _ = _market() if how != "manual" else (None, None, None)
+    _, visit, _ = _market() if how != "manual" and not how.startswith(("ads:", "stock:", "units7:")) \
+        else (None, None, None)
     out: dict[str, Any] = {"now": None, "met": None, "source": "check by hand"}
-    if how.startswith("fit_share:"):
+    if how.startswith("ads:") and wh is not None:
+        out = _ads_measure(how, item, wh) or out
+    elif how == "stock:core_out" and wh is not None:
+        out = _stock_measure(item, wh) or out
+    elif how.startswith("units7:") and wh is not None:
+        out = _units_measure(how.split(":", 1)[1], item, wh) or out
+    elif how.startswith("fit_share:"):
         share, n = fit_share(how.split(":", 1)[1], today)
         if share is not None:
             out = {"now": f"{share:.0%}", "met": _met(share, item["target"]),
@@ -184,7 +250,15 @@ def _words(item: dict[str, Any]) -> set[str]:
 def sync(wh: Warehouse, model: str | None = None, path: str | Path | None = None) -> int:
     """Put the plan in the tracker. Returns how many agent suggestions were merged in."""
     merged = 0
-    for item in load_plan(path):
+    items = load_plan(path)
+    # Items taken out of the plan leave the tracker too (kept as history).
+    keep = [f"plan/{i['id']}" for i in items]
+    if items:
+        wh.execute(
+            f"UPDATE actions SET status='superseded', notes='taken out of the CEO plan' "
+            f"WHERE agent=? AND status='acknowledged' AND target NOT IN ({','.join('?' * len(keep))})",
+            (AGENT, *keep))
+    for item in items:
         target = f"plan/{item['id']}"
         gain = (item.get("gain_low", 0) + item.get("gain_high", 0)) / 2 or None
         after = {k: item.get(k) for k in ("title", "rank", "why", "steps", "kpi", "baseline",
@@ -209,12 +283,18 @@ def sync(wh: Warehouse, model: str | None = None, path: str | Path | None = None
                 (item.get("added") or date.today().isoformat(), AGENT, KIND, target,
                  json.dumps(after), item.get("why", ""), item["team"], priority(item["rank"]),
                  item.get("effort", ""), gain))
-        if not after.get("draft_text"):
+        # Write the draft once; replace a starter outline once Claude can write it.
+        old_draft = after.get("draft_text") or {}
+        if not old_draft or (old_draft.get("voice") == "outline" and model and llm.available()):
             after["draft_text"] = draft(item, model)
             wh.execute("UPDATE actions SET after=? WHERE id=?", (json.dumps(after), action_id))
+        note = f"merged into CEO plan #{item['rank']}: {item['title']}"
         for title in item.get("covers", []):
             merged += wh.execute_count(
                 "UPDATE actions SET status='superseded', notes=? WHERE agent != ? AND "
                 "status IN ('proposed', 'pending_approval') AND json_extract(after, '$.title')=?",
-                (f"merged into CEO plan #{item['rank']}: {item['title']}", AGENT, title))
+                (note, AGENT, title))
+            # The plan was re-ranked: keep earlier merges pointing at the item's new rank.
+            wh.execute("UPDATE actions SET notes=? WHERE agent != ? AND status='superseded' "
+                       "AND json_extract(after, '$.title')=?", (note, AGENT, title))
     return merged

@@ -4,6 +4,7 @@ to manage sell-through (slow down before a stockout, speed up overstock)."""
 from __future__ import annotations
 
 from ..actions import Action
+from ..assumptions import is_assumed
 from ..guardrails import clamp_price, price_floor
 from .base import Agent, Context, Role
 
@@ -27,8 +28,8 @@ class PricingAgent(Agent):
         proposed_prices: dict[str, float] = {}
         for p in ctx.wh.query("SELECT * FROM products"):
             price, cost, fees = p["price"], p["landed_cost"], p["fees"]
-            if None in (price, cost, fees):
-                continue  # can't price without costs; the brief lists the gap
+            if None in (price, cost, fees) or is_assumed(p, "fees", "landed_cost"):
+                continue  # can't price on missing or assumed costs; the brief lists the gap
             floor = price_floor(g, cost, fees)
 
             if p["sku"] in low:

@@ -250,6 +250,22 @@ CREATE TABLE IF NOT EXISTS market_recs (
     kpi_target TEXT,
     url       TEXT
 );
+
+-- Ad results per product for a whole date range, from an agency report
+-- (amz-agents quartile FILE). Daily figures come from metrics_daily instead.
+CREATE TABLE IF NOT EXISTS ad_products (
+    period_start TEXT,
+    period_end   TEXT,
+    asin         TEXT,
+    parent_asin  TEXT,
+    name         TEXT,
+    total_sales  REAL,   -- all sales of the ASIN, ads or not
+    ad_sales     REAL,   -- sales attributed to its ads (can include other ASINs: halo)
+    ad_spend     REAL,
+    ad_types     TEXT,   -- which ad types the report covers, e.g. "Sponsored Products"
+    source       TEXT,
+    PRIMARY KEY (period_start, period_end, asin)
+);
 """
 
 
@@ -272,6 +288,8 @@ class Warehouse:
                         ("goal", "TEXT"), ("executed_at", "TEXT"), ("team", "TEXT"),
                         ("effort", "TEXT"), ("roi", "REAL"), ("priority", "TEXT"),
                         ("done_at", "TEXT")],
+            # fields filled by amz_agents.assumptions, e.g. "fees landed_cost"
+            "products": [("assumed", "TEXT")],
         }
         for table, cols in added.items():
             have = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
@@ -279,6 +297,22 @@ class Warehouse:
                 if col not in have:
                     self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
         self.conn.commit()
+
+    def upsert(self, table: str, rows: list[dict[str, Any]], key: list[str]) -> int:
+        """Insert rows, or update only the columns each row gives when its key exists,
+        so other columns (costs, ad spend loaded from elsewhere) are kept."""
+        by_cols: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+        for r in rows:
+            by_cols.setdefault(tuple(r), []).append(r)
+        for cols, group in by_cols.items():
+            sets = [c for c in cols if c not in key] or [cols[0]]
+            self.conn.executemany(
+                f"INSERT INTO {table} ({','.join(cols)}) VALUES ({','.join('?' * len(cols))}) "
+                f"ON CONFLICT({','.join(key)}) DO UPDATE SET "
+                + ",".join(f"{c}=excluded.{c}" for c in sets),
+                [tuple(r[c] for c in cols) for r in group])
+        self.conn.commit()
+        return len(rows)
 
     def query(self, sql: str, params: tuple | dict = ()) -> list[dict[str, Any]]:
         return [dict(r) for r in self.conn.execute(sql, params).fetchall()]

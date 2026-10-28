@@ -44,6 +44,8 @@ DEFAULT_LIMITS = {"email_subject_chars": 60, "email_body_words": 150, "outreach_
                   "listing_title_chars": 200, "max_exclamations": 1}
 
 
+SIZE_CODE = re.compile(r"X*[SML]|X+L|X+S")  # XXXL, XXS: sizes, not shouting
+
 def load_brand(path: str | Path | None = None) -> dict[str, Any]:
     path = Path(path or os.getenv("BRAND_PATH", "brand.toml"))
     brand: dict[str, Any] = {}
@@ -70,7 +72,8 @@ def review_copy(text: str, kind: str, brand: dict[str, Any]) -> list[str]:
             issues.append(f"names competitor '{c}'")
     if text.count("!") > lim["max_exclamations"]:
         issues.append(f"{text.count('!')} exclamation marks (max {lim['max_exclamations']})")
-    shouting = [w for w in re.findall(r"\b[A-Z]{4,}\b", text) if not re.search(r"\d", w)]
+    shouting = [w for w in re.findall(r"\b[A-Z]{4,}\b", text)
+                if not re.search(r"\d", w) and not SIZE_CODE.fullmatch(w)]
     if shouting:
         issues.append(f"all-caps words: {', '.join(sorted(set(shouting))[:3])}")
 
@@ -244,6 +247,7 @@ class CreativeAgent(Agent):
         assets = {r["sku"]: r for r in ctx.wh.query("SELECT * FROM listing_assets")}
         traffic = {r["sku"]: r for r in ctx.wh.query("SELECT * FROM asin_traffic")}
         out: list[Action] = []
+        same_fix: dict[tuple[str, ...], list[dict[str, Any]]] = {}
         for p in ctx.wh.query("SELECT * FROM products ORDER BY sku"):
             a = assets.get(p["sku"])
             if a:
@@ -274,15 +278,24 @@ class CreativeAgent(Agent):
                     ))
             issues = review_copy(p["title"] or "", "listing_title", self.brand)
             if issues:
-                out.append(Action(
-                    agent=self.name, kind="fix_listing_title", target=p["sku"], sku=p["sku"],
-                    before={"title": p["title"]},
-                    after={"title": f"Fix the {p['sku']} title", "issues": issues,
-                           "recommendation": "Rewrite without the flagged words; Amazon can "
-                                             "suppress listings for promotional claims.",
-                           "impact_usd": None, "confidence": "medium"},
-                    reason="title " + "; ".join(issues),
-                ))
+                same_fix.setdefault(tuple(issues), []).append(p)
+        # One piece of work per problem, not one card per size and color.
+        for issues, ps in same_fix.items():
+            skus = [p["sku"] for p in sorted(ps, key=lambda p: -(p["daily_velocity"] or 0))]
+            out.append(Action(
+                agent=self.name, kind="fix_listing_title",
+                target=skus[0] if len(skus) == 1 else f"titles/{len(skus)}:{skus[0]}",
+                sku=skus[0] if len(skus) == 1 else None,
+                before={"title": ps[0]["title"], "skus": skus},
+                after={"title": (f"Fix the {skus[0]} title" if len(skus) == 1 else
+                                 f"Fix {len(skus)} listing titles ({'; '.join(issues)})"),
+                       "issues": list(issues), "skus": skus,
+                       "recommendation": "Rewrite without the flagged words; Amazon can "
+                                         "suppress listings for promotional claims.",
+                       "impact_usd": None, "confidence": "medium"},
+                reason="title " + "; ".join(issues) + (f" on {len(skus)} listings, best seller "
+                                                       f"{skus[0]}" if len(skus) > 1 else ""),
+            ))
         return out
 
 

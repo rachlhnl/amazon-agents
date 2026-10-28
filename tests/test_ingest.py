@@ -182,6 +182,18 @@ def test_metrics_daily_from_orders_and_ads(amazon, wh):
     assert fake.polls >= 2  # waited for the report
 
 
+def test_metrics_daily_without_ads_api_keeps_imported_ad_spend(amazon, wh):
+    _, sp, _ = amazon
+    wh.insert_many("metrics_daily", [{"date": "2026-10-17", "sku": "SKU1", "units": 0,
+                                      "revenue": 0, "ad_spend": 7.5, "ad_sales": 30.0}])
+    ingest_metrics_daily(wh, sp, None, days=10, today=TODAY)
+    m = {(r["date"], r["sku"]): r for r in wh.query("SELECT * FROM metrics_daily")}
+    assert m[("2026-10-17", "SKU1")]["units"] == 3
+    assert m[("2026-10-17", "SKU1")]["revenue"] == 89.97
+    assert m[("2026-10-17", "SKU1")]["ad_spend"] == 7.5  # from the agency's report
+    assert m[("2026-10-18", "SKU2")]["ad_spend"] is None
+
+
 def test_long_backfill_is_split_into_report_sized_chunks(amazon, wh):
     fake, sp, ads = amazon
     ingest_metrics_daily(wh, sp, ads, days=60, today=TODAY)
@@ -311,3 +323,25 @@ def test_meta_adsets_by_naming_convention(wh):
     assert c["as1"]["orders_30d"] == 12  # Amazon sales kept for Attribution to fill
     assert c["as2"]["status"] == "paused" and c["as2"]["orders_30d"] == 5
     assert c["as2"]["sales_30d"] == 139.95 and c["as2"]["destination"] == "shopify"
+
+
+def test_shopify_dev_dashboard_app_exchanges_client_credentials(monkeypatch):
+    calls = []
+
+    def handle(req: httpx.Request) -> httpx.Response:
+        calls.append(req)
+        if req.url.path == "/admin/oauth/access_token":
+            assert json.loads(req.content)["grant_type"] == "client_credentials"
+            return httpx.Response(200, json={"access_token": "tok-1", "expires_in": 86399})
+        assert req.headers["X-Shopify-Access-Token"] == "tok-1"
+        return httpx.Response(200, json={"data": {"shop": {"name": "Dagacci"}}})
+
+    monkeypatch.delenv("SHOPIFY_ACCESS_TOKEN", raising=False)
+    monkeypatch.setenv("SHOPIFY_SHOP", "dagacci.myshopify.com")
+    monkeypatch.setenv("SHOPIFY_CLIENT_ID", "cid")
+    monkeypatch.setenv("SHOPIFY_CLIENT_SECRET", "secret")
+    assert ShopifyClient.configured()
+    shop = ShopifyClient.from_env(http=httpx.Client(transport=httpx.MockTransport(handle)))
+    assert shop.graphql("{ shop { name } }") == {"shop": {"name": "Dagacci"}}
+    shop.graphql("{ shop { name } }")
+    assert [c.url.path for c in calls].count("/admin/oauth/access_token") == 1  # token reused

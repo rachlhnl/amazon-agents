@@ -17,10 +17,12 @@ from __future__ import annotations
 
 import json
 import re
+import statistics
 from datetime import date, timedelta
 from urllib.parse import urlsplit
 
 from ..actions import Action
+from ..styles import styles
 from .base import Agent, Context, Role
 
 BENCHMARK = {"add_to_cart": 0.06, "checkout": 0.45, "purchase": 0.50}  # step conversion
@@ -40,7 +42,7 @@ LANDING_MIN_SESSIONS = 200
 LANDING_GAP = 0.5  # landing page converts under half the site rate
 LANDING_TARGET = 0.8
 
-AMAZON_MIN_SESSIONS = 300
+AMAZON_MIN_SESSIONS = 1500  # 30-day sessions before a style is judged against the catalog
 AMAZON_GAP = 0.6  # unit session % under this share of the catalog median
 AMAZON_TARGET = 0.8
 BUY_BOX_OK = 0.8
@@ -312,44 +314,59 @@ class UXAgent(Agent):
 
     # ------------------------------------------------------ Amazon conversion
     def _amazon_conversion(self) -> list[Action]:
-        rows = [r for r in self.ctx.wh.query("SELECT * FROM asin_traffic")
-                if (r["sessions_30d"] or 0) >= AMAZON_MIN_SESSIONS]
+        """Amazon pages that convert well below the rest of the catalog, judged per style:
+        shoppers land on the parent listing and pick a size there, so one size's
+        conversion says little (small and large sizes always convert less)."""
+        style = styles(self.ctx.wh)
+        products = {p["sku"]: p for p in self.ctx.wh.query("SELECT * FROM products")}
+        groups: dict[str, dict] = {}
+        for r in self.ctx.wh.query("SELECT * FROM asin_traffic WHERE sessions_30d > 0"):
+            key, name = style.get(r["sku"], (r["sku"], r["sku"]))
+            g = groups.setdefault(key, {"name": name, "skus": [], "sessions": 0, "units": 0,
+                                        "bb_w": 0.0, "profit_w": 0.0})
+            p = products.get(r["sku"], {})
+            unit = (p["price"] - p["landed_cost"] - p["fees"]
+                    if p and None not in (p["price"], p["landed_cost"], p["fees"]) else 0)
+            g["skus"].append(r["sku"])
+            g["sessions"] += r["sessions_30d"]
+            g["units"] += r["units_30d"] or 0
+            g["bb_w"] += (r["buy_box_pct"] if r["buy_box_pct"] is not None else 1) * r["sessions_30d"]
+            g["profit_w"] += unit * (r["units_30d"] or 0)
+        rows = [g for g in groups.values() if g["sessions"] >= AMAZON_MIN_SESSIONS]
         if len(rows) < 2:
             return []
-        crs = sorted(r["units_30d"] / r["sessions_30d"] for r in rows)
-        median = crs[len(crs) // 2] if len(crs) % 2 else (crs[len(crs) // 2 - 1]
-                                                          + crs[len(crs) // 2]) / 2
-        products = {p["sku"]: p for p in self.ctx.wh.query("SELECT * FROM products")}
+        median = statistics.median(g["units"] / g["sessions"] for g in rows)
         proposals = self.ctx.shared.get("proposals", [])
         out: list[Action] = []
-        for r in rows:
-            cr = r["units_30d"] / r["sessions_30d"]
+        for key, g in groups.items():
+            if g["sessions"] < AMAZON_MIN_SESSIONS:
+                continue
+            cr, bb = g["units"] / g["sessions"], g["bb_w"] / g["sessions"]
             if cr >= median * AMAZON_GAP:
                 continue
-            p = products.get(r["sku"], {})
-            profit = (p["price"] - p["landed_cost"] - p["fees"]
-                      if p and None not in (p["price"], p["landed_cost"], p["fees"]) else 0)
-            bb = r["buy_box_pct"]
-            lost_bb = bb is not None and bb < BUY_BOX_OK
+            profit = g["profit_w"] / g["units"] if g["units"] else 0
+            lost_bb = bb < BUY_BOX_OK
+            one = len(g["skus"]) == 1
             related = [(a.kind, a.target) for a in proposals
-                       if r["sku"] in (a.sku, a.target) and a.kind in
+                       if (a.sku in g["skus"] or a.target in g["skus"]) and a.kind in
                        ({"update_price"} if lost_bb else
                         {"update_listing_copy", "improve_listing_assets", "flag_defect",
                          "fix_listing_title"})]
             out.append(self._action(
-                "improve_listing_conversion", r["sku"], sku=r["sku"],
-                title=f"{r['sku']} detail page converts poorly",
-                reason=(f"{cr:.1%} of {r['sessions_30d']:,} sessions bought vs {median:.1%} "
-                        "median across the catalog. "
+                "improve_listing_conversion", g["skus"][0] if one else f"style/{key}",
+                sku=g["skus"][0] if one else None,
+                title=(f"{g['skus'][0]} detail page converts poorly" if one else
+                       f"{g['name']} pages convert poorly ({len(g['skus'])} variants)"),
+                reason=(f"{cr:.1%} of {g['sessions']:,} sessions bought vs {median:.1%} "
+                        "median across styles. "
                         + (f"You held the Buy Box only {bb:.0%} of the time: that's the likely "
                            "cause, not the page." if lost_bb else
                            "Buy Box is fine, so the page itself (images, price perception, "
-                           "reviews) is losing shoppers.")),
+                           "reviews, size confidence) is losing shoppers.")),
                 recommendation=("Fix Buy Box share first (see pricing)." if lost_bb else
-                                "Compare the page with the best-converting SKU: images, "
-                                "bullets, A+, review rating; test a new main image."),
-                impact=round(r["sessions_30d"] * (median * AMAZON_TARGET - cr) * profit, 2)
-                or None,
+                                "Compare the page with the best-converting style: main image "
+                                "on a model, size chart in the images, bullets, A+, rating."),
+                impact=round(g["sessions"] * (median * AMAZON_TARGET - cr) * profit, 2) or None,
                 related=related, confidence="medium" if lost_bb else "low",
             ))
         return out
