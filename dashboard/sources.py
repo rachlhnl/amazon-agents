@@ -430,7 +430,7 @@ class WarehouseSource:
 
         db = sqlite3.connect(f"file:{self.path}?mode=ro", uri=True)
         db.row_factory = sqlite3.Row
-        q = lambda sql, *a: [dict(r) for r in db.execute(sql, a)]  # noqa: E731
+        q = lambda sql, *a: [dict(r) for r in db.execute(sql, a)]
         t = {}
         try:
             t["sales_daily"] = q("SELECT date, SUM(units) AS units, SUM(revenue) AS revenue "

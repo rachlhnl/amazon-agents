@@ -70,7 +70,7 @@ def _segment(query):
 
 def customer_kpis(rows):
     rows = sorted(rows, key=lambda r: r["week_end"])
-    cur, prev = rows[-1], rows[-2] if len(rows) > 1 else None
+    prev = rows[-2] if len(rows) > 1 else None
 
     def wk(r):
         return {
@@ -239,7 +239,7 @@ def repeat_kpis(rows):
     } for k, v in by_line.items()), key=lambda x: -x["weekly_orders"])}
 
 
-_SCRUB_WORDS = re.compile(r"scrub|uniform|nursing|medical|jogger|lab coat", re.I)
+_SCRUB_WORDS = re.compile(r"scrub|uniform|nursing|medical|jogger|lab coat", re.IGNORECASE)
 
 
 def basket_kpis(rows):
@@ -255,7 +255,7 @@ def basket_kpis(rows):
             elif _SCRUB_WORDS.search(title):
                 kinds["Competitor scrubs"] += weight
                 name = " ".join(title.split()[:2])
-                if not re.match(r"(scrubs?|medical|womens?|women's|nurse|uniform)\b", name, re.I):
+                if not re.match(r"(scrubs?|medical|womens?|women's|nurse|uniform)\b", name, re.IGNORECASE):
                     competitors[name] += weight
             else:
                 kinds["Non-scrub item"] += weight
@@ -289,7 +289,7 @@ CORE_SKUS = 60  # best sellers whose stock and pages are watched one by one
 
 
 def _short(title, n=70):
-    t = re.sub(r"^Dagacci( Medical Uniform| Scrubs Medical Uniform)?\u00ae?\s*", "", title or "", flags=re.I)
+    t = re.sub(r"^Dagacci( Medical Uniform| Scrubs Medical Uniform)?\u00ae?\s*", "", title or "", flags=re.IGNORECASE)
     return t if len(t) <= n else t[:n - 1].rstrip() + "\u2026"
 
 
@@ -320,7 +320,7 @@ def ops_kpis(t):
         by_line = sorted(({"line": k, "sessions": v["sessions"], "units": v["units"],
                            "cr": _share(v["units"], v["sessions"]), "bb": _share(v["bb_w"], v["sessions"])}
                           for k, v in lines.items()), key=lambda r: -r["sessions"])
-        page = lambda r: {"asin": r["asin"], "sku": r["sku"], "title": _short(r["title"]),  # noqa: E731
+        page = lambda r: {"asin": r["asin"], "sku": r["sku"], "title": _short(r["title"]),
                           "line": line_of(r["title"] or ""), "size": size_of(r["title"] or ""),
                           "sessions": r["sessions"], "units": r["units"], "cr": _share(r["units"], r["sessions"]),
                           "bb": None if r["buy_box"] is None else 100 * r["buy_box"]}
@@ -333,8 +333,8 @@ def ops_kpis(t):
     stock = [r for r in t.get("stock") or [] if (r["velocity"] or 0) > 0]
     if stock:
         core = sorted(stock, key=lambda r: -r["velocity"])[:CORE_SKUS]
-        cover = lambda r: r["on_hand"] / (r["velocity"] * 7)  # noqa: E731
-        item = lambda r: {"sku": r["sku"], "asin": r["asin"], "title": _short(r["title"]),  # noqa: E731
+        cover = lambda r: r["on_hand"] / (r["velocity"] * 7)
+        item = lambda r: {"sku": r["sku"], "asin": r["asin"], "title": _short(r["title"]),
                           "size": size_of(r["title"] or ""), "per_day": r["velocity"], "on_hand": r["on_hand"],
                           "inbound": r["inbound"] or 0, "weeks": cover(r)}
         all_rows = t.get("stock") or []
@@ -453,8 +453,8 @@ def build(tables, source_name):
 
 # ---------------------------------------------------------------------- insights
 
-_GAP_PRODUCT = re.compile(r"\b(caps?|pants?|jackets?|tops?)\b", re.I)
-_COMPETITOR = re.compile(r"\b(figs|cherokee|grey'?s|greys|healing hands|fabletics|mandala|koi|barco|wonderwink|jaanuu)\b", re.I)
+_GAP_PRODUCT = re.compile(r"\b(caps?|pants?|jackets?|tops?)\b", re.IGNORECASE)
+_COMPETITOR = re.compile(r"\b(figs|cherokee|grey'?s|greys|healing hands|fabletics|mandala|koi|barco|wonderwink|jaanuu)\b", re.IGNORECASE)
 
 
 def pct_or_dash(seg):
@@ -680,7 +680,7 @@ def _range(mid, assumption, lo=0.5, hi=1.0):
 def impact(i, k):
     """Estimated monthly sales at stake if the recommendation hits its target.
     Sales dollars only (no margin data yet); None where there's no defensible basis."""
-    C, S, L, B = k.get("customers"), k.get("search"), k.get("listings"), k.get("basket")
+    C, S, L = k.get("customers"), k.get("search"), k.get("listings")
     sa, st, tr = k.get("sales"), k.get("stock"), k.get("traffic")
     month = C["last4_sales"] / 4 * WEEKS_PER_MONTH if C else None
     aov = C["latest"]["aov"] if C else None

@@ -16,8 +16,8 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import kpis  # noqa: E402
-import sources  # noqa: E402
+import kpis
+import sources
 
 ROOT = os.path.expanduser("~/Documents/dagacci")
 HERE = os.path.dirname(os.path.abspath(__file__))
