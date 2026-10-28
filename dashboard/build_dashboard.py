@@ -19,8 +19,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import kpis
 import sources
 
-ROOT = os.path.expanduser("~/Documents/dagacci")
-HERE = os.path.dirname(os.path.abspath(__file__))
+# Code lives in the repo; business data (exports, built page, KPI history) stays outside it,
+# in DAGACCI_DATA (default ~/Documents/dagacci). realpath: the old pipeline path is a symlink.
+HERE = os.path.dirname(os.path.realpath(__file__))
+REPO = os.path.dirname(HERE)
+ROOT = os.path.expanduser(os.environ.get("DAGACCI_DATA", "~/Documents/dagacci"))
 
 
 def latest_week_end(today=None):
@@ -60,13 +63,13 @@ def main():
     ap.add_argument("--source", choices=["csv", "spapi"], default="csv")
     ap.add_argument("--csv-dir", default=os.path.join(ROOT, "seller_central"))
     ap.add_argument("--config", default=os.path.join(ROOT, "config", "spapi.json"))
-    ap.add_argument("--env", default=os.path.expanduser("~/Documents/amazon-agents/.env"),
+    ap.add_argument("--env", default=os.path.join(REPO, ".env"),
                     help="SP_API_* credentials shared with amazon-agents")
     ap.add_argument("--week-end", help="Saturday ending the week to pull (SP-API mode); "
                     "default: the latest Saturday at least 3 days ago, once Brand Analytics has posted it")
     ap.add_argument("--dry-run", action="store_true", help="print SP-API requests without sending")
     ap.add_argument("--out-dir", default=os.path.join(ROOT, "dashboard"))
-    ap.add_argument("--warehouse", default=os.path.expanduser("~/Documents/amazon-agents/data/warehouse.db"))
+    ap.add_argument("--warehouse", default=os.path.join(REPO, "data", "warehouse.db"))
     a = ap.parse_args()
 
     csv_tables = sources.CsvSource(a.csv_dir).load()

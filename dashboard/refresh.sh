@@ -9,17 +9,18 @@
 set -euo pipefail
 export PATH="$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin"
 
-ROOT="$HOME/Documents/dagacci"
-AGENTS="$HOME/Documents/amazon-agents"
-ARTIFACT="https://claude.ai/artifact/EQVvremS6huZYvNAY1BswG"
-mkdir -p "$ROOT/pipeline/logs"
-exec >>"$ROOT/pipeline/logs/refresh-$(date +%F).log" 2>&1
+HERE="$(cd "$(dirname "$0")" && pwd -P)"              # amazon-agents/dashboard
+AGENTS="$(dirname "$HERE")"                           # the amazon-agents repo
+ROOT="${DAGACCI_DATA:-$HOME/Documents/dagacci}"       # exports, built page, KPI history
+ARTIFACT="${DASHBOARD_URL:-https://claude.ai/artifact/EQVvremS6huZYvNAY1BswG}"
+mkdir -p "$HERE/logs"
+exec >>"$HERE/logs/refresh-$(date +%F).log" 2>&1
 echo "== $(date) =="
 
 cd "$AGENTS"
 .venv/bin/amz-agents ingest --only products,metrics,inventory,asin_traffic,shopify
 
-python3 -I "$ROOT/pipeline/build_dashboard.py" --source spapi
+python3 -I "$HERE/build_dashboard.py" --source spapi
 
 cd "$ROOT"
 claude -p "Republish $ROOT/dashboard/Dagacci_KPI_Dashboard.html to the existing artifact $ARTIFACT \
@@ -27,5 +28,6 @@ claude -p "Republish $ROOT/dashboard/Dagacci_KPI_Dashboard.html to the existing 
   --allowedTools "Artifact"
 
 # 4. The weekly (and, at the start of a month, monthly) report from the new data and the team's actions
-claude -p "$(cat "$ROOT/pipeline/report_prompt.md")" --allowedTools "ArtifactData,Read"
+claude -p "$(sed "s#~/Documents/dagacci#$ROOT#g; s#https://claude.ai/artifact/EQVvremS6huZYvNAY1BswG#$ARTIFACT#g" "$HERE/report_prompt.md")" \
+  --allowedTools "ArtifactData,Read"
 echo "== done $(date) =="

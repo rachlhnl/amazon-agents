@@ -178,6 +178,17 @@ details.how div { font-size: 12.5px; color: var(--text-secondary); padding: 6px 
 .dec-form { display: flex; gap: 8px; margin-top: 8px; }
 .dec-form input { flex: 1; font: inherit; font-size: 13px; color: var(--text-primary); background: var(--page); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; min-width: 0; }
 @media (max-width: 640px) { .dlg-row { grid-template-columns: 1fr; } }
+.rv-hidden { display: none !important; }
+.rv-flash { outline: 3px solid var(--series-1); outline-offset: 2px; transition: outline-color 1.5s; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+.seg button { font: inherit; font-size: 12px; padding: 5px 10px; border: 0; border-left: 1px solid var(--border); background: var(--page); color: var(--text-secondary); cursor: pointer; white-space: nowrap; }
+.seg button:first-child { border-left: 0; }
+.seg button.on { color: #fff; font-weight: 600; }
+.seg button.v-keep { background: var(--good); } .seg button.v-change { background: var(--series-1); } .seg button.v-hide { background: var(--critical); }
+.seg button:disabled { cursor: not-allowed; }
+#review input[type="text"] { width: 100%; min-width: 180px; font: inherit; font-size: 12.5px; color: var(--text-primary); background: var(--page); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; }
+.tgt label { display: block; font-size: 12.5px; color: var(--text-secondary); margin: 0 0 10px; }
+.tgt input { display: block; margin-top: 4px; width: 160px; font: inherit; font-size: 13px; color: var(--text-primary); background: var(--page); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; }
 @media (max-width: 640px) { .viz-root { padding: 18px 16px 48px; } .recap-row { grid-template-columns: 80px 1fr; } .recap-row > :last-child { grid-column: 2; } }
 </style>
 </head>
@@ -188,7 +199,7 @@ details.how div { font-size: 12.5px; color: var(--text-secondary); padding: 6px 
     <h1>Dagacci Medical Uniform: KPI dashboard</h1>
     <p class="sub" id="subtitle"></p>
   </div>
-  <div class="chips" id="chips"></div>
+  <div class="chips"><span class="chips" id="chips"></span><button class="toggle" id="rv-chip" data-goto="review" hidden></button></div>
 </header>
 
 <nav class="tabs" role="tablist" id="tabs">
@@ -200,6 +211,7 @@ details.how div { font-size: 12.5px; color: var(--text-secondary); padding: 6px 
   <button role="tab" data-tab="customers">Customers &amp; basket</button>
   <button role="tab" data-tab="ops">Sales &amp; stock</button>
   <button role="tab" data-tab="data">Data sources</button>
+  <button role="tab" data-tab="review">Review</button>
 </nav>
 
 <section class="grid panel" data-panel="summary">
@@ -249,6 +261,17 @@ details.how div { font-size: 12.5px; color: var(--text-secondary); padding: 6px 
     </div>
     <div id="tracker"></div>
   </div>
+</section>
+
+<section class="grid panel" data-panel="review" hidden>
+  <div class="card s12">
+    <h2>Review this dashboard</h2>
+    <p class="intro">Go through each part and mark it <b>Useful</b>, <b>Change it</b> (and say what should change) or <b>Not useful</b>. <b>Not useful</b> hides the part for everyone right away; click it again here to bring the part back. <b>Change it</b> adds the item to the change requests below; Claude Code applies them to the dashboard and marks each one done. Use "Show me" to see a part before you decide.</p>
+    <div class="trk-bar"><b id="rv-progress"></b><label><input type="checkbox" id="rv-open"> Only parts not yet reviewed</label><span class="note" id="rv-state"></span></div>
+    <div id="review"></div>
+  </div>
+  <div class="card s6"><h2>Scorecard targets</h2><div id="targets" style="margin-top:8px"></div></div>
+  <div class="card s6"><h2>Change requests</h2><div id="rv-changes" style="margin-top:8px"></div></div>
 </section>
 
 <section class="grid panel" data-panel="reports" hidden>
@@ -509,6 +532,7 @@ function showTab(name) {
   document.querySelectorAll('.panel').forEach(p => p.hidden = p.dataset.panel !== name);
   renderAll();  // charts size to their card, so draw once the panel is visible
   if (name === 'reports') reportRender();
+  if (name === 'review') reviewRender();
   scrollTo({top: 0});
 }
 TABS.forEach(b => b.onclick = () => showTab(b.dataset.tab));
@@ -872,6 +896,7 @@ document.addEventListener('click', async e => {
   DB.collection('actions').onSnapshot(snap => { ACT = Object.fromEntries(snap.docs.map(d => [d.id, d.data()])); trackingChanged(); }, fail);
   DB.collection('log').orderBy('at').limit(1000).onSnapshot(snap => { LOG = snap.docs.map(d => d.data()); reportRender(); }, fail);
   DB.collection('reports').onSnapshot(snap => { REPORTS = Object.fromEntries(snap.docs.map(d => [d.id, d.data()])); repList(); }, fail);
+  reviewStart();
 })();
 
 function insightsRender() {
@@ -1147,8 +1172,121 @@ function pendingTiles() {
     {h: 'Notes', f: r => r[2] ? esc(r[3]) : ''}], rows);
 }
 
+// ------------------------------------------------------------------ review checklist
+// review/<part>: the CEO's verdict on each part of the page. "Not useful" hides the part for
+// everyone (restorable here); "Change it" queues a request that Claude Code applies to
+// dashboard_template.html and marks done (see README, "Applying the review").
+// settings/targets: scorecard targets set on the page, overriding targets.json.
+const VERDICT = {keep: 'Useful', change: 'Change it', hide: 'Not useful'};
+let REVIEW = {}, TARGETS = null;
+const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+const PARTS = [];
+document.querySelectorAll('.panel').forEach(p => {
+  if (p.dataset.panel === 'review') return;
+  const tab = TABS.find(b => b.dataset.tab === p.dataset.panel)?.textContent || p.dataset.panel;
+  let heading = '';
+  for (const c of p.children) {
+    if (c.classList.contains('section-title')) { heading = c.textContent.trim(); continue; }
+    if (!c.matches('.card, .sowhat') || c.id === 'ops-none') continue;  // placeholder shown only when ops data is missing
+    const name = c.classList.contains('sowhat') ? `What this tells us · what to do (${SECTION[c.dataset.section]?.[0] || c.dataset.section})`
+      : c.querySelector('h2')?.textContent.trim() || heading || tab;
+    let id = p.dataset.panel + '--' + slug(name), n = 2;
+    while (PARTS.some(x => x.id === id)) id = p.dataset.panel + '--' + slug(name) + '-' + n++;
+    c.dataset.part = id;
+    PARTS.push({id, tab, panel: p.dataset.panel, name, el: c});
+  }
+});
+const FILE_TARGETS = Object.fromEntries((D.scorecard || []).map(r => [r.key, r.target]));
+function applyTargets() {
+  for (const r of D.scorecard || []) {
+    r.target = TARGETS?.values?.[r.key] ?? FILE_TARGETS[r.key];
+    const gap = r.better === 'up' ? r.now - r.target : r.target - r.now;
+    r.status = gap >= 0 ? 'on' : Math.abs(gap) <= 0.1 * r.target ? 'close' : 'off';
+  }
+}
+function applyReview() {
+  for (const x of PARTS) x.el.classList.toggle('rv-hidden', REVIEW[x.id]?.verdict === 'hide');
+  const done = PARTS.filter(x => REVIEW[x.id]).length;
+  $('rv-chip').textContent = `Review: ${done} of ${PARTS.length} parts`;
+  $('rv-chip').hidden = !DB;
+}
+function saveReview(id, patch) {
+  const prev = REVIEW[id] || {}, x = PARTS.find(p => p.id === id);
+  const body = {...prev, ...patch, part: x.name, tab: x.tab, by: ME, at: new Date().toISOString()};
+  if (patch.verdict) body.status = patch.verdict === 'change' ? (prev.verdict === 'change' ? prev.status || 'requested' : 'requested') : null;
+  return DB.collection('review').doc(id).set(body).catch(e => { $('rv-state').textContent = 'Could not save (' + e.message + ').'; });
+}
+let rvSeq = 0;
+async function reviewRender() {
+  applyTargets(); applyReview();
+  if ($('review').closest('.panel').hidden) return;
+  const seq = ++rvSeq, dis = canWrite && DB ? '' : ' disabled', only = $('rv-open').checked;
+  const ids = [...new Set([...Object.values(REVIEW).map(r => r.by), TARGETS?.by].filter(Boolean))];
+  const ps = USER && ids.length ? await USER.profiles(ids) : {};
+  if (seq !== rvSeq) return;
+  const nm = id => ps[id]?.isMe ? 'you' : ps[id]?.name || 'someone';
+  const rows = PARTS.filter(x => !only || !REVIEW[x.id]);
+  $('rv-progress').textContent = `${PARTS.filter(x => REVIEW[x.id]).length} of ${PARTS.length} parts reviewed`;
+  $('review').innerHTML = table([
+    {h: 'Tab', f: x => esc(x.tab)},
+    {h: 'Part of the dashboard', f: x => `<b>${esc(x.name)}</b>${REVIEW[x.id]?.verdict === 'hide' ? ' <span class="tag blocked">Hidden</span>' : ''}<div><button class="linkbtn" data-show="${x.id}">Show me →</button></div>`},
+    {h: 'Is it useful?', f: x => `<div class="seg" role="group">${Object.entries(VERDICT).map(([v, l]) => `<button class="${REVIEW[x.id]?.verdict === v ? 'on v-' + v : ''}" data-rv="${x.id}" data-v="${v}" aria-pressed="${REVIEW[x.id]?.verdict === v}"${dis}>${l}</button>`).join('')}</div>`},
+    {h: 'What should change, or why', f: x => `<input type="text" data-rvc="${x.id}" value="${esc(REVIEW[x.id]?.comment || '')}" placeholder="${REVIEW[x.id]?.verdict === 'change' ? 'Required: what should change?' : 'Optional'}"${dis}>`},
+    {h: 'Reviewed', f: x => REVIEW[x.id] ? `<span class="note" style="margin:0">${esc(nm(REVIEW[x.id].by))} · ${wk(REVIEW[x.id].at.slice(0, 10))}</span>` : '<span class="note" style="margin:0">–</span>'}], rows) +
+    (rows.length ? '' : '<p class="note">Every part has been reviewed.</p>');
+  const reqs = Object.entries(REVIEW).filter(([, r]) => r.verdict === 'change');
+  $('rv-changes').innerHTML = reqs.length ? '<ul class="rep-ul">' + reqs.map(([, r]) => `<li><span class="tag ${r.status === 'done' ? 'done' : 'doing'}">${r.status === 'done' ? 'Done' : 'Requested'}</span>
+      <b>${esc(r.part)}</b> <span class="note">${esc(r.tab)}</span><div>${esc(r.comment || '(no detail yet)')}</div>${r.resolution ? `<div class="note" style="margin:0">${esc(r.resolution)}</div>` : ''}</li>`).join('') + '</ul>'
+    : '<p class="note">No change requests yet. Mark a part "Change it" and say what should change.</p>';
+  $('targets').innerHTML = `<div class="tgt">${(D.scorecard || []).map(r => `<label>${esc(r.label)} <span class="note" style="margin:0">(${r.better === 'down' ? 'lower' : 'higher'} is better${r.unit === '$' ? ', $ per week' : ', %'})</span>
+      <input type="number" step="any" min="0" data-tg="${r.key}" value="${r.target}"${dis}></label>`).join('')}</div>
+    <p class="note">${TARGETS?.at ? `Set by ${esc(nm(TARGETS.by))} on ${wk(TARGETS.at.slice(0, 10))}.` : 'From targets.json.'} New targets apply to the scorecard, status colors and reports for everyone.</p>
+    ${canWrite && DB ? '<button class="toggle primary" id="tg-save">Save targets</button>' : ''}`;
+  const b = $('tg-save');
+  if (b) b.onclick = async () => {
+    const values = {};
+    for (const i of document.querySelectorAll('[data-tg]')) { const v = parseFloat(i.value); if (!(v > 0)) { $('rv-state').textContent = 'Each target needs a number above 0.'; return; } values[i.dataset.tg] = v; }
+    try { await DB.doc('settings/targets').set({values, by: ME, at: new Date().toISOString()}); $('rv-state').textContent = 'Targets saved.'; }
+    catch (e) { $('rv-state').textContent = 'Could not save targets (' + e.message + ').'; }
+  };
+}
+$('rv-open').onchange = reviewRender;
+$('review').addEventListener('click', e => {
+  const s = e.target.closest('[data-show]');
+  if (s) {
+    const x = PARTS.find(p => p.id === s.dataset.show);
+    showTab(x.panel);
+    x.el.classList.remove('rv-hidden');  // shown until the next update, so a hidden part can still be judged
+    x.el.scrollIntoView({block: 'center'}); x.el.classList.add('rv-flash'); setTimeout(() => x.el.classList.remove('rv-flash'), 1600);
+    return;
+  }
+  const b = e.target.closest('[data-rv]');
+  if (!b || !canWrite) return;
+  const id = b.dataset.rv, v = b.dataset.v;
+  if (REVIEW[id]?.verdict === v) { DB.collection('review').doc(id).delete(); return; }  // click again to clear
+  saveReview(id, {verdict: v});
+  if (v === 'change' && !REVIEW[id]?.comment) setTimeout(() => document.querySelector(`[data-rvc="${id}"]`)?.focus(), 300);
+});
+$('review').addEventListener('change', e => {
+  const i = e.target.closest('[data-rvc]');
+  if (i && canWrite && i.value.trim() !== (REVIEW[i.dataset.rvc]?.comment || '')) saveReview(i.dataset.rvc, {comment: i.value.trim()});
+});
+function reviewStart() {
+  DB.collection('review').onSnapshot(snap => {
+    REVIEW = Object.fromEntries(snap.docs.map(d => [d.id, d.data()]));
+    if ($('review').contains(document.activeElement) && document.activeElement.type === 'text') { applyReview(); return; }
+    reviewRender();
+  }, () => {});
+  DB.doc('settings/targets').onSnapshot(snap => {
+    TARGETS = snap.exists ? snap.data() : null;
+    applyTargets(); reviewRender(); scoreRender(); top3Render();
+    if (!$('reports').closest('.panel').hidden) reportRender();
+  }, () => {});
+}
+
 showTab('summary');
 trackerRender();
+reviewRender();
 let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(renderAll, 150); });
 </script>
 </body>

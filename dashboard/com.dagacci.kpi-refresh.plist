@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- Tuesdays 07:00: Brand Analytics has posted the week ending the previous Saturday.
-     Install: cp to ~/Library/LaunchAgents/ && launchctl load ~/Library/LaunchAgents/com.dagacci.kpi-refresh.plist
-     If the Mac is asleep at 07:00, launchd runs it on wake. -->
+<!-- Template: install.sh --schedule fills in __HERE__ and installs it to ~/Library/LaunchAgents.
+     Tuesdays 07:00: Brand Analytics has posted the week ending the previous Saturday.
+     If the Mac is asleep at 07:00, launchd runs it on wake. Run it on ONE machine only. -->
 <plist version="1.0">
 <dict>
   <key>Label</key><string>com.dagacci.kpi-refresh</string>
   <key>ProgramArguments</key>
-  <array><string>/bin/zsh</string><string>/Users/rachel/Documents/dagacci/pipeline/refresh.sh</string></array>
+  <array><string>/bin/zsh</string><string>__HERE__/refresh.sh</string></array>
   <key>StartCalendarInterval</key>
   <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>
-  <key>StandardErrorPath</key><string>/Users/rachel/Documents/dagacci/pipeline/logs/launchd.err</string>
+  <key>StandardErrorPath</key><string>__HERE__/logs/launchd.err</string>
 </dict>
 </plist>
