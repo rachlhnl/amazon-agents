@@ -1,0 +1,1155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dagacci KPI Dashboard</title>
+<style>
+.viz-root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a;
+  --div-cool: #2a78d6; --div-warm: #e34948;
+  --good-text: #006300; --bad-text: #b42828;
+  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  --wash: rgba(42,120,214,0.08); --pending: #f0efec;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz-root {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface-1: #1a1a19;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
+    --div-cool: #3987e5; --div-warm: #e66767;
+    --good-text: #0ca30c; --bad-text: #e66767; --wash: rgba(57,135,229,0.12); --pending: #232321;
+  }
+}
+:root[data-theme="dark"] .viz-root {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface-1: #1a1a19;
+  --text-primary: #f0efec; --text-secondary: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
+  --div-cool: #3987e5; --div-warm: #e66767;
+  --good-text: #0ca30c; --bad-text: #e66767; --wash: rgba(57,135,229,0.12); --pending: #232321;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+.viz-root { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--page);
+  color: var(--text-primary); min-height: 100vh; padding: 28px 32px 60px; line-height: 1.4; }
+header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+h1 { font-size: 22px; margin: 0 0 4px; font-weight: 650; }
+h2 { font-size: 15px; margin: 0 0 2px; font-weight: 600; }
+.sub { color: var(--text-secondary); font-size: 13px; margin: 0; }
+.note { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.chip { font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-secondary); background: var(--surface-1); }
+.chip.live::before { content: "●"; color: var(--good); margin-right: 5px; }
+.chip.wait::before { content: "○"; margin-right: 5px; }
+button.toggle { font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary); cursor: pointer; }
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(12, 1fr); }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; min-width: 0; }
+.s12 { grid-column: span 12; } .s8 { grid-column: span 8; } .s7 { grid-column: span 7; } .s6 { grid-column: span 6; } .s5 { grid-column: span 5; } .s4 { grid-column: span 4; }
+@media (max-width: 1000px) { .s8, .s7, .s6, .s5, .s4 { grid-column: span 12; } }
+.section-title { grid-column: span 12; margin: 18px 0 -4px; font-size: 13px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; }
+.hero { display: flex; gap: 28px; align-items: flex-end; flex-wrap: wrap; }
+.hero .v { font-size: 52px; font-weight: 650; line-height: 1; }
+.delta { font-size: 13px; font-weight: 600; }
+.delta.up { color: var(--good-text); } .delta.down { color: var(--bad-text); }
+.tile .d .up { color: var(--good-text); } .tile .d .down { color: var(--bad-text); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.tile { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+.tile .l { font-size: 12px; color: var(--text-secondary); }
+.tile .v { font-size: 24px; font-weight: 600; margin: 4px 0 2px; }
+.tile .d { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.tile.pending { background: var(--pending); border-style: dashed; }
+.tile.pending .v { color: var(--muted); font-size: 15px; font-weight: 500; }
+svg { display: block; width: 100%; overflow: visible; }
+svg text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+svg text.lbl { fill: var(--text-secondary); font-size: 11.5px; }
+svg text.val { fill: var(--text-primary); font-size: 11.5px; font-weight: 600; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-secondary); margin: 8px 0 4px; flex-wrap: wrap; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.sw.dot { border-radius: 50%; }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th { text-align: left; font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--axis); padding: 6px 8px; white-space: nowrap; }
+td { border-bottom: 1px solid var(--grid); padding: 6px 8px; font-variant-numeric: tabular-nums; vertical-align: top; }
+td.n, th.n { text-align: right; }
+tr:hover td { background: var(--wash); }
+.flag { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); white-space: nowrap; }
+.flag.under::before { content: "▲ "; color: var(--good); }
+.flag.leak::before { content: "▼ "; color: var(--critical); }
+.flag.badge-yes::before { content: "⚠ "; color: var(--critical); }
+.flag.badge-risk::before { content: "◔ "; color: var(--serious); }
+.scroll { max-height: 420px; overflow: auto; }
+details summary { cursor: pointer; font-size: 12px; color: var(--text-secondary); margin-top: 10px; }
+.callout { border-left: 3px solid var(--series-1); padding: 4px 0 4px 12px; margin: 10px 0 0; font-size: 13px; color: var(--text-secondary); }
+.callout b { color: var(--text-primary); }
+#tip { position: fixed; pointer-events: none; background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border);
+  border-radius: 6px; padding: 7px 10px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12); opacity: 0; transition: opacity .08s; z-index: 10; max-width: 280px; }
+#tip .t { color: var(--text-secondary); margin-bottom: 2px; }
+.hit { fill: transparent; cursor: default; }
+.ins-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(330px, 100%), 1fr)); gap: 14px; }
+/* Wide tables scroll inside their card on a phone instead of widening the page. */
+.card div:has(> table), details > div:has(> table) { overflow-x: auto; max-width: 100%; }
+.ins { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; background: var(--surface-1); display: flex; flex-direction: column; gap: 6px; }
+.ins h3 { font-size: 14px; margin: 0; font-weight: 600; line-height: 1.3; }
+.ins p { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.ins p b { color: var(--text-primary); font-weight: 600; }
+.ins ul { margin: 2px 0 0; padding-left: 18px; font-size: 13px; }
+.ins li { margin: 2px 0; }
+.ins .meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.pri { white-space: nowrap; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); }
+.pri.p1::before { content: "● "; color: var(--critical); } .pri.p2::before { content: "● "; color: var(--serious); }
+.pri.p3::before { content: "● "; color: var(--warning); } .pri.p4::before { content: "● "; color: var(--axis); }
+.kpibox { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--grid); font-size: 12px; color: var(--text-secondary); display: flex; justify-content: space-between; gap: 8px; }
+.kpibox b { color: var(--text-primary); font-size: 13px; }
+.sowhat { grid-column: span 12; border: 1px solid var(--border); border-left: 3px solid var(--series-1); border-radius: 10px; background: var(--surface-1); padding: 14px 18px; }
+.sowhat h2 { margin-bottom: 8px; }
+.sowhat .row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; padding: 8px 0; border-top: 1px solid var(--grid); font-size: 13px; }
+.sowhat .row:first-of-type { border-top: 0; }
+.sowhat .row .t { font-weight: 600; } .sowhat .row .f { color: var(--text-secondary); margin-top: 2px; }
+.sowhat .row .a { color: var(--text-primary); } .sowhat .row .a::before { content: "→ "; color: var(--series-1); font-weight: 700; }
+@media (max-width: 1000px) { .sowhat .row { grid-template-columns: 1fr; } }
+details.how { margin-top: 10px; } details.how summary { font-size: 12px; }
+details.how div { font-size: 12.5px; color: var(--text-secondary); padding: 6px 0 0 14px; line-height: 1.5; }
+.intro { font-size: 13px; color: var(--text-secondary); margin: 0 0 12px; max-width: 900px; }
+.trunc { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Tabs: summary for the weekly meeting, detail behind it. */
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--axis); margin: 0 0 8px; overflow-x: auto; scrollbar-width: none; }
+.tabs button { font: inherit; font-size: 13px; font-weight: 550; padding: 9px 14px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  background: none; color: var(--text-secondary); cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--text-primary); }
+.tabs button[aria-selected="true"] { color: var(--text-primary); border-bottom-color: var(--series-1); }
+.panel[hidden] { display: none !important; }
+.chip.stale::before { content: "◔ "; color: var(--serious); }
+.score { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(185px, 100%), 1fr)); gap: 14px; }
+.sc { border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.sc .l { font-size: 12.5px; color: var(--text-secondary); font-weight: 550; }
+.sc .v { font-size: 30px; font-weight: 650; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.sc .d { font-size: 12.5px; color: var(--text-secondary); }
+.sc .bar { height: 6px; border-radius: 3px; background: var(--grid); overflow: hidden; margin: 4px 0 2px; }
+.sc .bar span { display: block; height: 100%; border-radius: 3px; }
+.st { font-size: 11.5px; font-weight: 650; white-space: nowrap; }
+.st::before { content: "● "; }
+.st-on::before, .bar .st-on { color: var(--good); background: var(--good); } .st-on::before { background: none; }
+.st-close::before { color: var(--warning); } .bar .st-close { background: var(--warning); }
+.st-off::before { color: var(--critical); } .bar .st-off { background: var(--critical); }
+.up { color: var(--good-text); } .down { color: var(--bad-text); }
+.impact { border-top: 1px solid var(--grid); padding-top: 8px; margin-top: auto; font-size: 12.5px; color: var(--text-secondary); }
+.impact b { color: var(--text-primary); font-size: 15px; }
+.impact details summary { margin-top: 4px; }
+.impact details p { font-size: 12px; margin: 4px 0 0; }
+.linkbtn { font: inherit; font-size: 12.5px; color: var(--series-1); background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
+.linkbtn:hover { text-decoration: underline; }
+.recap-row { display: grid; grid-template-columns: 92px 1fr auto; gap: 10px; align-items: baseline; padding: 7px 0; border-top: 1px solid var(--grid); font-size: 13px; }
+.recap-row:first-child { border-top: 0; }
+.tag { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); white-space: nowrap; text-align: center; }
+.tag.done { color: var(--good-text); } .tag.blocked, .tag.overdue { color: var(--bad-text); } .tag.doing { color: var(--series-1); }
+.trk-bar { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin: 4px 0 10px; font-size: 12.5px; color: var(--text-secondary); }
+.trk select, .trk input, .trk-bar select { font: inherit; font-size: 12.5px; color: var(--text-primary); background: var(--page); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; }
+.trk input[type="text"] { width: 100%; min-width: 150px; }
+.trk select:disabled, .trk input:disabled { opacity: .75; cursor: not-allowed; }
+.trk td { vertical-align: top; }
+.trk td.rec { min-width: 260px; max-width: 420px; }
+.trk details summary { margin-top: 4px; }
+.trk details div { font-size: 12.5px; color: var(--text-secondary); padding: 4px 0 0; }
+.trk details ul { margin: 4px 0; padding-left: 18px; }
+.who { display: flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 12px; color: var(--text-secondary); }
+.who img { width: 18px; height: 18px; border-radius: 50%; }
+.dlg { border: 1px solid var(--border); border-radius: 10px; background: var(--surface-1); color: var(--text-primary); padding: 18px 20px; width: min(460px, calc(100vw - 32px)); }
+.dlg::backdrop { background: rgba(0,0,0,.35); }
+.dlg h3 { margin: 0 0 4px; font-size: 16px; }
+.dlg label { display: block; font-size: 12.5px; color: var(--text-secondary); margin-top: 12px; }
+.dlg input, .dlg select { display: block; width: 100%; margin-top: 4px; font: inherit; font-size: 13px; color: var(--text-primary); background: var(--page); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
+.dlg-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.dlg-row label { margin-top: 12px; }
+.dlg-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.toggle.primary { background: var(--series-1); color: #fff; border-color: var(--series-1); }
+.toggle:disabled { opacity: .6; cursor: progress; }
+.rep { max-width: 920px; }
+.rep h3 { font-size: 14px; margin: 20px 0 6px; }
+.rep-head h2 { font-size: 17px; }
+.rep-ul { margin: 0; padding-left: 18px; font-size: 13px; }
+.rep-ul li { margin: 5px 0; }
+.dec-form { display: flex; gap: 8px; margin-top: 8px; }
+.dec-form input { flex: 1; font: inherit; font-size: 13px; color: var(--text-primary); background: var(--page); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; min-width: 0; }
+@media (max-width: 640px) { .dlg-row { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .viz-root { padding: 18px 16px 48px; } .recap-row { grid-template-columns: 80px 1fr; } .recap-row > :last-child { grid-column: 2; } }
+</style>
+</head>
+<body>
+<div class="viz-root">
+<header>
+  <div>
+    <h1>Dagacci Medical Uniform: KPI dashboard</h1>
+    <p class="sub" id="subtitle"></p>
+  </div>
+  <div class="chips" id="chips"></div>
+</header>
+
+<nav class="tabs" role="tablist" id="tabs">
+  <button role="tab" data-tab="summary">Summary</button>
+  <button role="tab" data-tab="actions">Actions</button>
+  <button role="tab" data-tab="reports">Reports</button>
+  <button role="tab" data-tab="search">Search</button>
+  <button role="tab" data-tab="fit">Fit &amp; returns</button>
+  <button role="tab" data-tab="customers">Customers &amp; basket</button>
+  <button role="tab" data-tab="ops">Sales &amp; stock</button>
+  <button role="tab" data-tab="data">Data sources</button>
+</nav>
+
+<section class="grid panel" data-panel="summary">
+  <div class="section-title">Scorecard</div>
+  <div class="card s12">
+    <div class="score" id="score"></div>
+  </div>
+  <div class="card s5">
+    <h2>What changed since last week</h2>
+    <p class="sub" id="changes-sub"></p>
+    <div id="changes" style="margin-top:8px"></div>
+  </div>
+  <div class="card s7">
+    <h2>Last week's actions</h2>
+    <p class="sub">From the Actions tab: closed in the last 7 days, blocked, or past due</p>
+    <div id="recap" style="margin-top:8px"></div>
+  </div>
+  <div class="section-title">Top 3 decisions this week</div>
+  <div class="card s12">
+    <p class="intro">The most urgent recommendations with the most sales at stake. Dollar figures are <b>estimated monthly sales</b> if the action reaches its target (no margin data yet); open "How we estimated this" on each card for the assumption.</p>
+    <div class="ins-grid" id="top3"></div>
+  </div>
+  <div class="section-title">Sales trend</div>
+  <div class="card s12">
+    <div class="hero">
+      <div>
+        <div class="sub" id="hero-l">Weekly sales, latest week</div>
+        <div class="v" id="hero-v"></div>
+        <div class="delta" id="hero-d"></div>
+      </div>
+      <div style="flex:1;min-width:280px"><svg id="spark" height="56"></svg></div>
+    </div>
+    <div class="tiles" style="margin-top:18px" id="tiles"></div>
+  </div>
+
+</section>
+
+<section class="grid panel" data-panel="actions" hidden>
+  <div class="card s12">
+    <h2>Action tracker</h2>
+    <p class="intro">Every recommendation from this week's data, ranked. Each one stays on its row week to week, so the owner, status, due date and note carry over when the data refreshes. Changes save for everyone and record who made them.</p>
+    <div class="trk-bar">
+      <label>Team <select id="f-team"><option value="">All</option></select></label>
+      <label>Status <select id="f-status"><option value="">All open</option><option value="*">Everything</option></select></label>
+      <button class="toggle" id="add-btn" hidden>+ Add action</button>
+      <span class="note" id="trk-state"></span>
+    </div>
+    <div id="tracker"></div>
+  </div>
+</section>
+
+<section class="grid panel" data-panel="reports" hidden>
+  <div class="card s12">
+    <div class="trk-bar"><label>Report <select id="rep-pick"></select></label><span id="rep-gen"></span><span class="note" id="rep-state"></span></div>
+    <div id="reports" class="rep"></div>
+  </div>
+</section>
+
+<dialog id="dlg-done" class="dlg"><form method="dialog">
+  <h3>Mark as done</h3><p class="sub" id="done-title"></p>
+  <label>What did you do? This line goes into the weekly and monthly reports.
+    <input id="done-note" type="text" maxlength="300" required placeholder="e.g. Updated the size chart on 42 listings"></label>
+  <div class="dlg-btns"><button class="toggle" value="cancel" formnovalidate>Cancel</button><button class="toggle primary" value="ok">Mark done</button></div>
+</form></dialog>
+<dialog id="dlg-add" class="dlg"><form method="dialog" id="add-form">
+  <h3>Add an action</h3>
+  <label>What needs doing<input id="add-title" type="text" maxlength="160" required></label>
+  <div class="dlg-row"><label>Team<select id="add-team"></select></label><label>When<select id="add-pri"></select></label><label>Due<input id="add-due" type="date"></label></div>
+  <label>KPI it should move (optional)<select id="add-kpi"></select></label>
+  <label>Details (optional)<input id="add-detail" type="text" maxlength="300"></label>
+  <div class="dlg-btns"><button class="toggle" value="cancel" formnovalidate>Cancel</button><button class="toggle primary" value="ok">Add</button></div>
+</form></dialog>
+
+<section class="grid panel" data-panel="search" hidden>
+  <div class="section-title" id="sec-search">Search visibility (Brand Analytics, top 1,500 queries)</div>
+  <div class="card s5">
+    <h2>Dagacci's share at each funnel step</h2>
+    <p class="sub" id="funnel-sub"></p>
+    <svg id="funnel" height="190"></svg>
+    <div class="callout" id="funnel-call"></div><details class="how"><summary>How to read this</summary><div>Across the top 1,500 scrub searches, each bar is Dagacci's share of that step. <b>Impressions</b>: how often a Dagacci item appeared in results. <b>Clicks / cart adds / purchases</b>: Dagacci's share of each action. If bars <b>grow</b> from top to bottom, shoppers prefer Dagacci once they see it, and the fix is more visibility. If they <b>shrink</b>, shoppers see it but choose others, and the fix is the listing (price, images, reviews, fit).</div></details>
+  </div>
+  <div class="card s7">
+    <h2>Seen vs. bought, by shopper segment</h2>
+    <p class="sub">Impression share vs purchase share, 3-week pool. A wide gap to the right means shoppers buy when they see Dagacci.</p>
+    <div class="legend"><span><span class="sw dot" style="background:var(--series-1)"></span>Impression share</span><span><span class="sw dot" style="background:var(--series-2)"></span>Purchase share</span></div>
+    <svg id="segments" height="210"></svg><details class="how"><summary>How to read this</summary><div>Searches are grouped by who they're for. The <b>blue dot</b> is how often Dagacci is seen; the <b>orange dot</b> is how often it's bought. Orange far to the right of blue means the segment converts very well and is under-served: increase ads and keywords there. Orange left of blue would mean wasted visibility.</div></details>
+  </div>
+  <div class="card s12">
+    <h2>Search query opportunities</h2>
+    <p class="sub"><span class="flag under">Under-exposed</span> purchase share ≥ 1.5× impression share: more ad or SEO visibility should pay off. <span class="flag leak">Leaking</span> seen often but rarely bought: check price, images or fit for that query. Top 60 non-branded queries by volume.</p>
+    <div class="scroll" style="margin-top:10px" id="queries"></div><details class="how"><summary>How to read this</summary><div>One row per search phrase (3-week average). <b>Impr. share</b> is how often Dagacci was shown, and <b>Purch. share</b> how often it won the sale. <b>Under-exposed</b>: it wins more sales than its visibility, so raise bids or add the phrase to listings. <b>Leaking</b>: it is shown but loses, so check which listing appears for that phrase. Rows with near-zero share and high volume (caps, pants, competitor names) are <b>gaps</b>: demand Dagacci isn't competing for. The price column compares the median price shoppers paid overall with Dagacci's.</div></details>
+  </div>
+
+  <div class="sowhat" data-section="search"></div>
+</section>
+
+<section class="grid panel" data-panel="fit" hidden>
+  <div class="section-title" id="sec-fit">Fit, returns & listing health (Voice of the Customer, new-condition SKUs)</div>
+  <div class="card s6">
+    <h2>Fit complaints by size</h2>
+    <p class="sub">Orders where the top bad-experience (NCX) reason is a fit complaint, per 100 orders (sizes with 300+ orders)</p>
+    <div class="legend"><span><span class="sw" style="background:var(--div-cool)"></span>Too small</span><span><span class="sw" style="background:var(--div-warm)"></span>Too large</span></div>
+    <svg id="fit" height="300"></svg>
+    <div class="callout" id="fit-call"></div><details class="how"><summary>How to read this</summary><div>For each size: of every 100 orders, how many had a bad-experience report whose main reason was <b>too large</b> (red, right) or <b>too small</b> (blue, left). If one side dominates at every size, the sizing itself is off, not individual units. Red dominating means the products run large; the fix is the size chart and a 'size down' note. Track the red bars shrinking after the fix.</div></details>
+  </div>
+  <div class="card s6">
+    <h2>Why customers had a bad experience</h2>
+    <p class="sub">Estimated orders with a bad-experience (NCX) report, by top reason</p>
+    <svg id="reasons" height="200"></svg>
+    <h2 style="margin-top:16px">Return badge exposure</h2>
+    <p class="sub">Amazon shows a "frequently returned" badge on high-return listings, which can lower conversion</p>
+    <svg id="badge" height="64"></svg><details class="how"><summary>How to read this</summary><div><b>Bad-experience (NCX) orders</b> are orders with a return, complaint or negative feedback, grouped by the main reason Amazon recorded. Amazon reports only the top reason per listing, so these counts are estimates. The <b>return badge</b> bar shows the share of orders on listings that display the 'frequently returned' warning (red) or are close to it (orange). Shrinking the orange is the urgent goal: it's the share you can still protect.</div></details>
+  </div>
+  <div class="card s12">
+    <h2>Product lines</h2>
+    <p class="sub">Grouped from listing titles. Order counts come from Amazon's Voice of the Customer window.</p>
+    <div id="lines"></div><details class="how"><summary>How to read this</summary><div>Listings are grouped into product lines by their titles. Compare lines on <b>stars</b> and <b>badge-risk share</b> against <b>orders</b>. A line with high stars and low badge risk but few orders is under-promoted and worth pushing. A high-volume line with high badge risk is where fixes pay back most.</div></details>
+  </div>
+  <div class="card s12">
+    <h2>Top-15 SKU watchlist</h2>
+    <div class="scroll" id="watch"></div><details class="how"><summary>How to read this</summary><div>The 15 highest-volume items. The return and NCX rates show how often they disappoint; <b>Top NCX reason</b> shows why, with the share of complaints in brackets. A badge or 'At risk' flag on a top seller is the highest-priority fix in the store.</div></details>
+  </div>
+
+  <div class="sowhat" data-section="fit"></div>
+</section>
+
+<section class="grid panel" data-panel="customers" hidden>
+  <div class="section-title" id="sec-customers">Demand & customers</div>
+  <div class="card s8">
+    <h2>Weekly sales</h2>
+    <p class="sub">Brand total, all channels on Amazon US. Back-to-school peaks in late August.</p>
+    <svg id="sales" height="240"></svg>
+    <details><summary>Show table</summary><div id="sales-table"></div></details><details class="how"><summary>How to read this</summary><div>Each column is one week of Amazon US sales for the brand; the solid column is the latest week. Look for <b>seasonal peaks</b> (late July, late August: back-to-school and nursing-program starts) and whether quiet weeks are trending up or down. Hover a column for orders, average order value and the new-to-brand share.</div></details>
+  </div>
+  <div class="card s4">
+    <h2>Share of customers who are new to brand</h2>
+    <p class="sub">% of the week's customers buying Dagacci for the first time in 12 months</p>
+    <svg id="ntb" height="110"></svg>
+    <h2 style="margin-top:14px">Repeat purchase rate</h2>
+    <p class="sub">% of the week's customers who bought Dagacci before</p>
+    <svg id="repeat" height="110"></svg><details class="how"><summary>How to read this</summary><div><b>New to brand</b> is the share of the week's customers who had not bought Dagacci in the past 12 months. High (~70%) means Dagacci is mostly a first purchase. <b>Repeat purchase rate</b> is the share who had bought before. If it falls while new-to-brand stays high, customers try Dagacci once and don't come back.</div></details>
+  </div>
+
+  <div class="sowhat" data-section="customers"></div>
+  <div class="section-title" id="sec-basket">Basket</div>
+  <div class="card s6">
+    <h2>What else is in the cart with Dagacci</h2>
+    <p class="sub">Market Basket: weighted share of the top-3 co-purchased items</p>
+    <div class="legend" id="basket-legend"></div>
+    <svg id="basket" height="56"></svg>
+    <div class="callout" id="basket-call"></div><details class="how"><summary>How to read this</summary><div>Amazon's Market Basket report lists the top 3 items bought in the same order as each Dagacci item. <b>Another Dagacci item</b>: customers buying several colors or sizes, which supports bundles. <b>Non-scrub item</b>: what else this shopper needs (stethoscopes, study guides), which suggests kits and cross-promotion. <b>Competitor scrubs</b>: shoppers hedging between brands, usually over fit.</div></details>
+  </div>
+  <div class="card s6">
+    <h2>Competitor scrubs bought in the same order</h2>
+    <svg id="comp" height="220"></svg><details class="how"><summary>How to read this</summary><div>Competitor scrubs that appear in the same order as a Dagacci item, weighted by order volume. These brands are Dagacci's true head-to-head rivals on Amazon. Benchmark their size charts and prices, and target their product pages with display ads.</div></details>
+  </div>
+
+  <div class="sowhat" data-section="basket"></div>
+</section>
+
+<section class="grid panel" data-panel="ops" hidden>
+  <div class="section-title" id="sec-ops">Sales, traffic, stock &amp; ads (Seller Central reports, Quartile, Shopify)</div>
+  <div class="card s12" id="ops-none" hidden><p class="sub">Load Seller Central reports into the agents' warehouse (amz-agents seller FILES) and rebuild to fill this section.</p></div>
+  <div class="card s8" id="ops-sales-card">
+    <h2>Daily Amazon sales</h2>
+    <p class="sub" id="ops-sales-sub"></p>
+    <svg id="daily" height="220"></svg>
+    <details><summary>Show table</summary><div id="daily-table"></div></details><details class="how"><summary>How to read this</summary><div>Each column is one day of Amazon.com orders, from the All Orders report (cancelled orders and other marketplaces left out). The solid columns are the last 7 days. Orders still <b>pending</b> have no price yet, so the most recent days read a little low until they ship.</div></details>
+  </div>
+  <div class="card s4" id="ops-tiles-card">
+    <h2>This period at a glance</h2>
+    <div class="tiles" id="ops-tiles" style="grid-template-columns:1fr 1fr"></div>
+  </div>
+  <div class="card s6" id="ops-lines-card">
+    <h2>Conversion and Buy Box by product line</h2>
+    <p class="sub">Business Report, detail page sales and traffic by child item, last 30 days</p>
+    <svg id="cr-lines" height="268"></svg>
+    <details><summary>Show table</summary><div id="cr-table"></div></details><details class="how"><summary>How to read this</summary><div>Each bar is a product line's <b>unit session percentage</b>: units ordered per 100 page sessions. The line on the axis is the brand average. A long line with a short bar has traffic but loses shoppers on the page (images, price, reviews, size confidence). Hover for sessions and Buy Box share.</div></details>
+  </div>
+  <div class="card s6" id="ops-stock-card">
+    <h2>Stock on the best sellers</h2>
+    <p class="sub" id="ops-stock-sub"></p>
+    <div class="scroll" id="stock-table"></div><details class="how"><summary>How to read this</summary><div>The 60 best-selling variants by units per day over the last 30 days, with the fewest <b>weeks of cover</b> (units at Amazon ÷ units sold per week) first. Under 3 weeks is a stockout risk once you count inbound time; 0 means the size is out now and losing sales and rank.</div></details>
+  </div>
+  <div class="card s12" id="ops-pages-card">
+    <h2>Highest-traffic pages</h2>
+    <p class="sub">The 15 child ASINs with the most sessions in the last 30 days</p>
+    <div class="scroll" id="pages-table"></div>
+  </div>
+  <div class="sowhat" data-section="ops"></div>
+
+</section>
+
+<section class="grid panel" data-panel="data" hidden>
+  <div class="section-title">Awaiting connection</div>
+  <div class="card s12">
+    <p class="sub" style="margin-bottom:12px">KPIs from the proposal that light up once the matching data source is connected</p>
+    <div class="tiles" id="pending"></div>
+    <details open><summary>Connector status</summary><div id="connectors" style="margin-top:8px"></div></details>
+  </div>
+</section>
+<div id="tip"></div>
+</div>
+
+<script id="data" type="application/json">/*__DATA__*/{}</script>
+<script>
+const D = JSON.parse(document.getElementById('data').textContent);
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.querySelector('.viz-root')).getPropertyValue(n).trim();
+const NS = 'http://www.w3.org/2000/svg';
+const fmt$ = v => v >= 1e6 ? '$' + (v/1e6).toFixed(2) + 'M' : v >= 1e3 ? '$' + (v/1e3).toFixed(v >= 1e5 ? 0 : 1) + 'K' : '$' + v.toFixed(2);
+const fmtN = v => v >= 1e6 ? (v/1e6).toFixed(1) + 'M' : v >= 1e4 ? (v/1e3).toFixed(0) + 'K' : v >= 1e3 ? (v/1e3).toFixed(1) + 'K' : Math.round(v).toLocaleString();
+const pct = (v, d = 1) => v == null ? '–' : v.toFixed(d) + '%';
+const wk = s => new Date(s + 'T12:00:00').toLocaleDateString('en-US', {month: 'short', day: 'numeric'});
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function el(tag, attrs = {}, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function txt(parent, x, y, s, cls, anchor = 'start', extra = {}) {
+  const t = el('text', {x, y, 'text-anchor': anchor, class: cls || '', ...extra}, parent); t.textContent = s; return t;
+}
+const tip = $('tip');
+function hover(node, html) {
+  node.addEventListener('mousemove', e => {
+    tip.innerHTML = html; tip.style.opacity = 1;
+    const w = tip.offsetWidth; tip.style.left = Math.min(e.clientX + 14, innerWidth - w - 8) + 'px'; tip.style.top = (e.clientY + 14) + 'px';
+  });
+  node.addEventListener('mouseleave', () => tip.style.opacity = 0);
+}
+// Column with 4px rounded data-end, square baseline.
+function colPath(x, y, w, h) {
+  const r = Math.min(4, w / 2, h);
+  return `M${x},${y+h}V${y+r}Q${x},${y} ${x+r},${y}H${x+w-r}Q${x+w},${y} ${x+w},${y+r}V${y+h}Z`;
+}
+// Horizontal bar growing right (dir=1) or left (dir=-1) from x0.
+function barPath(x0, y, len, h, dir = 1) {
+  const r = Math.min(4, h / 2, len);
+  if (len <= 0) return '';
+  if (dir > 0) return `M${x0},${y}H${x0+len-r}Q${x0+len},${y} ${x0+len},${y+r}V${y+h-r}Q${x0+len},${y+h} ${x0+len-r},${y+h}H${x0}Z`;
+  return `M${x0},${y}H${x0-len+r}Q${x0-len},${y} ${x0-len},${y+r}V${y+h-r}Q${x0-len},${y+h} ${x0-len+r},${y+h}H${x0}Z`;
+}
+function niceMax(v) { const p = Math.pow(10, Math.floor(Math.log10(v))); for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= v) return m * p; }
+function table(cols, rows) {
+  return '<table><thead><tr>' + cols.map(c => `<th class="${c.n ? 'n' : ''}">${c.h}</th>`).join('') + '</tr></thead><tbody>' +
+    rows.map(r => '<tr>' + cols.map(c => `<td class="${c.n ? 'n' : ''}${c.cls ? ' ' + c.cls : ''}">${c.f(r)}</td>`).join('') + '</tr>').join('') + '</tbody></table>';
+}
+
+// ------------------------------------------------------------------ header
+const C = D.customers, S = D.search, L = D.listings;
+$('subtitle').textContent = `Amazon US · data through week ending ${C ? wk(C.latest.week_end) + ', ' + C.latest.week_end.slice(0,4) : '–'} · source: ${D.source === 'spapi' ? 'Selling Partner API' : 'Seller Central CSV exports'} · built ${D.built}`;
+const live = {customer_trends: 'Customer trends', sqp: 'Search queries', repeat_asin: 'Repeat purchase', basket: 'Market basket', listing_health: 'Listing health'};
+const ageDays = C ? Math.floor((Date.now() - new Date(C.latest.week_end + 'T23:59:59')) / 864e5) : 0;
+$('chips').innerHTML = (ageDays > 9 ? `<span class="chip stale" title="Brand Analytics posts each week a few days after it ends">Latest week is ${ageDays} days old</span>` : '') +
+  Object.entries(live).map(([k, v]) => `<span class="chip ${D.have.includes(k) ? 'live' : 'wait'}">${v}</span>`).join('') +
+  [['Sales & traffic', D.traffic], ['Ads', D.ads], ['Inventory', D.stock]].map(([v, on]) => `<span class="chip ${on ? 'live' : 'wait'}">${v}</span>`).join('') +
+  '<button class="toggle" id="theme">Dark / light</button>';
+$('theme').onclick = () => {
+  const r = document.documentElement, dark = r.dataset.theme ? r.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  r.dataset.theme = dark ? 'light' : 'dark'; renderAll();
+};
+
+function renderAll() {
+  document.querySelectorAll('svg').forEach(s => s.innerHTML = '');
+  // ---------------------------------------------------------------- hero + tiles
+  const cur = C.latest, prev = C.prior;
+  // Lead with the freshest sales: Seller Central orders when they're newer than Brand Analytics.
+  const SA = D.sales, fresh = SA && SA.through > cur.week_end;
+  const d = fresh ? (SA.rev_7 / SA.rev_prior - 1) * 100 : (cur.sales / prev.sales - 1) * 100;
+  $('hero-l').textContent = fresh ? `Amazon.com sales, 7 days to ${wk(SA.through)} (Seller Central orders)` : `Weekly sales, week ending ${wk(cur.week_end)}`;
+  $('hero-v').textContent = fmt$(fresh ? SA.rev_7 : cur.sales);
+  $('hero-d').className = 'delta ' + (d >= 0 ? 'up' : 'down');
+  $('hero-d').textContent = `${d >= 0 ? '▲ +' : '▼ '}${d.toFixed(1)}% vs prior week · ${fmt$(C.peak_week.sales)} at the ${wk(C.peak_week.week_end)} peak (brand, Brand Analytics)`;
+  spark($('spark'), fresh ? SA.series.map(s => s.revenue) : C.series.map(s => s.sales));
+  const funnelLast = S.funnel[S.funnel.length - 1];
+  const tiles = [
+    {l: `Orders, week ending ${wk(cur.week_end)}`, v: cur.orders.toLocaleString(), d: `${prev.orders.toLocaleString()} prior week`},
+    {l: 'Average order value', v: '$' + cur.aov.toFixed(2), d: `$${prev.aov.toFixed(2)} prior week`},
+    {l: 'New-to-brand customers', v: pct(cur.ntb_share), d: `${pct(prev.ntb_share)} prior week`},
+    {l: 'Repeat purchase rate', v: pct(cur.repeat_rate), d: `${pct(prev.repeat_rate)} prior week`},
+    {l: 'Search purchase share', v: pct(funnelLast.Purchases), d: `vs ${pct(funnelLast.Impressions)} impression share`},
+    {l: 'Return rate', v: pct(L.return_rate), d: 'orders-weighted, new SKUs'},
+    {l: 'Orders on badge-risk listings', v: pct(L.badge_share, 0), d: `${fmtN(L.badge_orders.Yes)} badged · ${fmtN(L.badge_orders['At risk'])} at risk`},
+  ];
+  $('tiles').innerHTML = tiles.map(t => `<div class="tile"><div class="l">${t.l}</div><div class="v">${t.v}</div><div class="d">${t.d}</div></div>`).join('');
+
+  salesChart(); miniLine($('ntb'), C.series.map(s => s.ntb_share), C.series.map(s => s.week_end), '%');
+  miniLine($('repeat'), C.series.map(s => s.repeat_rate), C.series.map(s => s.week_end), '%');
+  funnelChart(); segmentChart(); queryTable();
+  fitChart(); reasonsChart(); badgeChart(); linesTable(); watchTable();
+  basketChart(); compChart(); opsRender(); pendingTiles(); insightsRender();
+}
+
+const SECTION = {fit: ['Fit & returns', 'fit'], search: ['Search', 'search'], customers: ['Customers', 'customers'], basket: ['Basket', 'customers'], ops: ['Sales & stock', 'ops']};
+const PRI = {1: 'Act this week', 2: 'This month', 3: 'This quarter', 4: 'Test'};
+const I = D.insights || [];
+const impactTxt = m => m ? `≈ ${fmt$(m.low).replace('.0K', 'K')}–${fmt$(m.high).replace('.0K', 'K')} / month` : 'Not estimated';
+const seeData = i => `<button class="linkbtn" data-goto="${SECTION[i.section][1]}">See the data in ${SECTION[i.section][0]} →</button>`;
+
+// ------------------------------------------------------------------ tabs
+const TABS = [...document.querySelectorAll('#tabs [data-tab]')];
+function showTab(name) {
+  TABS.forEach(b => b.setAttribute('aria-selected', b.dataset.tab === name));
+  document.querySelectorAll('.panel').forEach(p => p.hidden = p.dataset.panel !== name);
+  renderAll();  // charts size to their card, so draw once the panel is visible
+  if (name === 'reports') reportRender();
+  scrollTo({top: 0});
+}
+TABS.forEach(b => b.onclick = () => showTab(b.dataset.tab));
+document.addEventListener('click', e => { const g = e.target.closest('[data-goto]'); if (g) showTab(g.dataset.goto); });
+
+// ------------------------------------------------------------------ summary
+function scoreRender() {
+  const f = (r, v) => r.unit === '$' ? fmt$(v) : pct(v);
+  const LABEL = {on: 'On track', close: 'Close', off: 'Off track'};
+  $('score').innerHTML = (D.scorecard || []).map(r => {
+    const fill = Math.max(0.04, Math.min(1, r.better === 'up' ? r.now / r.target : r.target / r.now));
+    let vs = '<span class="note" style="margin:0">No prior week in this data</span>';
+    if (r.prior != null) {
+      const diff = r.now - r.prior, good = (diff >= 0) === (r.better === 'up');
+      const s = r.unit === '$' ? `${diff >= 0 ? '+' : ''}${(100 * diff / r.prior).toFixed(1)}%` : `${diff >= 0 ? '+' : ''}${diff.toFixed(1)} pts`;
+      vs = `<span class="${good ? 'up' : 'down'}">${diff >= 0 ? '▲' : '▼'} ${s}</span> vs last week (${f(r, r.prior)})`;
+    }
+    return `<div class="sc"><div class="l">${esc(r.label)}</div><div class="v">${f(r, r.now)}</div>
+      <div class="bar"><span class="st-${r.status}" style="width:${(fill * 100).toFixed(0)}%"></span></div>
+      <div class="d"><span class="st st-${r.status}">${LABEL[r.status]}</span> · target ${r.better === 'down' ? 'under ' : ''}${f(r, r.target)}</div>
+      <div class="d">${vs}</div><div class="note" style="margin:2px 0 0">${esc(r.note)}</div></div>`;
+  }).join('');
+}
+function changesRender() {
+  if (!C) return;
+  $('changes-sub').textContent = `Week ending ${wk(C.latest.week_end)} vs ${wk(C.prior.week_end)}, biggest moves first`;
+  const fv = (r, v) => r.unit === '$' ? fmt$(v) : r.unit === '%' ? pct(v) : v.toLocaleString();
+  $('changes').innerHTML = table([{h: 'Metric', f: r => esc(r.label)}, {h: 'This week', n: 1, f: r => fv(r, r.now)},
+    {h: 'Last week', n: 1, f: r => fv(r, r.prior)},
+    {h: 'Change', n: 1, f: r => `<span class="${r.good ? 'up' : 'down'}">${r.rel >= 0 ? '▲ +' : '▼ '}${r.unit === '%' ? (r.now - r.prior).toFixed(1).replace('-', '') + ' pts' : (100 * Math.abs(r.rel)).toFixed(1) + '%'}</span>`}], D.changes || []);
+}
+function top3() {
+  return [...I].sort((a, b) => a.priority - b.priority || (b.impact?.high || 0) - (a.impact?.high || 0)).slice(0, 3);
+}
+function top3Render() {
+  $('top3').innerHTML = top3().map(i => {
+    const t = track(i);
+    return `<div class="ins">
+      <div class="meta"><span class="pri p${i.priority}">${PRI[i.priority]}</span><span class="chip">${esc(t.team)}</span><span class="tag ${t.status}">${STATUS[t.status]}${t.due ? ' · due ' + wk(t.due) : ''}</span></div>
+      <h3>${esc(i.title)}</h3>
+      <p>${esc(i.finding)}</p>
+      <ul>${i.actions.slice(0, 2).map(a => `<li>${esc(a)}</li>`).join('')}</ul>
+      <div class="impact"><b>${impactTxt(i.impact)}</b> in sales at stake
+        ${i.impact ? `<details><summary>How we estimated this</summary><p>${esc(i.impact.assumption)}</p></details>` : ''}
+        <div style="margin-top:6px">Track: ${esc(i.kpi)}, now <b style="font-size:13px">${esc(i.current)}</b> → target <b style="font-size:13px">${esc(i.target)}</b></div>
+        <div style="margin-top:6px">${seeData(i)}</div></div>
+    </div>`;
+  }).join('');
+}
+function recapRender() {
+  const today = new Date().toISOString().slice(0, 10), weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
+  const rows = [];
+  for (const [id, a] of Object.entries(ACT)) {
+    const title = a.title || I.find(i => i.id === id)?.title || id;
+    if (a.status === 'done' && a.doneAt >= weekAgo) rows.push(['done', 'Done', title, a]);
+    else if (a.status === 'dropped') continue;
+    else if (a.status === 'blocked') rows.push(['blocked', 'Blocked', title, a]);
+    else if (a.status !== 'done' && a.due && a.due < today) rows.push(['overdue', 'Past due', title, a]);
+  }
+  const order = {blocked: 0, overdue: 1, done: 2};
+  rows.sort((x, y) => order[x[0]] - order[y[0]]);
+  $('recap').innerHTML = rows.length ? rows.map(([cls, lbl, title, a]) => `<div class="recap-row"><span class="tag ${cls}">${lbl}</span>
+      <div>${esc(title)}${(a.status === 'done' ? a.doneNote : a.note) ? `<div class="note" style="margin:2px 0 0">${esc(a.status === 'done' ? a.doneNote : a.note)}</div>` : ''}</div>
+      <span class="note" style="margin:0">${esc(a.team || '')}${a.due ? ' · due ' + wk(a.due) : ''}</span></div>`).join('')
+    : `<p class="note">Nothing closed, blocked or past due yet. Set owners, due dates and status in the <button class="linkbtn" data-goto="actions">Actions tab</button>, and this becomes the first agenda item each week.</p>`;
+}
+
+// ------------------------------------------------------------------ action tracker (shared, via the artifact's db)
+// actions/<id>: the current state of each recommendation or team to-do. log/<auto>: one row per
+// change carrying the full state after it, so a report can replay any period.
+const TEAMS = ['Amazon ops', 'Product', 'Marketing', 'Creative'];
+const STATUS = {todo: 'Not started', doing: 'In progress', blocked: 'Blocked', done: 'Done', dropped: 'Dropped'};
+const SC_KPI = Object.fromEntries((D.scorecard || []).map(r => [r.key, r.label]));
+let DB = null, USER = null, ME = null, SAMPLE = null, canWrite = false, ACT = {}, LOG = [], trkMsg = '';
+const VIEW_ONLY = 'View only: ask the dashboard owner to invite you as an Editor to update actions.';
+const queue = {};  // one write at a time per action
+const custom = () => Object.entries(ACT).filter(([, a]) => a.custom).map(([id, a]) => ({id, custom: true, title: a.title || '', priority: a.priority || 2,
+  team: a.team, kpi: SC_KPI[a.kpi] || '', finding: a.detail || '', actions: [], impact: null}));
+const items = () => [...I, ...custom()];
+function track(i) {
+  const a = ACT[i.id] || {};
+  return {team: a.team || i.team, status: a.status || 'todo', due: a.due || '', note: a.note || '', doneNote: a.doneNote || '', by: a.updatedBy, at: a.updatedAt};
+}
+function save(id, patch) {
+  return queue[id] = (queue[id] || Promise.resolve()).then(async () => {
+    const i = items().find(x => x.id === id), prev = ACT[id] || {}, now = new Date().toISOString();
+    const body = {...prev, ...patch, team: patch.team || prev.team || i?.team, status: patch.status || prev.status || 'todo', updatedBy: ME, updatedAt: now};
+    if (i && !i.custom) Object.assign(body, {title: i.title, kpi: i.kpi, priority: i.priority});
+    if (patch.status) body.doneAt = patch.status === 'done' ? (prev.status === 'done' ? prev.doneAt : now) : null;
+    const changes = {};
+    for (const k in patch) if ((prev[k] ?? '') !== (patch[k] ?? '')) changes[k] = [prev[k] ?? null, patch[k]];
+    try {
+      await DB.collection('actions').doc(id).set(body);
+      await DB.collection('log').add({action: id, at: now, by: ME, changes, state: body});
+    } catch (e) {
+      if (e.code === 'invalid_argument') { canWrite = false; trkMsg = VIEW_ONLY; }
+      else trkMsg = 'Could not save that change (' + e.message + '). Try again.';
+      trackerRender();
+    }
+  });
+}
+let trkSeq = 0;
+async function trackerRender() {
+  const seq = ++trkSeq, fTeam = $('f-team').value, fStatus = $('f-status').value;
+  const rows = items().filter(i => { const t = track(i);
+    return (!fTeam || t.team === fTeam) && (fStatus === '*' || (fStatus ? t.status === fStatus : !['done', 'dropped'].includes(t.status))); });
+  const gone = Object.entries(ACT).filter(([id, a]) => !a.custom && !I.some(i => i.id === id));
+  const ids = [...new Set(Object.values(ACT).map(a => a.updatedBy).filter(Boolean))];
+  const ps = USER && ids.length ? await USER.profiles(ids) : {};
+  if (seq !== trkSeq) return;
+  const dis = canWrite ? '' : ' disabled';
+  const who = t => t.at ? `<span class="who">${t.by && ps[t.by] ? `<img alt="" src="${esc(ps[t.by].avatarUrl)}">` : ''}<span data-name="${esc(t.by || '')}"></span> · ${wk(t.at.slice(0, 10))}</span>` : '<span class="note" style="margin:0">–</span>';
+  const rec = i => i.custom
+    ? `<b>${esc(i.title)}</b> <span class="chip">Team to-do</span>${i.finding || i.kpi ? `<details><summary>Details</summary><div>${i.finding ? `<p style="margin:4px 0">${esc(i.finding)}</p>` : ''}${i.kpi ? `<p style="margin:4px 0">Should move: ${esc(i.kpi)}</p>` : ''}</div></details>` : ''}`
+    : `<b>${esc(i.title)}</b><details><summary>Details and next steps</summary><div>
+        <p style="margin:4px 0">${esc(i.finding)}</p><p style="margin:4px 0"><b>Why it matters:</b> ${esc(i.why)}</p>
+        <ul>${i.actions.map(a => `<li>${esc(a)}</li>`).join('')}</ul>
+        <p style="margin:4px 0">Track ${esc(i.kpi)}: now ${esc(i.current)} → target ${esc(i.target)}. Effort: ${esc(i.effort)}.</p>
+        ${i.impact ? `<p style="margin:4px 0"><b>Estimate:</b> ${esc(i.impact.assumption)}</p>` : ''}${seeData(i)}</div></details>`;
+  $('tracker').innerHTML = `<div class="trk">` + table([
+    {h: 'When', f: i => `<span class="pri p${i.priority}">${PRI[i.priority]}</span>`},
+    {h: 'Action', cls: 'rec', f: i => rec(i) + (track(i).doneNote ? `<div class="note" style="margin:4px 0 0">Done: ${esc(track(i).doneNote)}</div>` : '')},
+    {h: 'Team', f: i => `<select data-id="${i.id}" data-k="team"${dis}>${TEAMS.map(t => `<option${t === track(i).team ? ' selected' : ''}>${t}</option>`).join('')}</select>`},
+    {h: 'Status', f: i => `<select data-id="${i.id}" data-k="status"${dis}>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}"${k === track(i).status ? ' selected' : ''}>${v}</option>`).join('')}</select>`},
+    {h: 'Due', f: i => `<input type="date" data-id="${i.id}" data-k="due" value="${esc(track(i).due)}"${dis}>`},
+    {h: 'Sales at stake', n: 1, f: i => `<span style="white-space:nowrap">${i.custom ? '–' : impactTxt(i.impact)}</span>`},
+    {h: 'Note', f: i => `<input type="text" data-id="${i.id}" data-k="note" value="${esc(track(i).note)}" placeholder="${canWrite ? 'Next step, blocker…' : ''}"${dis}>`},
+    {h: 'Last update', f: i => who(track(i))}], rows) + `</div>` +
+    (rows.length ? '' : '<p class="note">No actions match these filters.</p>') +
+    (gone.length ? `<details style="margin-top:12px"><summary>No longer flagged by this week's data (${gone.length})</summary><div style="margin-top:6px">` +
+      table([{h: 'Recommendation', f: ([, a]) => esc(a.title || '')}, {h: 'Team', f: ([, a]) => esc(a.team || '')},
+             {h: 'Last status', f: ([, a]) => STATUS[a.status] || '–'}, {h: 'Note', f: ([, a]) => esc(a.doneNote || a.note || '')}], gone) + '</div></details>' : '');
+  document.querySelectorAll('#tracker [data-name]').forEach(n => { const p = ps[n.dataset.name]; n.textContent = (p && p.isMe) ? 'You' : (p && p.name) || 'Someone'; });
+  $('trk-state').textContent = trkMsg;
+  $('add-btn').hidden = !canWrite;
+}
+$('f-team').innerHTML += TEAMS.map(t => `<option>${t}</option>`).join('');
+$('f-status').innerHTML += Object.entries(STATUS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+$('f-team').onchange = $('f-status').onchange = trackerRender;
+$('tracker').addEventListener('change', e => {
+  const n = e.target.closest('[data-id]');
+  if (!n || !canWrite) return;
+  const id = n.dataset.id, k = n.dataset.k, v = n.value.trim(), cur = track(items().find(i => i.id === id))[k];
+  if (v === cur) return;
+  if (k === 'status' && v === 'done') return askDone(id);
+  save(id, {[k]: v});
+});
+
+// Marking an action done asks what was done: the line the reports quote.
+let doneId = null;
+function askDone(id) {
+  doneId = id;
+  $('done-title').textContent = items().find(i => i.id === id)?.title || '';
+  $('done-note').value = '';
+  $('dlg-done').showModal();
+}
+$('dlg-done').addEventListener('close', () => {
+  const note = $('done-note').value.trim();
+  if ($('dlg-done').returnValue === 'ok' && note) save(doneId, {status: 'done', doneNote: note});
+  else trackerRender();  // put the status menu back
+});
+$('add-btn').onclick = () => { $('add-form').reset(); $('dlg-add').showModal(); };
+$('add-team').innerHTML = TEAMS.map(t => `<option>${t}</option>`).join('');
+$('add-pri').innerHTML = Object.entries(PRI).map(([k, v]) => `<option value="${k}"${k === '2' ? ' selected' : ''}>${v}</option>`).join('');
+$('add-kpi').innerHTML = '<option value="">None</option>' + (D.scorecard || []).map(r => `<option value="${r.key}">${esc(r.label)}</option>`).join('');
+$('dlg-add').addEventListener('close', () => {
+  const title = $('add-title').value.trim();
+  if ($('dlg-add').returnValue !== 'ok' || !title) return;
+  const id = 'todo-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  save(id, {custom: true, title, team: $('add-team').value, priority: +$('add-pri').value, due: $('add-due').value,
+            kpi: $('add-kpi').value, detail: $('add-detail').value.trim(), status: 'todo', createdBy: ME, createdAt: new Date().toISOString()});
+});
+
+let dirty = false;  // a live update arriving mid-typing waits until the field loses focus
+$('tracker').addEventListener('focusout', () => { if (dirty) { dirty = false; setTimeout(trackingChanged); } });
+function trackingChanged() {
+  if ($('tracker').contains(document.activeElement) && document.activeElement.type === 'text') { dirty = true; return; }
+  trackerRender(); top3Render(); recapRender(); reportRender();
+}
+
+// ------------------------------------------------------------------ reports
+// reports/<week-YYYY-MM-DD | month-YYYY-MM>: the period plus Claude's summary bullets.
+// Every other section is computed from the KPI history and the action log, so it always
+// agrees with them. reports/<id>/decisions/<auto>: decisions typed in during the meeting.
+const H = D.history || {}, HW = Object.keys(H).sort();
+const addDays = (d, n) => new Date(new Date(d + 'T12:00:00').getTime() + n * 864e5).toISOString().slice(0, 10);
+const MONTH = k => new Date(k + '-15T12:00:00').toLocaleDateString('en-US', {month: 'long', year: 'numeric'});
+let REPORTS = {}, curRep = null, DEC = [], decUnsub = null;
+function periodOf(id) {
+  const [kind, key] = [id.slice(0, id.indexOf('-')), id.slice(id.indexOf('-') + 1)];
+  if (kind === 'week') {
+    // Data: the Sun–Sat week. Team activity: from the previous weekly report up to when this one
+    // was written, so no week's work falls between reports even when the data arrives late.
+    const span = REPORTS[id]?.from ? REPORTS[id] : activitySpan(id);
+    return {kind, key, id, weeks: [key], prior: HW.filter(w => w < key).slice(-1), from: span.from, to: span.to,
+            label: `Week ending ${wk(key)}`, dataLabel: `Data: week ending ${wk(key)}, ${key.slice(0, 4)}`};
+  }
+  const prevKey = new Date(new Date(key + '-15T12:00:00').setMonth(new Date(key + '-15T12:00:00').getMonth() - 1)).toISOString().slice(0, 7);
+  const next = new Date(new Date(key + '-15T12:00:00').setMonth(new Date(key + '-15T12:00:00').getMonth() + 1)).toISOString().slice(0, 7);
+  return {kind, key, id, weeks: HW.filter(w => w.startsWith(key)), prior: HW.filter(w => w.startsWith(prevKey)), from: key + '-01', to: next + '-01',
+          label: MONTH(key), dataLabel: `Data: weeks ending in ${MONTH(key)}`};
+}
+function activitySpan(id) {
+  const to = new Date().toISOString();
+  const prev = Object.entries(REPORTS).filter(([k, r]) => k.startsWith('week-') && k !== id && r.to && r.to < to).map(([, r]) => r.to).sort().pop();
+  return {from: prev || new Date(Date.now() - 7 * 864e5).toISOString(), to};
+}
+const T = d => d.length > 10 ? d : d + 'T00:00:00';
+const weekAt = date => HW.filter(w => w <= date && H[w].insights).slice(-1)[0];
+function stateAt(t) {  // every action's state as of time t, replayed from the log
+  const s = {};
+  for (const e of LOG) if (e.at < t) s[e.action] = e.state;
+  return s;
+}
+function reportData(p) {
+  const end = p.weeks[p.weeks.length - 1], prv = p.prior[p.prior.length - 1];
+  const kpis = (D.scorecard || []).map(r => {
+    const now = end ? H[end]?.kpis?.[r.key] : null, prior = prv ? H[prv]?.kpis?.[r.key] : null;
+    const gap = now == null ? null : r.better === 'up' ? now - r.target : r.target - now;
+    return {label: r.label, unit: r.unit, better: r.better, target: r.target, now, prior,
+            status: gap == null ? null : gap >= 0 ? 'on' : Math.abs(gap) <= 0.1 * r.target ? 'close' : 'off',
+            total: p.kind === 'month' && r.key === 'weekly_sales' ? p.weeks.reduce((s, w) => s + (H[w].kpis?.weekly_sales || 0), 0) : null};
+  });
+  const fromT = T(p.from), toT = T(p.to);
+  const inWin = LOG.filter(e => e.at >= fromT && e.at < toT);
+  const latestW = HW.filter(w => H[w].insights).slice(-1)[0];
+  const done = {};
+  for (const e of inWin) if (e.changes?.status?.[1] === 'done') done[e.action] = e;
+  const completed = Object.values(done).map(e => {
+    const s = e.state, ins = s.custom ? null : H[weekAt(e.at.slice(0, 10))]?.insights?.find(i => i.id === e.action);
+    const nowIns = H[latestW]?.insights?.find(i => i.id === e.action);
+    let moved = '';
+    if (s.custom && s.kpi) {
+      const r = (D.scorecard || []).find(x => x.key === s.kpi), w0 = weekAt(e.at.slice(0, 10)) || HW[HW.length - 1];
+      const fv = v => v == null ? '–' : r.unit === '$' ? fmt$(v) : pct(v);
+      moved = `${r.label}: ${fv(H[w0]?.kpis?.[s.kpi])} when done → ${fv(H[HW[HW.length - 1]]?.kpis?.[s.kpi])} now`;
+    } else if (!s.custom) moved = nowIns ? `${s.kpi}: ${ins ? ins.current : '–'} when done → ${nowIns.current} now (target ${nowIns.target})` : 'No longer flagged by the data';
+    return {title: s.title, team: s.team, did: s.doneNote || '', at: e.at, moved};
+  });
+  const iEnd = H[p.kind === 'week' ? p.weeks[0] : weekAt(addDays(p.to.slice(0, 10), -1))]?.insights || [], iStartW = HW.filter(w => w < (p.weeks[0] || p.from) && H[w].insights).slice(-1)[0];
+  const iStart = iStartW ? H[iStartW].insights : null;
+  const added = iStart ? iEnd.filter(i => !iStart.some(j => j.id === i.id)) : [];
+  const dropped = iStart ? iStart.filter(i => !iEnd.some(j => j.id === i.id)) : [];
+  const todos = inWin.filter(e => e.changes?.custom).map(e => ({title: e.state.title, team: e.state.team}));
+  const st = stateAt(toT), today = p.to.slice(0, 10);
+  const open = iEnd.map(i => ({id: i.id, title: i.title, team: i.team, status: 'todo', due: ''})).map(o => ({...o, ...(st[o.id] || {})}))
+    .concat(Object.entries(st).filter(([, s]) => s.custom).map(([id, s]) => ({id, ...s})))
+    .filter(o => !['done', 'dropped'].includes(o.status));
+  const blocked = open.filter(o => o.status === 'blocked'), late = open.filter(o => o.status !== 'blocked' && o.due && o.due < today);
+  const byTeam = TEAMS.map(t => [t, open.filter(o => o.team === t).length]);
+  const tracked = iEnd.length > 0 || LOG.some(e => e.at < toT);
+  return {kpis, completed, added, dropped, todos, hasBaseline: !!iStart, blocked, late, byTeam, open: open.length, tracked};
+}
+function repList() {
+  const ids = Object.keys(REPORTS).sort((a, b) => (periodOf(b).to + b).localeCompare(periodOf(a).to + a));
+  $('rep-pick').innerHTML = ids.length ? ids.map(id => `<option value="${id}"${id === curRep ? ' selected' : ''}>${esc((id.startsWith('month') ? 'Monthly · ' : 'Weekly · ') + periodOf(id).label)}</option>`).join('')
+    : '<option value="">No reports yet</option>';
+  if (!curRep || !REPORTS[curRep]) pickReport(ids[0] || null);
+}
+function pickReport(id) {
+  curRep = id; DEC = [];
+  if (decUnsub) { decUnsub(); decUnsub = null; }
+  if (id && DB) decUnsub = DB.collection('reports').doc(id).collection('decisions').orderBy('at').onSnapshot(
+    snap => { DEC = snap.docs.map(d => ({id: d.id, ...d.data()})); reportRender(); }, () => {});
+  reportRender();
+}
+$('rep-pick').onchange = e => pickReport(e.target.value);
+// The periods a report can be written for: the latest data week, and last month once it has ended.
+function duePeriods() {
+  const last = HW.filter(w => H[w].insights).slice(-1)[0], out = [];
+  if (last) out.push('week-' + last);
+  const thisMonth = new Date().toISOString().slice(0, 7), lastMonth = new Date(new Date().setDate(0)).toISOString().slice(0, 7);
+  if (HW.some(w => w.startsWith(lastMonth)) && lastMonth < thisMonth) out.push('month-' + lastMonth);
+  return out;
+}
+let repSeq = 0;
+async function reportRender() {
+  if ($('reports').closest('.panel').hidden) return;
+  const gen = duePeriods();
+  $('rep-gen').innerHTML = canWrite && DB ? gen.map(id => `<button class="toggle" data-gen="${id}">${REPORTS[id] ? 'Rewrite summary' : 'Write report'}: ${id.startsWith('month') ? 'monthly, ' : 'weekly, '}${esc(periodOf(id).label)}</button>`).join(' ') : '';
+  const seq = ++repSeq;
+  if (!curRep || !REPORTS[curRep]) {
+    $('reports').innerHTML = `<p class="note">${DB ? 'No report yet. Reports are written automatically each Tuesday after the data refresh' + (canWrite ? ', or use the buttons above.' : '.') : trkMsg}</p>`;
+    return;
+  }
+  const R = REPORTS[curRep], p = periodOf(curRep), d = reportData(p);
+  const ids = [...new Set([R.generatedBy, ...DEC.map(x => x.by)].filter(x => x && x !== 'auto'))];
+  const ps = USER && ids.length ? await USER.profiles(ids) : {};
+  if (seq !== repSeq) return;
+  const nm = id => id === 'auto' ? 'the weekly refresh' : (ps[id]?.isMe ? 'you' : ps[id]?.name || 'someone');
+  const fv = (r, v) => v == null ? '–' : r.unit === '$' ? fmt$(v) : pct(v);
+  const LABEL = {on: 'On track', close: 'Close', off: 'Off track'};
+  const list = (rows, f, empty) => rows.length ? '<ul class="rep-ul">' + rows.map(f).join('') + '</ul>' : `<p class="note">${empty}</p>`;
+  $('reports').innerHTML = `
+    <div class="rep-head"><h2>${p.kind === 'month' ? 'Monthly report' : 'Weekly report'}: ${esc(p.label)}</h2>
+      <p class="sub">${esc(p.dataLabel)} · Team activity ${wk(p.from.slice(0, 10))}–${wk(p.kind === 'week' ? p.to.slice(0, 10) : addDays(p.to, -1))} · written ${R.generatedAt ? wk(R.generatedAt.slice(0, 10)) : ''} by ${esc(nm(R.generatedBy))}</p></div>
+    <h3>What to know</h3>${list(R.summary || [], b => `<li>${esc(b)}</li>`, 'No summary was written for this report.')}
+    <h3>KPIs vs. target</h3>${table([{h: 'KPI', f: r => esc(r.label)},
+      {h: p.kind === 'month' ? 'Month end' : 'This week', n: 1, f: r => fv(r, r.now) + (r.total ? `<div class="note" style="margin:0">${fmt$(r.total)} for the month</div>` : '')},
+      {h: p.kind === 'month' ? 'Previous month end' : 'Last week', n: 1, f: r => fv(r, r.prior)},
+      {h: 'Target', n: 1, f: r => (r.better === 'down' ? 'under ' : '') + fv(r, r.target)},
+      {h: 'Status', f: r => r.status ? `<span class="st st-${r.status}">${LABEL[r.status]}</span>` : '–'}], d.kpis)}
+    <h3>Actions completed (${d.completed.length})</h3>${list(d.completed, c => `<li><b>${esc(c.title)}</b> <span class="note">${esc(c.team || '')} · ${wk(c.at.slice(0, 10))}</span>
+      ${c.did ? `<div>Done: ${esc(c.did)}</div>` : ''}${c.moved ? `<div class="note" style="margin:0">${esc(c.moved)}</div>` : ''}</li>`, 'Nothing was marked done in this period.')}
+    <h3>New from the data</h3>${d.hasBaseline ? list(d.added, i => `<li>${esc(i.title)} <span class="note">${esc(i.team)} · ${impactTxt(i.impact)}</span></li>`, 'No new recommendations this period.') +
+      (d.dropped.length ? '<p class="note" style="margin-top:6px">No longer flagged:</p>' + list(d.dropped, i => `<li>${esc(i.title)}</li>`, '') : '')
+      : '<p class="note">This is the first period with saved recommendations; new and resolved items show from the next report on.</p>'}
+    ${d.todos.length ? '<p class="note" style="margin-top:6px">Team to-dos added:</p>' + list(d.todos, t => `<li>${esc(t.title)} <span class="note">${esc(t.team)}</span></li>`, '') : ''}
+    <h3>Open, blocked and past due</h3>
+    ${d.tracked ? `<p class="sub">${d.open} open at the end of the period: ${d.byTeam.map(([t, n]) => `${t} ${n}`).join(' · ')}</p>` : '<p class="note">Action tracking started after this period.</p>'}
+    ${d.blocked.length || d.late.length ? list([...d.blocked.map(o => ['Blocked', o]), ...d.late.map(o => ['Past due', o])],
+      ([lbl, o]) => `<li><span class="tag ${lbl === 'Blocked' ? 'blocked' : 'overdue'}">${lbl}</span> ${esc(o.title)} <span class="note">${esc(o.team || '')}${o.due ? ' · due ' + wk(o.due) : ''}${o.note ? ' · ' + esc(o.note) : ''}</span></li>`, '')
+      : '<p class="note">Nothing blocked or past due.</p>'}
+    <h3>Decisions</h3>
+    ${list(DEC, x => `<li>${esc(x.text)} <span class="note">${esc(nm(x.by))} · ${wk(x.at.slice(0, 10))}</span></li>`, 'No decisions recorded yet.')}
+    ${canWrite ? `<form id="dec-form" class="dec-form"><input id="dec-text" type="text" maxlength="300" placeholder="Record a decision, e.g. Approved a $5K test of a men's-only campaign" required><button class="toggle">Add decision</button></form>` : ''}`;
+  const f = $('dec-form');
+  if (f) f.onsubmit = async e => {
+    e.preventDefault();
+    const text = $('dec-text').value.trim();
+    if (!text) return;
+    try { await DB.collection('reports').doc(curRep).collection('decisions').add({text, by: ME, at: new Date().toISOString()}); }
+    catch (err) { $('rep-state').textContent = 'Could not save the decision (' + err.message + ').'; }
+  };
+}
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-gen]');
+  if (!b || !canWrite) return;
+  const id = b.dataset.gen, p = periodOf(id), d = reportData(p);  // an existing report keeps its window
+  b.disabled = true; $('rep-state').textContent = 'Writing the summary…';
+  let summary = [];
+  if (SAMPLE) {
+    try {
+      const facts = {company: 'Dagacci Medical Uniform (scrubs sold on Amazon US)', report: `${p.kind}ly report, ${p.label}`, kpis: d.kpis,
+        completed: d.completed, new_recommendations: d.added.map(i => ({title: i.title, team: i.team, impact: i.impact && [i.impact.low, i.impact.high]})),
+        resolved: d.dropped.map(i => i.title), team_todos_added: d.todos, blocked: d.blocked.map(o => o.title), past_due: d.late.map(o => o.title), open_by_team: d.byTeam};
+      const out = await SAMPLE.json(`Write the "What to know" summary for a ${p.kind}ly KPI review led by the CEO. Use only the facts in the JSON below; no outside claims, no invented numbers. ` +
+        `Lead with the biggest KPI move against target, then what the team completed and whether its KPI moved, then what is new or stuck and needs a decision. ` +
+        `Return a JSON array of 3 to 5 strings, each one plain sentence under 30 words, no markdown.\n\n` + JSON.stringify(facts));
+      if (Array.isArray(out)) summary = out.filter(x => typeof x === 'string').slice(0, 5);
+    } catch (err) { $('rep-state').textContent = err.code === 'not_granted' ? 'Claude was not allowed for this page, so the report has no summary.' : 'The summary could not be written (' + err.code + '); the report was saved without it.'; }
+  }
+  try {
+    await DB.collection('reports').doc(id).set({kind: p.kind, key: p.key, summary, generatedAt: new Date().toISOString(), generatedBy: ME,
+      ...(p.kind === 'week' ? {from: p.from, to: p.to} : {})});
+    if (summary.length) $('rep-state').textContent = '';
+    pickReport(id);
+  } catch (err) { $('rep-state').textContent = 'Could not save the report (' + err.message + ').'; }
+  b.disabled = false;
+});
+
+(async () => {
+  trkMsg = 'Owners, status and reports load when this page is opened from its claude.ai link while signed in.';
+  if (!window.claude?.use) { trackerRender(); reportRender(); return; }
+  [DB, USER, SAMPLE] = await Promise.all([claude.use('db'), claude.use('user'), claude.use('sample')]);
+  if (!DB) { trackerRender(); reportRender(); return; }
+  ME = USER ? await USER.id() : null;
+  canWrite = (USER ? await USER.can('data.write') : null) !== false;
+  trkMsg = canWrite ? '' : VIEW_ONLY;
+  const fail = e => { trkMsg = e.code === 'revoked' ? '' : 'Live updates stopped. Reload the page to see the latest status.'; trackerRender(); };
+  DB.collection('actions').onSnapshot(snap => { ACT = Object.fromEntries(snap.docs.map(d => [d.id, d.data()])); trackingChanged(); }, fail);
+  DB.collection('log').orderBy('at').limit(1000).onSnapshot(snap => { LOG = snap.docs.map(d => d.data()); reportRender(); }, fail);
+  DB.collection('reports').onSnapshot(snap => { REPORTS = Object.fromEntries(snap.docs.map(d => [d.id, d.data()])); repList(); }, fail);
+})();
+
+function insightsRender() {
+  scoreRender(); changesRender(); top3Render(); recapRender();
+  document.querySelectorAll('.sowhat').forEach(box => {
+    const rows = I.filter(i => i.section === box.dataset.section);
+    box.style.display = rows.length ? '' : 'none';
+    box.innerHTML = '<h2>What this tells us · what to do</h2>' + rows.map(i => `<div class="row">
+        <div><div class="t">${esc(i.title)}</div><div class="f">${esc(i.finding)}</div></div>
+        <div>${i.actions.map(a => `<div class="a">${esc(a)}</div>`).join('')}</div></div>`).join('');
+  });
+}
+
+function spark(svg, vals) {
+  const W = svg.clientWidth || 400, H = 56, n = vals.length, mx = Math.max(...vals), mn = Math.min(...vals);
+  const x = i => 4 + i * (W - 8) / (n - 1), y = v => 6 + (H - 12) * (1 - (v - mn) / (mx - mn || 1));
+  el('path', {d: vals.map((v, i) => (i ? 'L' : 'M') + x(i) + ',' + y(v)).join(''), fill: 'none', stroke: css('--axis'), 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round'}, svg);
+  el('circle', {cx: x(n - 1), cy: y(vals[n - 1]), r: 4, fill: css('--series-1'), stroke: css('--surface-1'), 'stroke-width': 2}, svg);
+}
+
+function salesChart() {
+  const svg = $('sales'), W = svg.clientWidth || 700, H = 240, m = {l: 44, r: 8, t: 18, b: 24};
+  const s = C.series, n = s.length, mx = niceMax(Math.max(...s.map(r => r.sales)));
+  const band = (W - m.l - m.r) / n, bw = Math.min(24, band * 0.6), y = v => m.t + (H - m.t - m.b) * (1 - v / mx);
+  for (let i = 0; i <= 4; i++) {
+    const v = mx * i / 4, yy = y(v);
+    el('line', {x1: m.l, x2: W - m.r, y1: yy, y2: yy, stroke: i ? css('--grid') : css('--axis'), 'stroke-width': 1}, svg);
+    txt(svg, m.l - 6, yy + 4, fmt$(v).replace('.0K', 'K'), '', 'end');
+  }
+  const peakI = s.findIndex(r => r.week_end === C.peak_week.week_end);
+  s.forEach((r, i) => {
+    const cx = m.l + band * i + band / 2, yy = y(r.sales);
+    const isLast = i === n - 1;
+    el('path', {d: colPath(cx - bw / 2, yy, bw, y(0) - yy), fill: isLast ? css('--series-1') : css('--series-1'), opacity: isLast ? 1 : 0.55}, svg);
+    if (i % 2 === (n - 1) % 2) txt(svg, cx, H - 6, wk(r.week_end), '', 'middle');
+    if (isLast || i === peakI) txt(svg, cx, yy - 6, fmt$(r.sales), 'val', 'middle');
+    const hit = el('rect', {x: cx - band / 2, y: m.t, width: band, height: H - m.t - m.b, class: 'hit'}, svg);
+    hover(hit, `<div class="t">Week ending ${wk(r.week_end)}</div><b>${fmt$(r.sales)}</b> · ${r.orders.toLocaleString()} orders<br>AOV $${r.aov.toFixed(2)} · new-to-brand ${pct(r.ntb_share)}`);
+  });
+  $('sales-table').innerHTML = table([
+    {h: 'Week ending', f: r => r.week_end}, {h: 'Sales', n: 1, f: r => '$' + Math.round(r.sales).toLocaleString()},
+    {h: 'Orders', n: 1, f: r => r.orders.toLocaleString()}, {h: 'AOV', n: 1, f: r => '$' + r.aov.toFixed(2)},
+    {h: 'New-to-brand', n: 1, f: r => pct(r.ntb_share)}, {h: 'Repeat rate', n: 1, f: r => pct(r.repeat_rate)}], s);
+}
+
+function miniLine(svg, vals, weeks, unit) {
+  const W = svg.clientWidth || 300, H = 110, m = {l: 34, r: 40, t: 10, b: 20}, n = vals.length;
+  const mn = Math.floor(Math.min(...vals) / 5) * 5, mx = Math.ceil(Math.max(...vals) / 5) * 5;
+  const x = i => m.l + i * (W - m.l - m.r) / (n - 1), y = v => m.t + (H - m.t - m.b) * (1 - (v - mn) / (mx - mn || 1));
+  [mn, mx].forEach(v => { el('line', {x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: css('--grid')}, svg); txt(svg, m.l - 6, y(v) + 4, v + unit, '', 'end'); });
+  el('path', {d: vals.map((v, i) => (i ? 'L' : 'M') + x(i) + ',' + y(v)).join(''), fill: 'none', stroke: css('--series-1'), 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round'}, svg);
+  el('circle', {cx: x(n - 1), cy: y(vals[n - 1]), r: 4, fill: css('--series-1'), stroke: css('--surface-1'), 'stroke-width': 2}, svg);
+  txt(svg, x(n - 1) + 8, y(vals[n - 1]) + 4, vals[n - 1].toFixed(1) + unit, 'val');
+  txt(svg, m.l, H - 4, wk(weeks[0]), ''); txt(svg, W - m.r, H - 4, wk(weeks[n - 1]), '', 'end');
+  const cross = el('line', {y1: m.t, y2: H - m.b, stroke: css('--axis'), opacity: 0}, svg);
+  const hit = el('rect', {x: m.l, y: 0, width: W - m.l - m.r, height: H, class: 'hit'}, svg);
+  hit.addEventListener('mousemove', e => {
+    const b = svg.getBoundingClientRect(), i = Math.max(0, Math.min(n - 1, Math.round((e.clientX - b.left - m.l) / ((W - m.l - m.r) / (n - 1)))));
+    cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.setAttribute('opacity', 1);
+    tip.innerHTML = `<div class="t">Week ending ${wk(weeks[i])}</div><b>${vals[i].toFixed(1)}${unit}</b>`; tip.style.opacity = 1;
+    tip.style.left = (e.clientX + 14) + 'px'; tip.style.top = (e.clientY + 14) + 'px';
+  });
+  hit.addEventListener('mouseleave', () => { tip.style.opacity = 0; cross.setAttribute('opacity', 0); });
+}
+
+function hbars(svg, rows, {label, value, fmt, color, H, labelW = 150, tipf}) {
+  const W = svg.clientWidth || 400, mx = Math.max(...rows.map(value)) * 1.15, bh = Math.min(20, (H - 8) / rows.length - 8);
+  const step = (H - 4) / rows.length;
+  rows.forEach((r, i) => {
+    const yy = 4 + i * step + (step - bh) / 2, len = (W - labelW - 60) * value(r) / mx;
+    txt(svg, labelW - 8, yy + bh / 2 + 4, label(r), 'lbl', 'end');
+    el('path', {d: barPath(labelW, yy, Math.max(len, 1), bh), fill: typeof color === 'function' ? color(r, i) : color}, svg);
+    txt(svg, labelW + len + 6, yy + bh / 2 + 4, fmt(value(r)), 'val');
+    if (tipf) hover(el('rect', {x: 0, y: yy - 4, width: W, height: bh + 8, class: 'hit'}, svg), tipf(r));
+  });
+  el('line', {x1: labelW, x2: labelW, y1: 0, y2: H, stroke: css('--axis')}, svg);
+}
+
+function funnelChart() {
+  const f = S.funnel[S.funnel.length - 1], stages = ['Impressions', 'Clicks', 'Cart adds', 'Purchases'];
+  const avg = k => S.funnel.reduce((a, r) => a + r[k], 0) / S.funnel.length;
+  $('funnel-sub').textContent = `Brand count ÷ total for the week ending ${wk(f.week_end)}. Hover for the 3-week average.`;
+  hbars($('funnel'), stages, {label: s => s, value: s => f[s], fmt: v => pct(v), color: css('--series-1'), H: 180, labelW: 90,
+    tipf: s => `<div class="t">${s}</div>This week <b>${pct(f[s])}</b><br>3-week avg ${pct(avg(s))}`});
+  const ratio = f.Purchases / f.Impressions;
+  $('funnel-call').innerHTML = `Dagacci wins <b>${ratio.toFixed(1)}×</b> more of the purchases than of the impressions. <b>Visibility is the constraint, not conversion</b>: every point of impression share gained should carry through to sales.`;
+}
+
+function segmentChart() {
+  const svg = $('segments'), rows = S.segments.filter(r => !r.segment.startsWith('Branded'));
+  const W = svg.clientWidth || 600, H = 210, lw = 150, m = {r: 20, t: 6, b: 22};
+  const mx = niceMax(Math.max(...rows.map(r => Math.max(r.impr_share, r.purch_share))) * 1.1);
+  const x = v => lw + (W - lw - m.r) * v / mx, step = (H - m.t - m.b) / rows.length;
+  for (let i = 0; i <= 4; i++) { const v = mx * i / 4; el('line', {x1: x(v), x2: x(v), y1: m.t, y2: H - m.b, stroke: css('--grid')}, svg); txt(svg, x(v), H - 6, v + '%', '', 'middle'); }
+  rows.forEach((r, i) => {
+    const yy = m.t + step * i + step / 2;
+    txt(svg, lw - 10, yy - 2, r.segment, 'lbl', 'end');
+    txt(svg, lw - 10, yy + 12, fmtN(r.weekly_searches) + ' searches/wk', '', 'end');
+    el('line', {x1: x(r.impr_share), x2: x(r.purch_share), y1: yy, y2: yy, stroke: css('--axis'), 'stroke-width': 2}, svg);
+    el('circle', {cx: x(r.impr_share), cy: yy, r: 5, fill: css('--series-1'), stroke: css('--surface-1'), 'stroke-width': 2}, svg);
+    el('circle', {cx: x(r.purch_share), cy: yy, r: 5, fill: css('--series-2'), stroke: css('--surface-1'), 'stroke-width': 2}, svg);
+    txt(svg, x(r.purch_share) + 10, yy + 4, pct(r.purch_share), 'val');
+    hover(el('rect', {x: 0, y: yy - step / 2, width: W, height: step, class: 'hit'}, svg),
+      `<div class="t">${r.segment}</div>${fmtN(r.weekly_searches)} searches/wk<br>Impression share <b>${pct(r.impr_share)}</b><br>Purchase share <b>${pct(r.purch_share)}</b><br>${Math.round(r.weekly_brand_purchases)} of ${Math.round(r.weekly_market_purchases)} purchases/wk`);
+  });
+}
+
+function queryTable() {
+  const fl = q => q.flag === 'Under-exposed' ? '<span class="flag under">Under-exposed</span>' : q.flag === 'Leaking' ? '<span class="flag leak">Leaking</span>' : '';
+  $('queries').innerHTML = table([
+    {h: 'Search query', f: q => esc(q.query)}, {h: 'Segment', f: q => q.segment},
+    {h: 'Searches/wk', n: 1, f: q => fmtN(q.weekly_searches)},
+    {h: 'Impr. share', n: 1, f: q => pct(q.impr_share)}, {h: 'Click share', n: 1, f: q => pct(q.click_share)},
+    {h: 'Purch. share', n: 1, f: q => pct(q.purch_share)}, {h: 'Dagacci purch/wk', n: 1, f: q => q.weekly_brand_purchases.toFixed(1)},
+    {h: 'Median price: market / Dagacci', n: 1, f: q => (q.price_mkt ? '$' + q.price_mkt.toFixed(2) : '–') + ' / ' + (q.price_brand ? '$' + q.price_brand.toFixed(2) : '–')},
+    {h: 'Signal', f: fl}], S.queries);
+}
+
+function fitChart() {
+  const svg = $('fit'), rows = L.fit_by_size.filter(r => r.orders >= 300), W = svg.clientWidth || 500, H = 300;
+  const rate = (r, k) => 100 * r[k] / r.orders, mx = niceMax(Math.max(...rows.map(r => Math.max(rate(r, 'Too Large'), rate(r, 'Too Small')))));
+  const mid = W / 2 + 10, half = W / 2 - 60, step = (H - 24) / rows.length, bh = Math.min(18, step - 8);
+  [-1, -0.5, 0.5, 1].forEach(f => { const xx = mid + f * half; el('line', {x1: xx, x2: xx, y1: 0, y2: H - 22, stroke: css('--grid')}, svg); txt(svg, xx, H - 6, (Math.abs(f) * mx).toFixed(1), '', 'middle'); });
+  rows.forEach((r, i) => {
+    const yy = i * step + (step - bh) / 2, s = rate(r, 'Too Small'), lg = rate(r, 'Too Large');
+    txt(svg, 30, yy + bh / 2 + 4, r.size, 'lbl', 'end');
+    el('path', {d: barPath(mid - 1, yy, half * s / mx, bh, -1), fill: css('--div-cool')}, svg);
+    el('path', {d: barPath(mid + 1, yy, half * lg / mx, bh, 1), fill: css('--div-warm')}, svg);
+    txt(svg, mid + 1 + half * lg / mx + 6, yy + bh / 2 + 4, lg.toFixed(1), 'val');
+    txt(svg, mid - 1 - half * s / mx - 6, yy + bh / 2 + 4, s.toFixed(1), 'val', 'end');
+    hover(el('rect', {x: 0, y: yy - 4, width: W, height: bh + 8, class: 'hit'}, svg),
+      `<div class="t">Size ${r.size} · ${r.orders.toLocaleString()} orders</div>Too large <b>${lg.toFixed(1)}</b> per 100 orders<br>Too small <b>${s.toFixed(1)}</b> per 100 orders`);
+  });
+  el('line', {x1: mid, x2: mid, y1: 0, y2: H - 22, stroke: css('--axis')}, svg);
+  const tl = L.reasons.find(r => r.reason === 'Too Large')?.orders || 0, ts = L.reasons.find(r => r.reason === 'Too Small')?.orders || 0;
+  const worst = rows.reduce((a, r) => rate(r, 'Too Large') > rate(a, 'Too Large') ? r : a);
+  $('fit-call').innerHTML = `"Too large" outnumbers "too small" <b>${(tl / ts).toFixed(1)} to 1</b> and is worst at <b>size ${worst.size}</b>. The products run large: update the size chart and add a "size down if between sizes" note, then track this ratio weekly.`;
+}
+
+function reasonsChart() {
+  const rows = L.reasons.slice(0, 6);
+  hbars($('reasons'), rows, {label: r => r.reason.replace('Performance or quality not adequate', 'Quality not adequate'), value: r => r.orders,
+    fmt: v => fmtN(v), color: css('--series-1'), H: 190, labelW: 150, tipf: r => `<div class="t">${esc(r.reason)}</div><b>${Math.round(r.orders).toLocaleString()}</b> est. orders`});
+}
+
+function badgeChart() {
+  const svg = $('badge'), W = svg.clientWidth || 500, tot = L.orders, y = L.badge_orders.Yes, r = L.badge_orders['At risk'], ok = tot - y - r;
+  const segs = [['Badged', y, css('--critical')], ['At risk', r, css('--serious')], ['No badge', ok, css('--axis')]];
+  let x = 0;
+  segs.forEach(([k, v, c], i) => {
+    const w = (W) * v / tot - (i < 2 ? 2 : 0);
+    const p = el('rect', {x, y: 6, width: Math.max(w, 1), height: 20, rx: 3, fill: c}, svg);
+    hover(p, `<div class="t">${k}</div><b>${v.toLocaleString()}</b> orders (${pct(100 * v / tot)})`);
+    x += w + 2;
+  });
+  txt(svg, 0, 46, `⚠ Badged ${pct(100 * y / tot)}`, 'lbl'); txt(svg, 110, 46, `◔ At risk ${pct(100 * r / tot)}`, 'lbl'); txt(svg, 220, 46, `No badge ${pct(100 * ok / tot)}`, 'lbl');
+}
+
+function linesTable() {
+  $('lines').innerHTML = table([
+    {h: 'Line', f: r => r.line}, {h: 'SKUs', n: 1, f: r => r.skus}, {h: 'Orders', n: 1, f: r => r.orders.toLocaleString()},
+    {h: 'Return rate', n: 1, f: r => pct(r.return_rate)}, {h: 'NCX rate', n: 1, f: r => pct(r.ncx_rate)},
+    {h: 'Stars', n: 1, f: r => r.stars ? r.stars.toFixed(2) : '–'}, {h: 'Orders on badge-risk listings', n: 1, f: r => pct(r.badge_share, 0)}], L.lines);
+}
+
+function watchTable() {
+  const b = r => r.badge === 'Yes' ? '<span class="flag badge-yes">Badged</span>' : r.badge === 'At risk' ? '<span class="flag badge-risk">At risk</span>' : '';
+  $('watch').innerHTML = table([
+    {h: 'ASIN', f: r => r.asin}, {h: 'Product', cls: 'trunc', f: r => `<span title="${esc(r.title)}">${esc(r.title.replace(/^Dagacci Medical Uniform®?\s*/, ''))}</span>`},
+    {h: 'Size', f: r => r.size || '–'}, {h: 'Orders', n: 1, f: r => r.orders.toLocaleString()},
+    {h: 'Return', n: 1, f: r => pct(r.return_rate)}, {h: 'NCX', n: 1, f: r => pct(r.ncx_rate)}, {h: 'Stars', n: 1, f: r => r.stars ?? '–'},
+    {h: 'Top NCX reason', f: r => r.top_reason ? `${esc(r.top_reason)} (${r.top_share}%)` : '–'}, {h: 'Badge', f: b}], L.watchlist);
+}
+
+function basketChart() {
+  const svg = $('basket'), W = svg.clientWidth || 500, B = D.basket.mix, cols = [css('--series-1'), css('--series-2'), css('--series-3')];
+  $('basket-legend').innerHTML = B.map((r, i) => `<span><span class="sw" style="background:${cols[i]}"></span>${r.kind} ${pct(r.share, 0)}</span>`).join('');
+  let x = 0;
+  B.forEach((r, i) => {
+    const w = W * r.share / 100 - (i < B.length - 1 ? 2 : 0);
+    hover(el('rect', {x, y: 6, width: Math.max(w, 1), height: 22, rx: 3, fill: cols[i]}, svg), `<div class="t">${r.kind}</div><b>${pct(r.share)}</b> of weighted co-purchases`);
+    x += w + 2;
+  });
+  const comp = B.find(r => r.kind === 'Competitor scrubs');
+  $('basket-call').innerHTML = `In <b>${pct(comp?.share, 0)}</b> of co-purchases, the shopper bought a competitor's scrubs in the same order. That usually means they're hedging on fit or style. A clearer size guide and multi-size bundles target this directly.`;
+}
+
+function compChart() {
+  hbars($('comp'), D.basket.competitors, {label: r => r.name, value: r => r.weight, fmt: v => Math.round(v) + '', color: css('--series-2'), H: 210, labelW: 130,
+    tipf: r => `<div class="t">${esc(r.name)}</div><b>${Math.round(r.weight)}</b> weighted co-purchase orders (3 weeks)`});
+}
+
+function opsRender() {
+  const SA = D.sales, TR = D.traffic, ST = D.stock, AD = D.ads;
+  $('ops-none').hidden = !!(SA || TR || ST);
+  ['ops-sales-card', 'ops-tiles-card'].forEach(id => $(id).hidden = !SA);
+  $('ops-lines-card').hidden = $('ops-pages-card').hidden = !TR;
+  $('ops-stock-card').hidden = !ST;
+  if (SA) {
+    const s = SA.series, n = s.length, svg = $('daily'), W = svg.clientWidth || 700, H = 220, m = {l: 44, r: 8, t: 18, b: 24};
+    const mx = niceMax(Math.max(...s.map(r => r.revenue))), band = (W - m.l - m.r) / n, bw = Math.min(18, band * 0.7);
+    const y = v => m.t + (H - m.t - m.b) * (1 - v / mx);
+    for (let i = 0; i <= 4; i++) {
+      const v = mx * i / 4, yy = y(v);
+      el('line', {x1: m.l, x2: W - m.r, y1: yy, y2: yy, stroke: i ? css('--grid') : css('--axis'), 'stroke-width': 1}, svg);
+      txt(svg, m.l - 6, yy + 4, fmt$(v).replace('.0K', 'K'), '', 'end');
+    }
+    const best = s.reduce((a, r, i) => r.revenue > s[a].revenue ? i : a, 0);
+    s.forEach((r, i) => {
+      const cx = m.l + band * i + band / 2, yy = y(r.revenue), recent = i >= n - 7;
+      el('path', {d: colPath(cx - bw / 2, yy, bw, y(0) - yy), fill: css('--series-1'), opacity: recent ? 1 : 0.55}, svg);
+      if (i % 7 === (n - 1) % 7) txt(svg, cx, H - 6, wk(r.date), '', 'middle');
+      if (i === n - 1 || i === best) txt(svg, cx, yy - 6, fmt$(r.revenue), 'val', 'middle');
+      hover(el('rect', {x: cx - band / 2, y: m.t, width: band, height: H - m.t - m.b, class: 'hit'}, svg),
+        `<div class="t">${new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric'})}</div><b>${fmt$(r.revenue)}</b> · ${r.units.toLocaleString()} units`);
+    });
+    const d = (SA.rev_7 / SA.rev_prior - 1) * 100;
+    $('ops-sales-sub').textContent = `Amazon.com, ${wk(SA.from)} – ${wk(SA.through)}: ${fmt$(SA.rev_total)} from ${SA.units_total.toLocaleString()} units`;
+    $('daily-table').innerHTML = table([{h: 'Day', f: r => r.date}, {h: 'Sales', n: 1, f: r => '$' + Math.round(r.revenue).toLocaleString()},
+      {h: 'Units', n: 1, f: r => r.units.toLocaleString()}], [...s].reverse());
+    const tl = [
+      {l: 'Last 7 days', v: fmt$(SA.rev_7), d: `<span class="${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '▲ +' : '▼ '}${d.toFixed(1)}%</span> vs ${fmt$(SA.rev_prior)}`},
+      {l: 'Units, last 7 days', v: fmtN(SA.units_7), d: `${fmtN(SA.units_prior)} the week before`},
+    ];
+    if (TR) tl.push({l: 'Unit session %', v: pct(TR.cr), d: `${fmtN(TR.sessions)} sessions, 30 days`},
+                    {l: 'Buy Box', v: pct(TR.bb), d: 'weighted by sessions'});
+    if (ST) tl.push({l: 'Weeks of cover', v: ST.weeks.toFixed(1), d: `${fmtN(ST.on_hand)} units at Amazon · ${fmtN(ST.inbound)} inbound`},
+                    {l: 'Best sellers out of stock', v: `${ST.core_out} of ${ST.core}`, d: 'top variants by units/day'});
+    if (AD) tl.push({l: 'Ad spend (Quartile)', v: fmt$(AD.spend_month) + '/mo', d: `ACoS ${pct(AD.acos)} · TACoS ${pct(AD.tacos)}`},
+                    {l: 'Sales from ads', v: pct(AD.ad_share, 0), d: `${AD.ad_types}, ${wk(AD.period_start)} – ${wk(AD.period_end)}`});
+    if (D.store) tl.push({l: 'dagacci.com units, 30 days', v: fmtN(D.store.units_30d), d: `${fmtN(D.store.variants)} variants on Shopify`});
+    $('ops-tiles').innerHTML = tl.map(t => `<div class="tile"><div class="l">${t.l}</div><div class="v">${t.v}</div><div class="d">${t.d}</div></div>`).join('');
+  }
+  if (TR) {
+    const rows = TR.by_line.filter(r => r.sessions >= 2000).slice(0, 9), svg = $('cr-lines');
+    hbars(svg, rows, {label: r => r.line, value: r => r.cr || 0, fmt: v => v.toFixed(1) + '%', color: css('--series-1'), H: 250, labelW: 140,
+      tipf: r => `<div class="t">${esc(r.line)}</div><b>${pct(r.cr)}</b> unit session %<br>${r.sessions.toLocaleString()} sessions · ${r.units.toLocaleString()} units · Buy Box ${pct(r.bb)}`});
+    const W = svg.clientWidth || 400, mx = Math.max(...rows.map(r => r.cr || 0)) * 1.15, xa = 140 + (W - 140 - 60) * TR.cr / mx;
+    el('line', {x1: xa, x2: xa, y1: 0, y2: 250, stroke: css('--axis'), 'stroke-dasharray': '3 3'}, svg);
+    txt(svg, xa, 262, 'brand average ' + pct(TR.cr), 'lbl', 'middle');
+    $('cr-table').innerHTML = table([{h: 'Line', f: r => esc(r.line)}, {h: 'Sessions', n: 1, f: r => r.sessions.toLocaleString()},
+      {h: 'Units', n: 1, f: r => r.units.toLocaleString()}, {h: 'Unit session %', n: 1, f: r => pct(r.cr)}, {h: 'Buy Box', n: 1, f: r => pct(r.bb)}], TR.by_line);
+    $('pages-table').innerHTML = table([
+      {h: 'Product', f: r => `<a href="https://www.amazon.com/dp/${esc(r.asin)}" target="_blank" rel="noopener">${esc(r.asin)}</a> <span class="note">${esc(r.sku)}</span><div class="trunc note" title="${esc(r.title)}">${esc(r.title)}</div>`},
+      {h: 'Line', f: r => esc(r.line)}, {h: 'Size', f: r => r.size || '–'},
+      {h: 'Sessions', n: 1, f: r => r.sessions.toLocaleString()}, {h: 'Units', n: 1, f: r => r.units.toLocaleString()},
+      {h: 'Unit session %', n: 1, f: r => pct(r.cr)}, {h: 'Buy Box', n: 1, f: r => pct(r.bb, 0)}], TR.top);
+  }
+  if (ST) {
+    $('ops-stock-sub').textContent = `${ST.core_out} of the ${ST.core} best sellers are out of stock; ${ST.low.filter(r => r.on_hand > 0).length} more have under 3 weeks of cover. Manage FBA Inventory report.`;
+    $('stock-table').innerHTML = ST.low.length ? table([
+      {h: 'SKU', f: r => `${esc(r.sku)}<div class="trunc note" title="${esc(r.title)}">${esc(r.title)}</div>`},
+      {h: 'Sold/day', n: 1, f: r => r.per_day.toFixed(1)}, {h: 'At Amazon', n: 1, f: r => r.on_hand.toLocaleString()},
+      {h: 'Inbound', n: 1, f: r => r.inbound.toLocaleString()},
+      {h: 'Weeks', n: 1, cls: '', f: r => `<b style="color:${r.on_hand <= 0 ? css('--critical') : r.weeks < 1.5 ? css('--serious') : 'inherit'}">${r.on_hand <= 0 ? 'Out' : r.weeks.toFixed(1)}</b>`}], ST.low)
+      : '<p class="note">Every best seller has at least 3 weeks of cover.</p>';
+  }
+}
+
+function pendingTiles() {
+  $('pending').innerHTML = D.awaiting.map(a => `<div class="tile pending"><div class="l">${a.kpi}</div><div class="v">Awaiting data</div><div class="d">${a.source}</div></div>`).join('');
+  const rows = [
+    ['Customer trends', 'Seller Central CSV', 'customer_trends', 'No confirmed API: keep weekly CSV drop'],
+    ['Search Query Performance', 'GET_BRAND_ANALYTICS_SEARCH_QUERY_PERFORMANCE_REPORT', 'sqp', 'API is ASIN-level; pipeline rolls up to brand'],
+    ['Repeat purchase', 'GET_BRAND_ANALYTICS_REPEAT_PURCHASE_REPORT', 'repeat_asin', ''],
+    ['Market basket', 'GET_BRAND_ANALYTICS_MARKET_BASKET_REPORT', 'basket', ''],
+    ['Listing health (Voice of the Customer)', 'Seller Central CSV', 'listing_health', 'No API: keep weekly CSV drop'],
+    ...D.awaiting.map(a => [a.kpi, a.source, null, a.status]),
+  ];
+  $('connectors').innerHTML = table([
+    {h: 'Data', f: r => r[0]}, {h: 'Source / report type', f: r => `<code>${esc(r[1])}</code>`},
+    {h: 'Status', f: r => r[2] && D.have.includes(r[2]) ? `<span class="chip live">Loaded (${D.source === 'spapi' && !r[1].startsWith('Seller') ? 'API' : 'CSV'})</span>` : `<span class="chip wait">${r[3] || 'Waiting'}</span>`},
+    {h: 'Notes', f: r => r[2] ? esc(r[3]) : ''}], rows);
+}
+
+showTab('summary');
+trackerRender();
+let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(renderAll, 150); });
+</script>
+</body>
+</html>
