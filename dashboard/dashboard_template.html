@@ -586,7 +586,20 @@ function showTab(name) {
   if (name === 'review') reviewRender();
   scrollTo({top: 0});
 }
-TABS.forEach(b => b.onclick = () => showTab(b.dataset.tab));
+TABS.forEach(b => b.onclick = () => { showTab(b.dataset.tab); history.replaceState(null, '', '#' + b.dataset.tab); });
+// Direct links: #<tab> opens a tab (#fit, #progress, #actions…); #<id> of anything inside a tab
+// (#watch, #segments, #stock-table…) opens its tab and scrolls to the card that holds it.
+function openHash() {
+  const h = decodeURIComponent(location.hash.slice(1));
+  if (!h) return;
+  if (TABS.some(b => b.dataset.tab === h)) return showTab(h);
+  const target = document.getElementById(h), panel = target && target.closest('.panel');
+  if (!panel) return;
+  showTab(panel.dataset.panel);
+  const card = target.closest('.card, .sowhat, .start') || target;
+  setTimeout(() => { card.scrollIntoView({block: 'start', behavior: 'smooth'}); card.classList.add('rv-flash'); setTimeout(() => card.classList.remove('rv-flash'), 1800); }, 150);
+}
+addEventListener('hashchange', openHash);
 document.addEventListener('click', e => { const g = e.target.closest('[data-goto]'); if (g) showTab(g.dataset.goto); });
 
 // ------------------------------------------------------------------ summary
@@ -1443,6 +1456,7 @@ function reviewStart() {
 }
 
 showTab('summary');
+openHash();  // a direct link (#fit, #watch…) opens on its tab
 trackerRender();
 reviewRender();
 let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(renderAll, 150); });
