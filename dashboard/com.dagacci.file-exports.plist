@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Files Seller Central exports from Downloads as soon as they land. Installed by install.sh --schedule. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.dagacci.file-exports</string>
+  <key>ProgramArguments</key>
+  <array><string>/bin/zsh</string><string>__HERE__/file_exports.sh</string></array>
+  <key>WatchPaths</key>
+  <array><string>__DOWNLOADS__</string></array>
+  <key>StandardOutPath</key><string>__HERE__/logs/file-exports.log</string>
+  <key>StandardErrorPath</key><string>__HERE__/logs/file-exports.err</string>
+</dict>
+</plist>

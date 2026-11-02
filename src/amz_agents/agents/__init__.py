@@ -6,11 +6,12 @@ from .listing import ListingAgent
 from .marketing import MarketingAgent
 from .pricing import PricingAgent
 from .product import ProductAgent
+from .promotions import PromotionsAgent
 from .reviews import ReviewsAgent
 from .sales import SalesAgent
 from .ux import UXAgent
 
 __all__ = [
     "AdsAgent", "CreativeAgent", "DataAgent", "InventoryAgent", "ListingAgent", "MarketingAgent", "PricingAgent",
-    "ProductAgent", "ReviewsAgent", "SalesAgent", "UXAgent",
+    "ProductAgent", "PromotionsAgent", "ReviewsAgent", "SalesAgent", "UXAgent",
 ]

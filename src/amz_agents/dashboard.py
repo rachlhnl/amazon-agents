@@ -70,6 +70,13 @@ HANDOFFS = [
     {"from": "reviews", "to": ["listing", "data"],
      "what": "Recurring complaints by product",
      "why": "Listing copy stays honest about known issues; the data agent sizes defects."},
+    {"from": "promotions", "to": ["pricing"],
+     "what": "Deal candidates under a price hold",
+     "why": "A price cut before an event lowers the 30-day low the deal has to beat, so "
+            "pricing leaves those items alone until the event ends."},
+    {"from": "inventory", "to": ["promotions"],
+     "what": "Items running low on stock",
+     "why": "Nothing goes on deal that can't cover the event's extra demand."},
     {"from": "pricing", "to": ["sales"],
      "what": "Proposed Amazon prices",
      "why": "Other channels aren't priced under the new Amazon price and the Buy Box."},

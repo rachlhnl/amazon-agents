@@ -55,6 +55,9 @@ HUMAN_ONLY = {
     "improve_listing_conversion",
     # product work: patterns, size charts, factory orders, launches
     "fix_fit", "restock_style", "improve_product", "plan_launch", "improve_shopping_experience",
+    # promotions: deals are submitted and channel prices changed by a person
+    "plan_deal", "hold_price", "event_stock", "match_channel_price", "promotion_results",
+    "request_data",
 }
 
 # Statuses that mean an action is still waiting, or was carried out recently

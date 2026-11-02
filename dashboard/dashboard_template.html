@@ -39,11 +39,26 @@
 * { box-sizing: border-box; }
 body { margin: 0; }
 .viz-root { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--page);
-  color: var(--text-primary); min-height: 100vh; padding: 28px 32px 60px; line-height: 1.4; }
+  color: var(--text-primary); min-height: 100vh; padding: 28px 32px 60px; line-height: 1.5; font-size: 16px; }
 header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
-h1 { font-size: 22px; margin: 0 0 4px; font-weight: 650; }
-h2 { font-size: 15px; margin: 0 0 2px; font-weight: 600; }
-.sub { color: var(--text-secondary); font-size: 13px; margin: 0; }
+h1 { font-size: 26px; margin: 0 0 4px; font-weight: 650; }
+h2 { font-size: 18px; margin: 0 0 4px; font-weight: 600; }
+.sub { color: var(--text-secondary); font-size: 14.5px; margin: 0; }
+.pg-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 18px; }
+.pg-chart h3 { font-size: 15px; margin: 0 0 2px; font-weight: 600; }
+.pg-chart .now { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.pg-cell { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pg-cell i { font-style: normal; font-size: 12px; margin-left: 4px; }
+.pg-dot-on { color: var(--good-text); } .pg-dot-close { color: #a06a00; } .pg-dot-off { color: var(--bad-text); }
+.pg-done { font-size: 13px; color: var(--text-secondary); margin: 0; padding-left: 16px; }
+.start { grid-column: span 12; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-1); padding: 18px 22px; display: grid; gap: 10px; }
+.start p { margin: 0; font-size: 16px; max-width: 820px; }
+.start .steps3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.start .steps3 div { border-top: 3px solid var(--series-1); padding-top: 8px; font-size: 15px; }
+.start .steps3 b { display: block; font-size: 16px; }
+.start dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 6px 0 0; font-size: 14.5px; }
+.start dt { font-weight: 600; } .start dd { margin: 0; color: var(--text-secondary); }
+@media (max-width: 760px) { .start .steps3 { grid-template-columns: 1fr; } .start dl { grid-template-columns: 1fr; } }
 .note { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .chip { font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-secondary); background: var(--surface-1); }
@@ -199,42 +214,49 @@ details.how div { font-size: 12.5px; color: var(--text-secondary); padding: 6px 
     <h1>Dagacci Medical Uniform: KPI dashboard</h1>
     <p class="sub" id="subtitle"></p>
   </div>
-  <div class="chips"><span class="chips" id="chips"></span><button class="toggle" id="rv-chip" data-goto="review" hidden></button></div>
+  <div class="chips"><span class="chips" id="chips"></span><button class="toggle" id="rv-chip" hidden style="display:none"></button></div>
 </header>
 
 <nav class="tabs" role="tablist" id="tabs">
-  <button role="tab" data-tab="summary">Summary</button>
-  <button role="tab" data-tab="actions">Actions</button>
-  <button role="tab" data-tab="reports">Reports</button>
-  <button role="tab" data-tab="search">Search</button>
+  <button role="tab" data-tab="summary">This week</button>
+  <button role="tab" data-tab="progress">Progress</button>
+  <button role="tab" data-tab="actions">To-do list</button>
+  <button role="tab" data-tab="reports">Weekly reports</button>
+  <button role="tab" data-tab="search">Amazon search</button>
   <button role="tab" data-tab="fit">Fit &amp; returns</button>
-  <button role="tab" data-tab="customers">Customers &amp; basket</button>
+  <button role="tab" data-tab="customers">Customers</button>
   <button role="tab" data-tab="ops">Sales &amp; stock</button>
-  <button role="tab" data-tab="data">Data sources</button>
-  <button role="tab" data-tab="review">Review</button>
+  <button role="tab" data-tab="data">Where the numbers come from</button>
 </nav>
 
 <section class="grid panel" data-panel="summary">
-  <div class="section-title">Scorecard</div>
+  <div class="start">
+    <h2>Start here</h2>
+    <p>This page shows how Dagacci did on Amazon last week, what the team is doing about it, and what needs a decision. It updates itself every Tuesday morning.</p>
+    <div class="steps3">
+      <div><b>1. Results</b>Last week's numbers against our targets. Green is on target, yellow is close, red is off.</div>
+      <div><b>2. Actions</b>What each team did last week and what is due. The full list is on the To-do list tab.</div>
+      <div><b>3. Decisions</b>The three things worth the most money to decide this week.</div>
+    </div>
+    <details><summary>What the words mean</summary><dl>
+      <dt>Purchase share</dt><dd>Of everyone who bought scrubs after searching on Amazon, the share who bought Dagacci.</dd>
+      <dt>Impression share</dt><dd>How often Dagacci appears in those search results.</dd>
+      <dt>Repeat customer rate</dt><dd>Share of the week's buyers who bought Dagacci before.</dd>
+      <dt>New to brand</dt><dd>Buyers who hadn't bought Dagacci in the past 12 months.</dd>
+      <dt>Return rate</dt><dd>Share of orders sent back.</dd>
+      <dt>Bad experience (NCX)</dt><dd>Orders with a return, complaint or bad feedback.</dd>
+      <dt>Return badge</dt><dd>Amazon's "frequently returned" warning on a listing, which puts shoppers off.</dd>
+      <dt>Weeks of cover</dt><dd>How many weeks the stock at Amazon lasts at today's sales.</dd>
+      <dt>Buy Box</dt><dd>Being the seller Amazon shows on the "Add to cart" button.</dd>
+      <dt>ACoS / TACoS</dt><dd>Ad spend as a share of ad sales / of all sales.</dd>
+      <dt>SKU / ASIN</dt><dd>One product in one size and color (our code / Amazon's code).</dd>
+    </dl></details>
+  </div>
+  <div class="section-title">1. Results: how last week went</div>
   <div class="card s12">
     <div class="score" id="score"></div>
   </div>
-  <div class="card s5">
-    <h2>What changed since last week</h2>
-    <p class="sub" id="changes-sub"></p>
-    <div id="changes" style="margin-top:8px"></div>
-  </div>
-  <div class="card s7">
-    <h2>Last week's actions</h2>
-    <p class="sub">From the Actions tab: closed in the last 7 days, blocked, or past due</p>
-    <div id="recap" style="margin-top:8px"></div>
-  </div>
-  <div class="section-title">Top 3 decisions this week</div>
-  <div class="card s12">
-    <p class="intro">The most urgent recommendations with the most sales at stake. Dollar figures are <b>estimated monthly sales</b> if the action reaches its target (no margin data yet); open "How we estimated this" on each card for the assumption.</p>
-    <div class="ins-grid" id="top3"></div>
-  </div>
-  <div class="section-title">Sales trend</div>
+  <div class="section-title">Weekly sales</div>
   <div class="card s12">
     <div class="hero">
       <div>
@@ -247,12 +269,40 @@ details.how div { font-size: 12.5px; color: var(--text-secondary); padding: 6px 
     <div class="tiles" style="margin-top:18px" id="tiles"></div>
   </div>
 
+  <div class="card s5">
+    <h2>What moved since last week</h2>
+    <p class="sub" id="changes-sub"></p>
+    <div id="changes" style="margin-top:8px"></div>
+  </div>
+  <div class="section-title">2. Actions: what the team is doing</div>
+  <div class="card s12">
+    <h2>Last week's to-dos</h2>
+    <p class="sub">Done in the last 7 days, blocked, or past due. Everything else is on the To-do list tab.</p>
+    <div id="recap" style="margin-top:8px"></div>
+  </div>
+  <div class="section-title">3. Decisions: the top three this week</div>
+  <div class="card s12">
+    <p class="intro">The three most urgent changes with the most sales at stake. Each dollar figure is the <b>extra sales a month</b> we estimate if the change works. It is sales, not profit: product costs are not loaded yet.</p>
+    <div class="ins-grid" id="top3"></div>
+  </div>
+</section>
+
+<section class="grid panel" data-panel="progress" hidden>
+  <div class="start">
+    <h2>Week by week, against our goals</h2>
+    <p>Each chart is one goal over the last 12 weeks. The dashed line is the target. A dot marks a week when the team finished work meant to move that number; point at it to see what was done. Below: every week in a table, and whether finished work has moved its number yet.</p>
+  </div>
+  <div class="card s12"><div class="pg-charts" id="pg-charts"></div></div>
+  <div class="section-title">Every week</div>
+  <div class="card s12"><div id="pg-table"></div><p class="note">Green is on target, yellow within 10% of it, red further off. A dash means that report wasn't loaded for that week.</p></div>
+  <div class="section-title">Did the work move the number?</div>
+  <div class="card s12"><div id="pg-effect"></div><p class="note">A change after the work was done doesn't prove the work caused it: seasons, stock, price and ads move these numbers too. Treat it as a signal, and look for the same change across several weeks.</p></div>
 </section>
 
 <section class="grid panel" data-panel="actions" hidden>
   <div class="card s12">
-    <h2>Action tracker</h2>
-    <p class="intro">Every recommendation from this week's data, ranked. Each one stays on its row week to week, so the owner, status, due date and note carry over when the data refreshes. Changes save for everyone and record who made them.</p>
+    <h2>To-do list</h2>
+    <p class="intro">Everything each team needs to do, in one list. At the top: <b>this week's routine</b> (the same tasks every week, listed automatically each Monday). Then the changes the numbers call for, and the team's own to-dos. Pick your team below. Change the status as you go; when something is done, write one line on what you did, and it goes into the weekly report.</p>
     <div class="trk-bar">
       <label>Team <select id="f-team"><option value="">All</option></select></label>
       <label>Status <select id="f-status"><option value="">All open</option><option value="*">Everything</option></select></label>
@@ -263,7 +313,7 @@ details.how div { font-size: 12.5px; color: var(--text-secondary); padding: 6px 
   </div>
 </section>
 
-<section class="grid panel" data-panel="review" hidden>
+<section class="grid panel" data-panel="review" hidden style="display:none">
   <div class="card s12">
     <h2>Review this dashboard</h2>
     <p class="intro">Go through each part and mark it <b>Useful</b>, <b>Change it</b> (and say what should change) or <b>Not useful</b>. <b>Not useful</b> hides the part for everyone right away; click it again here to bring the part back. <b>Change it</b> adds the item to the change requests below; Claude Code applies them to the dashboard and marks each one done. Use "Show me" to see a part before you decide.</p>
@@ -532,6 +582,7 @@ function showTab(name) {
   document.querySelectorAll('.panel').forEach(p => p.hidden = p.dataset.panel !== name);
   renderAll();  // charts size to their card, so draw once the panel is visible
   if (name === 'reports') reportRender();
+  if (name === 'progress') progressRender();
   if (name === 'review') reviewRender();
   scrollTo({top: 0});
 }
@@ -597,30 +648,62 @@ function recapRender() {
   $('recap').innerHTML = rows.length ? rows.map(([cls, lbl, title, a]) => `<div class="recap-row"><span class="tag ${cls}">${lbl}</span>
       <div>${esc(title)}${(a.status === 'done' ? a.doneNote : a.note) ? `<div class="note" style="margin:2px 0 0">${esc(a.status === 'done' ? a.doneNote : a.note)}</div>` : ''}</div>
       <span class="note" style="margin:0">${esc(a.team || '')}${a.due ? ' · due ' + wk(a.due) : ''}</span></div>`).join('')
-    : `<p class="note">Nothing closed, blocked or past due yet. Set owners, due dates and status in the <button class="linkbtn" data-goto="actions">Actions tab</button>, and this becomes the first agenda item each week.</p>`;
+    : `<p class="note">Nothing closed, blocked or past due yet. Set owners, due dates and status on the <button class="linkbtn" data-goto="actions">To-do list</button>, and this becomes the first item at each weekly review.</p>`;
 }
 
 // ------------------------------------------------------------------ action tracker (shared, via the artifact's db)
 // actions/<id>: the current state of each recommendation or team to-do. log/<auto>: one row per
 // change carrying the full state after it, so a report can replay any period.
-const TEAMS = ['Amazon ops', 'Product', 'Marketing', 'Creative'];
+const TEAMS = ['Leadership', 'Amazon ops', 'Product', 'Marketing', 'Creative', 'Data & promotions', 'Finance & stores'];
 const STATUS = {todo: 'Not started', doing: 'In progress', blocked: 'Blocked', done: 'Done', dropped: 'Dropped'};
 const SC_KPI = Object.fromEntries((D.scorecard || []).map(r => [r.key, r.label]));
 let DB = null, USER = null, ME = null, SAMPLE = null, canWrite = false, ACT = {}, LOG = [], trkMsg = '';
 const VIEW_ONLY = 'View only: ask the dashboard owner to invite you as an Editor to update actions.';
 const queue = {};  // one write at a time per action
-const custom = () => Object.entries(ACT).filter(([, a]) => a.custom).map(([id, a]) => ({id, custom: true, title: a.title || '', priority: a.priority || 2,
+const custom = () => Object.entries(ACT).filter(([, a]) => a.custom && !a.routine).map(([id, a]) => ({id, custom: true, title: a.title || '', priority: a.priority || 2,
   team: a.team, kpi: SC_KPI[a.kpi] || '', finding: a.detail || '', actions: [], impact: null}));
-const items = () => [...I, ...custom()];
+// The weekly routine: the same work every week, listed for the current week (Monday to Friday)
+// with its own id per week, so each week's status is kept and the reports can replay it.
+const ROUTINE = [
+  [0, 'Data & promotions', 'Download last week\'s Seller Central reports', 'Brand Analytics: Search Query Performance (Brand view, Comprehensive), Repeat Purchase (ASIN view), Market Basket; Customer Loyalty → Trends → Export; Reports → All Orders and FBA Inventory. Save them to Downloads: they are filed automatically, and the dashboard rebuilds itself Tuesday at 7:00.'],
+  [0, 'Amazon ops', 'Check stock on the best sellers', 'Sales & stock tab: anything under 9 weeks of cover or out of stock goes on Wednesday\'s reorder list.'],
+  [1, 'Data & promotions', 'Check the automatic refresh ran', 'The page header shows last week\'s date and the Weekly reports tab has a new report. If not, see the log in amazon-agents/dashboard/logs.'],
+  [1, 'Leadership', 'Weekly review (45 minutes)', 'Scorecard, what changed, last week\'s to-dos, top 3 decisions with an owner and due date each, and the next three weeks of promotions.'],
+  [2, 'Amazon ops', 'Place reorders from the reorder list', 'Include anything a promotion in the next 6 weeks needs.'],
+  [2, 'Product', 'Approve reorder quantities and report on the sizing fix', 'Fit & returns tab: are "too large" complaints coming down?'],
+  [2, 'Marketing', 'Quartile weekly review', 'The searches Dagacci wins but is rarely shown on, last week\'s results, and the next promotion\'s products.'],
+  [3, 'Marketing', 'Email and social for the next two weeks of promotions', 'With the content team: dates, products, codes.'],
+  [3, 'Creative', 'Ship one dagacci.com fix', 'In order: free size exchanges, one clear sizing step, fabric blend on every product page, lighter pages.'],
+  [3, 'Data & promotions', 'Set Walmart and dagacci.com promotion prices a day ahead', 'Match the Amazon deal price; Walmart can take hours to update.'],
+  [4, 'Amazon ops', 'Submit or adjust the deals that are due', 'Amazon\'s deal screen: check accepted and rejected deals too.'],
+  [4, 'Leadership', 'Check nothing is blocked or overdue', 'To-do list filtered to Blocked; overdue items show their due date in red.'],
+];
+const MONTHLY = [
+  [0, 'Data & promotions', 'Monthly downloads: Voice of the Customer summary and the Quartile export', 'Voice of the Customer → Download data; the Quartile ASIN Analysis export. Save to Downloads.'],
+  [1, 'Data & promotions', 'Write the monthly report', 'Weekly reports tab → choose the month → Write report.'],
+  [3, 'Finance & stores', 'Update costs for new or re-costed products', 'Cost sheet: SKU, unit cost, inbound freight.'],
+];
+const isoDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function routine(now = new Date()) {
+  const mon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+  const first = mon.getDate() <= 7;  // the first Monday of the month starts a monthly week
+  return [...ROUTINE, ...(first ? MONTHLY : [])].map(([day, team, title, detail], n) => {
+    const due = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + day);
+    return {id: `routine-${isoDay(mon)}-${n}`, custom: true, routine: true, title, team, priority: 1, due: isoDay(due),
+            kpi: '', finding: detail, actions: [], impact: null};
+  });
+}
+const items = () => [...routine(), ...I, ...custom()];
 function track(i) {
   const a = ACT[i.id] || {};
-  return {team: a.team || i.team, status: a.status || 'todo', due: a.due || '', note: a.note || '', doneNote: a.doneNote || '', by: a.updatedBy, at: a.updatedAt};
+  return {team: a.team || i.team, status: a.status || 'todo', due: a.due || i.due || '', note: a.note || '', doneNote: a.doneNote || '', by: a.updatedBy, at: a.updatedAt};
 }
 function save(id, patch) {
   return queue[id] = (queue[id] || Promise.resolve()).then(async () => {
     const i = items().find(x => x.id === id), prev = ACT[id] || {}, now = new Date().toISOString();
     const body = {...prev, ...patch, team: patch.team || prev.team || i?.team, status: patch.status || prev.status || 'todo', updatedBy: ME, updatedAt: now};
     if (i && !i.custom) Object.assign(body, {title: i.title, kpi: i.kpi, priority: i.priority});
+    if (i && i.routine) Object.assign(body, {routine: true, title: i.title, priority: i.priority, due: body.due || i.due});
     if (patch.status) body.doneAt = patch.status === 'done' ? (prev.status === 'done' ? prev.doneAt : now) : null;
     const changes = {};
     for (const k in patch) if ((prev[k] ?? '') !== (patch[k] ?? '')) changes[k] = [prev[k] ?? null, patch[k]];
@@ -639,14 +722,14 @@ async function trackerRender() {
   const seq = ++trkSeq, fTeam = $('f-team').value, fStatus = $('f-status').value;
   const rows = items().filter(i => { const t = track(i);
     return (!fTeam || t.team === fTeam) && (fStatus === '*' || (fStatus ? t.status === fStatus : !['done', 'dropped'].includes(t.status))); });
-  const gone = Object.entries(ACT).filter(([id, a]) => !a.custom && !I.some(i => i.id === id));
+  const gone = Object.entries(ACT).filter(([id, a]) => !a.custom && !a.routine && !I.some(i => i.id === id));
   const ids = [...new Set(Object.values(ACT).map(a => a.updatedBy).filter(Boolean))];
   const ps = USER && ids.length ? await USER.profiles(ids) : {};
   if (seq !== trkSeq) return;
   const dis = canWrite ? '' : ' disabled';
   const who = t => t.at ? `<span class="who">${t.by && ps[t.by] ? `<img alt="" src="${esc(ps[t.by].avatarUrl)}">` : ''}<span data-name="${esc(t.by || '')}"></span> · ${wk(t.at.slice(0, 10))}</span>` : '<span class="note" style="margin:0">–</span>';
   const rec = i => i.custom
-    ? `<b>${esc(i.title)}</b> <span class="chip">Team to-do</span>${i.finding || i.kpi ? `<details><summary>Details</summary><div>${i.finding ? `<p style="margin:4px 0">${esc(i.finding)}</p>` : ''}${i.kpi ? `<p style="margin:4px 0">Should move: ${esc(i.kpi)}</p>` : ''}</div></details>` : ''}`
+    ? `<b>${esc(i.title)}</b> <span class="chip">${i.routine ? 'Every week' : 'Team to-do'}</span>${i.finding || i.kpi ? `<details><summary>Details</summary><div>${i.finding ? `<p style="margin:4px 0">${esc(i.finding)}</p>` : ''}${i.kpi ? `<p style="margin:4px 0">Should move: ${esc(i.kpi)}</p>` : ''}</div></details>` : ''}`
     : `<b>${esc(i.title)}</b><details><summary>Details and next steps</summary><div>
         <p style="margin:4px 0">${esc(i.finding)}</p><p style="margin:4px 0"><b>Why it matters:</b> ${esc(i.why)}</p>
         <ul>${i.actions.map(a => `<li>${esc(a)}</li>`).join('')}</ul>
@@ -710,9 +793,84 @@ let dirty = false;  // a live update arriving mid-typing waits until the field l
 $('tracker').addEventListener('focusout', () => { if (dirty) { dirty = false; setTimeout(trackingChanged); } });
 function trackingChanged() {
   if ($('tracker').contains(document.activeElement) && document.activeElement.type === 'text') { dirty = true; return; }
-  trackerRender(); top3Render(); recapRender(); reportRender();
+  trackerRender(); top3Render(); recapRender(); reportRender(); progressRender();
 }
 
+
+// ------------------------------------------------------------------ progress (week by week vs goal)
+// Weeks end on Saturday, like Amazon's. Finished work counts in the week it was finished, and is
+// linked to the scorecard goal it was meant to move: to-dos carry the goal they were added with;
+// recommendations are linked by their topic.
+const PG_KPI = id => id.startsWith('fit-') ? 'return_rate' : id.startsWith('search-') ? 'search_purchase_share'
+  : id === 'customers-repeat' ? 'repeat_rate' : 'weekly_sales';
+const satOf = iso => { const d = new Date(iso.slice(0, 10) + 'T12:00:00'); d.setDate(d.getDate() + (6 - d.getDay()) % 7); return isoDay(d); };
+function pgStatus(r, v) {
+  if (v == null || r.target == null) return '';
+  const gap = r.better === 'up' ? v - r.target : r.target - v;
+  return gap >= 0 ? 'on' : Math.abs(gap) <= 0.1 * r.target ? 'close' : 'off';
+}
+function pgDone() {
+  return Object.entries(ACT).filter(([, a]) => a.status === 'done' && (a.doneAt || a.updatedAt)).map(([id, a]) => ({
+    id, title: a.title || id, team: a.team || '', note: a.doneNote || '', at: (a.doneAt || a.updatedAt).slice(0, 10),
+    kpi: a.custom || a.routine ? (a.kpi || '') : PG_KPI(id)}));
+}
+function progressRender() {
+  if ($('pg-charts').closest('.panel').hidden) return;
+  const R = D.scorecard || [], weeks = HW.slice(-12), done = pgDone();
+  const f = (r, v) => v == null ? '–' : r.unit === '$' ? fmt$(v) : pct(v);
+  const byWeek = {}; done.forEach(d => (byWeek[satOf(d.at)] ||= []).push(d));
+  const charts = $('pg-charts'); charts.innerHTML = '';
+  const draw = [];  // lay every box out first, then draw each chart at its final width
+  R.forEach(r => {
+    const box = document.createElement('div'); box.className = 'pg-chart';
+    const vals = weeks.map(w => H[w]?.kpis?.[r.key] ?? null), have = vals.filter(v => v != null);
+    const last = have[have.length - 1];
+    box.innerHTML = `<h3>${esc(r.label)}</h3><div class="now">${f(r, last)} <span class="note" style="font-size:13px;font-weight:400">target ${f(r, r.target)}</span></div>`;
+    const svg = el('svg', {height: 120, width: '100%'}); box.appendChild(svg); charts.appendChild(box);
+    draw.push(() => {
+    const W = box.clientWidth || 280, Ht = 120, m = {l: 6, r: 6, t: 10, b: 20};
+    svg.setAttribute('viewBox', `0 0 ${W} ${Ht}`);
+    const lo = Math.min(...have, r.target) * 0.95, hi = Math.max(...have, r.target) * 1.05;
+    const x = i => m.l + i * (W - m.l - m.r) / Math.max(1, weeks.length - 1), y = v => m.t + (Ht - m.t - m.b) * (1 - (v - lo) / (hi - lo || 1));
+    el('line', {x1: m.l, x2: W - m.r, y1: y(r.target), y2: y(r.target), stroke: css('--muted'), 'stroke-dasharray': '4 4', 'stroke-width': 1}, svg);
+    let d = ''; vals.forEach((v, i) => { if (v != null) d += (d ? 'L' : 'M') + x(i) + ',' + y(v); });
+    el('path', {d, fill: 'none', stroke: css('--series-1'), 'stroke-width': 2, 'stroke-linejoin': 'round'}, svg);
+    vals.forEach((v, i) => {
+      if (v == null) return;
+      const work = (byWeek[weeks[i]] || []).filter(a => a.kpi === r.key);
+      const c = el('circle', {cx: x(i), cy: y(v), r: work.length ? 6 : 3, fill: work.length ? css('--series-2') : css('--series-1'), stroke: css('--surface-1'), 'stroke-width': 2}, svg);
+      hover(c, `<div class="t">Week ending ${wk(weeks[i])}</div><b>${f(r, v)}</b>` + (work.length ? `<div style="margin-top:4px">Finished that week:</div>${work.map(a => `<div>· ${esc(a.title)}</div>`).join('')}` : ''));
+    });
+    txt(svg, m.l, Ht - 4, wk(weeks[0]), '', 'start');
+    txt(svg, W - m.r, Ht - 4, wk(weeks[weeks.length - 1]), '', 'end');
+    });
+  });
+  draw.forEach(fn => fn());
+  const rows = [...weeks].reverse().map(w => ({w}));
+  $('pg-table').innerHTML = table([
+    {h: 'Week ending', f: o => `<b>${wk(o.w)}</b>`},
+    ...R.map(r => ({h: r.label, f: o => {
+      const i = HW.indexOf(o.w), v = H[o.w]?.kpis?.[r.key], p = i > 0 ? H[HW[i - 1]]?.kpis?.[r.key] : null, st = pgStatus(r, v);
+      const arrow = v == null || p == null ? '' : v > p ? '▲' : v < p ? '▼' : '';
+      const good = v == null || p == null ? '' : (v > p) === (r.better === 'up') ? 'up' : 'down';
+      return `<span class="pg-cell">${st ? `<span class="pg-dot-${st}">●</span> ` : ''}${f(r, v)}${arrow ? `<i class="${good}">${arrow}</i>` : ''}</span>`;
+    }})),
+    {h: 'Finished that week', f: o => (byWeek[o.w] || []).length ? `<ul class="pg-done">${byWeek[o.w].map(a => `<li>${esc(a.title)}${a.team ? ` <span class="note" style="margin:0">(${esc(a.team)})</span>` : ''}</li>`).join('')}</ul>` : '<span class="note" style="margin:0">–</span>'}
+  ], rows);
+  const latest = HW[HW.length - 1], tracked = done.filter(a => a.kpi && R.some(r => r.key === a.kpi));
+  $('pg-effect').innerHTML = tracked.length ? table([
+    {h: 'Finished', f: a => `<b>${esc(a.title)}</b>${a.note ? `<div class="note" style="margin:2px 0 0">${esc(a.note)}</div>` : ''}`},
+    {h: 'When', f: a => wk(a.at)},
+    {h: 'Goal it should move', f: a => esc(R.find(r => r.key === a.kpi).label)},
+    {h: 'Then → now', f: a => {
+      const r = R.find(x => x.key === a.kpi), w0 = satOf(a.at);
+      const before = [...HW].reverse().find(w => w <= w0 && H[w]?.kpis?.[r.key] != null), now = H[latest]?.kpis?.[r.key];
+      if (!before || before === latest || w0 >= latest) return '<span class="note" style="margin:0">Too soon to tell: next week\'s numbers will show it</span>';
+      const v0 = H[before].kpis[r.key], better = (now > v0) === (r.better === 'up');
+      return `<span class="pg-cell">${f(r, v0)} → ${f(r, now)} <i class="${now === v0 ? '' : better ? 'up' : 'down'}">${now === v0 ? 'no change' : better ? 'better' : 'worse'}</i></span>`;
+    }}], tracked.sort((a, b) => b.at.localeCompare(a.at)))
+    : '<p class="note">Nothing linked to a goal has been marked done yet. When a to-do with a goal is finished, it appears here with the number before and after.</p>';
+}
 // ------------------------------------------------------------------ reports
 // reports/<week-YYYY-MM-DD | month-YYYY-MM>: the period plus Claude's summary bullets.
 // Every other section is computed from the KPI history and the action log, so it always
@@ -1208,7 +1366,7 @@ function applyReview() {
   for (const x of PARTS) x.el.classList.toggle('rv-hidden', REVIEW[x.id]?.verdict === 'hide');
   const done = PARTS.filter(x => REVIEW[x.id]).length;
   $('rv-chip').textContent = `Review: ${done} of ${PARTS.length} parts`;
-  $('rv-chip').hidden = !DB;
+  $('rv-chip').hidden = true;  // the review step is finished; its tab is gone
 }
 function saveReview(id, patch) {
   const prev = REVIEW[id] || {}, x = PARTS.find(p => p.id === id);

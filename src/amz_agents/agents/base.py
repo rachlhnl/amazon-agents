@@ -28,6 +28,7 @@ TEAMS = {
     "creative": "Creative",
     "ux": "UX & web",
     "data": "Data & insights",
+    "promotions": "Data & promotions",
 }
 
 # Level of effort -> hours of a person's time, for ROI. XS is a click to approve

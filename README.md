@@ -34,6 +34,7 @@ opportunities and a plain-language read of each chart. See `market/README.md`.
 | Inventory | stock, velocity, lead time | `reorder` | human |
 | Reviews | low-rated reviews | `flag_defect` | human |
 | Pricing | price, cost, fees, Buy Box | `update_price` | SP-API Listings Items |
+| Promotions | deal calendar (`promotions.toml`), stock, sales history, ratings, channel prices | `plan_deal`, `hold_price`, `event_stock`, `match_channel_price`, `promotion_results`, `request_data` | human |
 | Ads | keywords, search terms | `update_bid`, `add_keyword`, `add_negative` | Ads API (SP v3) |
 | Listing | search terms, review themes | `update_listing_copy` (+ LLM draft) | human |
 | Product | market tracker findings (dagacci.com stock, Judge.me reviews, other brands) | `fix_fit`, `restock_style`, `improve_product`, `plan_launch` | human |
@@ -149,6 +150,27 @@ behind them, it drafts an email to the customer list for a person to send.
 - **Wholesale follow-ups.** Leads quiet for longer than their stage allows (new 2
   days, negotiating 3, contacted 7), biggest first, with a drafted email and a
   warning if they want a SKU that's about to stock out.
+
+## Promotions agent (the Data & promotions analyst's desk)
+
+`promotions.toml` is the deal calendar: each event's channel, dates, submission deadline,
+price-hold days, deal type, minimum discount, fees and whether its rules are confirmed on
+the channel's own pages. Put company-specific picks in `promotions.local.toml` (git-ignored),
+or point `PROMOTIONS_PATH` at another file. For each event within 75 days the agent:
+
+- **plans the deal**: best sellers with enough stock for the event (or overstock, for
+  clearance), the deal price each event's rules require (estimated from the last 30 days'
+  daily average prices), and the margin at that price against the pricing agent's floor;
+- **holds prices** on those candidates from `hold_days` before the event: the pricing agent
+  skips them, because a price cut lowers the 30-day low a deal has to beat;
+- sends **event stock** gaps to Amazon operations, with whether a reorder can still land;
+- asks to **match Walmart** prices when the event runs there;
+- writes each finished event's **results** (sales a day vs the two weeks before, ad spend)
+  for the ad agency and the weekly report;
+- and lists the **data it's missing**, with where each piece comes from.
+
+It runs after inventory and reviews and before pricing. Everything it proposes is
+human-only: a person submits deals and changes channel prices.
 
 ## Chief of staff
 

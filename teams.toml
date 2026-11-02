@@ -31,3 +31,7 @@ owner = ""
 
 [team.data]
 owner = ""
+
+# Data & promotions analyst: deal calendar, price holds, event results.
+[team.promotions]
+owner = ""

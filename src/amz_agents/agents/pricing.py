@@ -24,9 +24,12 @@ class PricingAgent(Agent):
         g = ctx.settings.guardrails
         low = ctx.shared.get("low_stock", set())
         over = ctx.shared.get("overstock", set())
+        hold = ctx.shared.get("price_hold", {})  # deal candidates ahead of an event
         out: list[Action] = []
         proposed_prices: dict[str, float] = {}
         for p in ctx.wh.query("SELECT * FROM products"):
+            if p["sku"] in hold:
+                continue  # a cut would lower the 30-day low the deal must beat
             price, cost, fees = p["price"], p["landed_cost"], p["fees"]
             if None in (price, cost, fees) or is_assumed(p, "fees", "landed_cost"):
                 continue  # can't price on missing or assumed costs; the brief lists the gap
