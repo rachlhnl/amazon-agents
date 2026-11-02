@@ -56,6 +56,13 @@ if [[ "${1:-}" == "--schedule" ]]; then
   sed "s#__HERE__#$HERE#g" "$HERE/com.dagacci.kpi-refresh.plist" > "$dest"
   launchctl load "$dest"
   ok "Scheduled: Tuesdays 07:00 ($dest). Logs: $HERE/logs/"
+  # Exports downloaded from Seller Central are filed into the data folder as they land.
+  dest="$HOME/Library/LaunchAgents/com.dagacci.file-exports.plist"
+  [[ -f "$dest" ]] && launchctl unload "$dest" 2>/dev/null || true
+  sed "s#__HERE__#$HERE#g; s#__DOWNLOADS__#$HOME/Downloads#g" "$HERE/com.dagacci.file-exports.plist" > "$dest"
+  launchctl load "$dest"
+  ok "Watching ~/Downloads for Seller Central exports ($dest)."
+  todo "macOS blocks scheduled jobs from Documents and Downloads: System Settings → Privacy & Security → Full Disk Access → add /bin/zsh and /bin/bash."
 else
   todo "When this is the machine that should run the weekly refresh: zsh $HERE/install.sh --schedule"
 fi
