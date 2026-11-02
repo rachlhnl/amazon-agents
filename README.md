@@ -274,6 +274,9 @@ data and approvals stay in the local warehouse and the repo is public. macOS
 won't let scheduled jobs read Documents, Desktop or Downloads, so keep the repo
 elsewhere (e.g. `~/code`) or give `/bin/bash` Full Disk Access.
 
+The KPI dashboard has its own schedules (a Tuesday refresh and filing of downloaded
+exports), which also run the agents once a week; see `dashboard/README.md` → Schedules.
+
 ## Quick start
 
 ```bash

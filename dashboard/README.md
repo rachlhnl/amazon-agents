@@ -20,22 +20,44 @@ page's shared database, not in these files, so a rebuild never overwrites them.
 | Ad spend, ACoS, TACoS | Quartile ASIN Analysis export | `amz-agents quartile FILE` | Manual, unless Amazon Ads API access is added |
 | dagacci.com units | Shopify | `amz-agents ingest --only shopify` in refresh.sh | Credentials set |
 
-## Cadence (once SP-API keys are in)
+## Schedules
 
-- **Tuesday 07:00**: launchd runs `refresh.sh`. It pulls SP-API data, rebuilds with the week that ended the previous Saturday, republishes the page, and writes the weekly report (`report_prompt.md`). In the first week of a month it also writes the monthly report. If the Mac is asleep at 07:00, the job runs when it wakes.
-- **Weekly, before Tuesday**: drop the Customer Trends CSV into `seller_central/`.
-- **Monthly**: drop a fresh Listing Summary CSV and the Quartile export.
-- **Anytime**: an Editor can press "Write report" on the Reports tab when the automatic run didn't happen.
-- Logs: `dashboard/logs/refresh-YYYY-MM-DD.log`.
+Two launchd jobs, installed by `zsh install.sh --schedule` on **one machine only** (two
+machines would both publish and both write reports):
 
-## Turning on automation
+| Job | When | What it does | File |
+|---|---|---|---|
+| Weekly refresh | Tuesdays 07:00 (or at wake if the Mac was asleep) | Runs `refresh.sh`, below | `com.dagacci.kpi-refresh.plist` |
+| Export filing | Whenever `~/Downloads` changes | Runs `file_exports.sh`: moves Seller Central and Quartile exports out of Downloads into the data folder (Brand Analytics CSVs and the Listing Summary to `seller_central/`, orders, inventory, listings and business reports to `data/seller-<date>/`, the Quartile export to `data/`) | `com.dagacci.file-exports.plist` |
+
+What `refresh.sh` does, in order (it stops at the first failure, so a half-built page is never published):
+
+1. Files any exports still in Downloads.
+2. **With SP-API keys** in `.env`: pulls orders, stock, traffic and Brand Analytics, and builds the dashboard from them. **Without them**: builds from the CSVs in `seller_central/` and loads the newest `data/seller-<date>/` reports into the agents' warehouse.
+3. Runs the agents (`amz-agents run`, approve mode), so the briefs and the promotions plan are current.
+4. Republishes the dashboard to the same link with headless Claude Code.
+5. Writes the weekly report (`report_prompt.md`), and the monthly one in the first week of a month.
+6. If `~/Documents/dagacci/hub/update.sh` exists, runs it: it refreshes the company hub page outside this repo.
+
+On the page itself, the To-do list adds each week's routine tasks every Monday (and the monthly ones in a month's first week), from `ROUTINE` and `MONTHLY` in `dashboard_template.html`.
+
+**macOS permission (once per machine):** scheduled jobs can't read Documents or Downloads until you add `/bin/zsh` and `/bin/bash` under System Settings → Privacy & Security → Full Disk Access. The refresh log shows "Operation not permitted" when this is missing.
+
+Until SP-API keys are in, a person downloads the weekly reports into Downloads (they're filed automatically):
+- **Weekly:** Search Query Performance (Brand view, Comprehensive), Repeat Purchase Behavior (ASIN view), Market Basket Analysis, Customer Loyalty → Trends → Export; Reports → All Orders and FBA Inventory.
+- **Monthly:** Voice of the Customer → Download data (Listing Summary); the Quartile ASIN Analysis export.
+- **Anytime:** an Editor can press "Write report" on the Weekly reports tab when the automatic run didn't happen.
+
+Logs: `dashboard/logs/refresh-YYYY-MM-DD.log`, `dashboard/logs/file-exports.log`. To stop both jobs:
+`launchctl unload ~/Library/LaunchAgents/com.dagacci.kpi-refresh.plist ~/Library/LaunchAgents/com.dagacci.file-exports.plist`
+
+## Turning on SP-API
 
 1. Put `SP_API_CLIENT_ID`, `SP_API_CLIENT_SECRET` and `SP_API_REFRESH_TOKEN` in `~/Documents/amazon-agents/.env`. Never paste them into chat or commit them.
 2. Validate the first live pull against the CSVs you already have:
    `python3 -I build_dashboard.py --source spapi --week-end 2026-10-10 --out-dir /tmp/check`
    Raw API responses are saved to `seller_central/api_raw/`. The JSON-to-table mappings in sources.py were written from Amazon's published schemas and haven't been run against live data yet.
-3. Run `zsh refresh.sh` once by hand and check the log.
-4. `zsh install.sh --schedule` (on one machine only)
+3. Run `zsh refresh.sh` once by hand and check the log. From then on the Tuesday job uses the API automatically.
 
 ## Manual refresh (works today)
 

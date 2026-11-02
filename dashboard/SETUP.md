@@ -13,8 +13,8 @@ Teammates need no setup. They open the dashboard link while signed in to claude.
 ## Part 1: on the old machine
 
 1. **Make sure all code is on GitHub:** `git -C ~/Documents/amazon-agents status` should show nothing to commit and nothing to push.
-2. **Stop the weekly job** if it's installed, so two machines don't both publish and write reports:
-   `launchctl unload ~/Library/LaunchAgents/com.dagacci.kpi-refresh.plist`
+2. **Stop the scheduled jobs** if they're installed, so two machines don't both publish and write reports:
+   `launchctl unload ~/Library/LaunchAgents/com.dagacci.kpi-refresh.plist ~/Library/LaunchAgents/com.dagacci.file-exports.plist`
 3. **Copy these files to the new machine**, using AirDrop, an encrypted drive or a password manager's secure notes. Never email, Slack or git:
 
    | File | Why |
@@ -47,8 +47,9 @@ Teammates need no setup. They open the dashboard link while signed in to claude.
 5. **Test a build:** `python3 -I ~/Documents/amazon-agents/dashboard/build_dashboard.py`, then open `~/Documents/dagacci/dashboard/Dagacci_KPI_Dashboard.html`.
 6. **Test the full refresh once.** This republishes the live page and writes the week's report if it's missing:
    `zsh ~/Documents/amazon-agents/dashboard/refresh.sh`, then read `dashboard/logs/refresh-<today>.log`.
-7. **Turn on the Tuesday 07:00 schedule** on this machine only:
+7. **Turn on the schedules** on this machine only: the Tuesday 07:00 refresh and the Downloads export filing (see README "Schedules"):
    `zsh ~/Documents/amazon-agents/dashboard/install.sh --schedule`
+8. **Give the scheduled jobs file access:** System Settings → Privacy & Security → Full Disk Access → add `/bin/zsh` and `/bin/bash`. Without it, macOS stops them from reading Documents and Downloads. Check with `launchctl list | grep dagacci` (two lines).
 
 Other locations: set `DAGACCI_DATA=/path/to/data` for the data folder and `DASHBOARD_URL=<artifact link>` for a different dashboard, in your shell profile and for launchd.
 Not on a Mac: the scripts need zsh. On Linux, replace step 7 with the cron line `0 7 * * 2 zsh ~/Documents/amazon-agents/dashboard/refresh.sh`. On Windows, use WSL.
