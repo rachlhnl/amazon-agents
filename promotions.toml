@@ -1,0 +1,399 @@
+# Dagacci deal calendar, Nov 2026 – Oct 2027. Read by the promotions agent every run, and
+# the source of the calendar on the Dagacci HQ page.
+#
+# One entry per platform per occasion: `group` ties them together (Amazon, Walmart and
+# dagacci.com versions of Black Friday are three entries).
+#
+# Black Friday, Cyber Monday and the fixed observances (Nurses Week, Doctors' Day) have
+# known dates. Amazon and Walmart haven't announced 2027 event dates, so those are
+# placeholders. Fees and discount rules come from seller guides, not the channels' own
+# pages, so every entry stays `confirmed = false` until someone checks it on Amazon's deal
+# screen or in Walmart Seller Center.
+#
+# Fields:
+#   group, name, channel (amazon | walmart | shopify = dagacci.com), starts, ends
+#   submit_by + deadline: whose date it is (amazon | walmart = the platform's cutoff;
+#     ours = our own lead time to set it up)
+#   hold_days: price hold before the event (Amazon's price-history rule)
+#   deal_type, min_discount (vs the recent selling price), discount_proposed (true until
+#     the team sets it), below_30d_low
+#   upfront_fee, pct_fee, fee_cap, fee_basis (per_deal = each parent style is a deal |
+#     per_campaign = one fee for the promotion | none | unknown)
+#   alt_deal_type + alt_fee_basis: another way to run it, priced alongside
+#   pick (best_sellers | overstock), skus, lift, confirmed, source, notes
+
+# ---------------------------------------------------------------- November 2026
+[[event]]
+group = "Nurse Practitioner Week"
+name = "Nurse Practitioner Week · Amazon coupon"
+channel = "amazon"
+starts = "2026-11-08"
+ends = "2026-11-14"
+submit_by = "2026-11-06"
+deadline = "ours"
+deal_type = "Coupon"
+min_discount = 0.10
+upfront_fee = 5.0
+pct_fee = 0.025
+fee_cap = 2000.0
+fee_basis = "per_campaign"
+source = "Planner, Oct 29 2026. NP Week is usually the second full week of November; check the AANP date. Coupon fees per SellerMagnet's Q4 2026 summary."
+
+[[event]]
+group = "Nurse Practitioner Week"
+name = "Nurse Practitioner Week · dagacci.com code"
+channel = "shopify"
+starts = "2026-11-08"
+ends = "2026-11-14"
+submit_by = "2026-11-06"
+deadline = "ours"
+deal_type = "Discount code"
+min_discount = 0.10
+fee_basis = "none"
+source = "Planner, Oct 29 2026."
+notes = "No platform fee for a Shopify discount code; normal payment fees still apply."
+
+[[event]]
+group = "Black Friday & Cyber Monday"
+name = "Black Friday & Cyber Monday · Amazon"
+channel = "amazon"
+starts = "2026-11-27"
+ends = "2026-11-30"
+submit_by = "2026-11-13"
+deadline = "amazon"
+hold_days = 30
+deal_type = "Best Deal"
+alt_deal_type = "Prime Exclusive Discount"
+alt_fee_basis = "per_campaign"
+min_discount = 0.15
+discount_proposed = false
+below_30d_low = 0.05
+upfront_fee = 100.0
+pct_fee = 0.015
+fee_cap = 5000.0
+fee_basis = "per_deal"
+source = "Amazon's Seller Forum post said submissions close Oct 20, 2026; ChannelMAX (Oct 2026) reports an extension to Nov 13. Fees, the 15% minimum and the price-history rule per SellerMagnet's Q4 2026 summary."
+notes = "Amazon's Black Friday Week may start before Nov 27: check the event window on the deal screen. Lightning Deals reportedly need 20% off."
+
+[[event]]
+group = "Black Friday & Cyber Monday"
+name = "Black Friday & Cyber Monday · Walmart match"
+channel = "walmart"
+starts = "2026-11-27"
+ends = "2026-11-30"
+submit_by = "2026-11-26"
+deadline = "ours"
+hold_days = 30
+deal_type = "Promo price with strikethrough, matched to Amazon"
+min_discount = 0.15
+discount_proposed = false
+fee_basis = "unknown"
+source = "Walmart 2024 Marketplace holiday hub: promo price at least 10% under the comparison price for strikethrough. 2026 dates and any fees not published."
+notes = "Price updates can take about 4 hours to show: schedule a day ahead."
+
+[[event]]
+group = "Black Friday & Cyber Monday"
+name = "Black Friday & Cyber Monday · dagacci.com"
+channel = "shopify"
+starts = "2026-11-27"
+ends = "2026-11-30"
+submit_by = "2026-11-24"
+deadline = "ours"
+deal_type = "Sale price or code, matched to Amazon"
+min_discount = 0.15
+fee_basis = "none"
+source = "Proposal: keep dagacci.com at parity with the Amazon deal."
+
+# ---------------------------------------------------------------- December 2026
+[[event]]
+group = "Holiday coupons"
+name = "Holiday coupons · Amazon"
+channel = "amazon"
+starts = "2026-12-01"
+ends = "2026-12-24"
+submit_by = "2026-11-24"
+deadline = "ours"
+deal_type = "Coupon"
+alt_deal_type = "Prime Exclusive Discount"
+alt_fee_basis = "per_campaign"
+min_discount = 0.10
+upfront_fee = 5.0
+pct_fee = 0.025
+fee_cap = 2000.0
+fee_basis = "per_campaign"
+source = "Planner, Oct 29 2026."
+
+[[event]]
+group = "New-grad scrub bundle"
+name = "New-grad scrub bundle · Amazon"
+channel = "amazon"
+starts = "2026-12-01"
+ends = "2026-12-20"
+submit_by = "2026-11-20"
+deadline = "ours"
+deal_type = "2-set bundle listing + coupon"
+min_discount = 0.10
+upfront_fee = 5.0
+pct_fee = 0.025
+fee_cap = 2000.0
+fee_basis = "per_campaign"
+source = "Planner, Oct 29 2026: December nursing graduations."
+notes = "The bundle listing has to exist before Dec 1."
+
+[[event]]
+group = "New-grad scrub bundle"
+name = "New-grad scrub bundle · dagacci.com"
+channel = "shopify"
+starts = "2026-12-01"
+ends = "2026-12-20"
+submit_by = "2026-11-20"
+deadline = "ours"
+deal_type = "Bundle + code"
+min_discount = 0.10
+fee_basis = "none"
+source = "Planner, Oct 29 2026."
+
+# ---------------------------------------------------------------- January 2027
+[[event]]
+group = "January clearance"
+name = "January clearance · Amazon"
+channel = "amazon"
+starts = "2027-01-04"
+ends = "2027-01-31"
+submit_by = "2026-12-28"
+deadline = "ours"
+deal_type = "Price cut"
+min_discount = 0.20
+pick = "overstock"
+fee_basis = "none"
+source = "Planner, Oct 29 2026: clear slow sellers."
+notes = "Picks come from the inventory agent's overstock list. A plain price cut has no deal fee."
+
+[[event]]
+group = "January clearance"
+name = "January clearance · dagacci.com"
+channel = "shopify"
+starts = "2027-01-04"
+ends = "2027-01-31"
+submit_by = "2026-12-28"
+deadline = "ours"
+deal_type = "Sale price"
+min_discount = 0.20
+pick = "overstock"
+fee_basis = "none"
+source = "Planner, Oct 29 2026."
+
+# ---------------------------------------------------------------- February – March 2027
+[[event]]
+group = "Valentine's print drop"
+name = "Valentine's print drop · Amazon"
+channel = "amazon"
+starts = "2027-02-07"
+ends = "2027-02-14"
+submit_by = "2027-01-15"
+deadline = "ours"
+deal_type = "Lightning Deal"
+min_discount = 0.20
+below_30d_low = 0.05
+upfront_fee = 70.0
+pct_fee = 0.01
+fee_cap = 2000.0
+fee_basis = "per_deal"
+source = "Planner, Oct 29 2026. Outside big events, guides cite about $70 a day plus 1% of sales."
+notes = "List the new print by mid-January so it has sales history before the deal."
+
+[[event]]
+group = "Big Spring Sale"
+name = "Big Spring Sale · Amazon"
+channel = "amazon"
+starts = "2027-03-22"
+ends = "2027-03-28"
+deadline = "amazon"
+hold_days = 30
+deal_type = "Best Deal"
+alt_deal_type = "Prime Exclusive Discount"
+alt_fee_basis = "per_campaign"
+min_discount = 0.15
+discount_proposed = false
+below_30d_low = 0.05
+upfront_fee = 100.0
+pct_fee = 0.015
+fee_cap = 5000.0
+fee_basis = "per_deal"
+source = "Placeholder: 2027 dates and the submission deadline aren't announced. Fees assumed equal to Q4 2026."
+
+[[event]]
+group = "National Doctors' Day"
+name = "National Doctors' Day · Amazon coupon"
+channel = "amazon"
+starts = "2027-03-26"
+ends = "2027-03-30"
+submit_by = "2027-03-19"
+deadline = "ours"
+deal_type = "Coupon"
+min_discount = 0.10
+upfront_fee = 5.0
+pct_fee = 0.025
+fee_cap = 2000.0
+fee_basis = "per_campaign"
+source = "Doctors' Day is March 30 every year."
+
+[[event]]
+group = "National Doctors' Day"
+name = "National Doctors' Day · dagacci.com code"
+channel = "shopify"
+starts = "2027-03-26"
+ends = "2027-03-30"
+submit_by = "2027-03-19"
+deadline = "ours"
+deal_type = "Discount code"
+min_discount = 0.10
+fee_basis = "none"
+source = "Doctors' Day is March 30 every year."
+
+# ---------------------------------------------------------------- April – June 2027
+[[event]]
+group = "Nurses Week"
+name = "Nurses Week · Amazon"
+channel = "amazon"
+starts = "2027-05-06"
+ends = "2027-05-12"
+submit_by = "2027-04-22"
+deadline = "ours"
+hold_days = 30
+deal_type = "Coupon"
+alt_deal_type = "Prime Exclusive Discount"
+alt_fee_basis = "per_campaign"
+min_discount = 0.15
+upfront_fee = 5.0
+pct_fee = 0.025
+fee_cap = 2000.0
+fee_basis = "per_campaign"
+source = "National Nurses Week is May 6–12 every year. Promotion terms are Dagacci's to set."
+notes = "The biggest Dagacci-run event: stock up in April."
+
+[[event]]
+group = "Nurses Week"
+name = "Nurses Week · Walmart match"
+channel = "walmart"
+starts = "2027-05-06"
+ends = "2027-05-12"
+submit_by = "2027-05-05"
+deadline = "ours"
+hold_days = 30
+deal_type = "Promo price, matched to Amazon"
+min_discount = 0.15
+fee_basis = "unknown"
+source = "Planner, Oct 29 2026."
+
+[[event]]
+group = "Nurses Week"
+name = "Nurses Week · dagacci.com"
+channel = "shopify"
+starts = "2027-05-06"
+ends = "2027-05-12"
+submit_by = "2027-04-29"
+deadline = "ours"
+deal_type = "Sale + code"
+min_discount = 0.15
+fee_basis = "none"
+source = "Planner, Oct 29 2026."
+
+# ---------------------------------------------------------------- July – October 2027
+[[event]]
+group = "Prime Day"
+name = "Prime Day · Amazon"
+channel = "amazon"
+starts = "2027-07-13"
+ends = "2027-07-14"
+deadline = "amazon"
+hold_days = 30
+deal_type = "Best Deal"
+alt_deal_type = "Prime Exclusive Discount"
+alt_fee_basis = "per_campaign"
+min_discount = 0.15
+discount_proposed = false
+below_30d_low = 0.05
+upfront_fee = 100.0
+pct_fee = 0.015
+fee_cap = 5000.0
+fee_basis = "per_deal"
+source = "Placeholder: Amazon announces Prime Day dates, the submission deadline and the FBA inventory deadline each spring."
+
+[[event]]
+group = "Back-to-school nursing bundle"
+name = "Back-to-school bundle · Amazon"
+channel = "amazon"
+starts = "2027-08-01"
+ends = "2027-09-01"
+submit_by = "2027-07-15"
+deadline = "ours"
+deal_type = "Bundle + coupon"
+min_discount = 0.10
+upfront_fee = 5.0
+pct_fee = 0.025
+fee_cap = 2000.0
+fee_basis = "per_campaign"
+source = "Planner, Oct 29 2026. Back-to-school is the peak season for scrubs."
+
+[[event]]
+group = "Back-to-school nursing bundle"
+name = "Back-to-school bundle · dagacci.com"
+channel = "shopify"
+starts = "2027-08-01"
+ends = "2027-09-01"
+submit_by = "2027-07-15"
+deadline = "ours"
+deal_type = "Bundle + code"
+min_discount = 0.10
+fee_basis = "none"
+source = "Planner, Oct 29 2026."
+
+[[event]]
+group = "Prime Big Deal Days"
+name = "Prime Big Deal Days · Amazon"
+channel = "amazon"
+starts = "2027-10-05"
+ends = "2027-10-06"
+deadline = "amazon"
+hold_days = 30
+deal_type = "Best Deal"
+alt_deal_type = "Prime Exclusive Discount"
+alt_fee_basis = "per_campaign"
+min_discount = 0.15
+discount_proposed = false
+below_30d_low = 0.05
+upfront_fee = 100.0
+pct_fee = 0.015
+fee_cap = 5000.0
+fee_basis = "per_deal"
+source = "Placeholder: dates announced by Amazon. Submissions and the FBA cutoff fall in September."
+
+[[event]]
+group = "Medical Assistants Recognition Week"
+name = "Medical Assistants Week · Amazon coupon"
+channel = "amazon"
+starts = "2027-10-17"
+ends = "2027-10-23"
+submit_by = "2027-10-10"
+deadline = "ours"
+deal_type = "Coupon"
+min_discount = 0.10
+upfront_fee = 5.0
+pct_fee = 0.025
+fee_cap = 2000.0
+fee_basis = "per_campaign"
+source = "Usually the third full week of October; check the AAMA date."
+
+[[event]]
+group = "Medical Assistants Recognition Week"
+name = "Medical Assistants Week · dagacci.com code"
+channel = "shopify"
+starts = "2027-10-17"
+ends = "2027-10-23"
+submit_by = "2027-10-10"
+deadline = "ours"
+deal_type = "Discount code"
+min_discount = 0.10
+fee_basis = "none"
+source = "Usually the third full week of October; check the AAMA date."

@@ -142,6 +142,9 @@ class ChiefOfStaff:
         if a.kind == "opportunity":
             owner = self.roster.get(a.after.get("owner", ""))
             return owner.team if owner else "data"
+        # Work an agent hands to another team (e.g. promotions → Amazon ops for event stock).
+        if isinstance(a.after, dict) and a.after.get("team") in TEAMS:
+            return a.after["team"]
         role = self.roster.get(a.agent)
         return role.team if role else ""
 

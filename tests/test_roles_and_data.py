@@ -210,7 +210,7 @@ def test_data_quality_checks(ctx):
     # inventory and data both need fresh metrics_daily
     stale = [h["agent"] for h in orch.chief.agent_health()
              if any("stale" in p for p in h["problems"])]
-    assert set(stale) == {"inventory", "data"}
+    assert set(stale) == {"inventory", "promotions", "data"}
 
 
 def test_low_stock_sku_not_suggested_for_ads(ctx):

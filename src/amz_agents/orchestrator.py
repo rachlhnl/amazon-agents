@@ -16,6 +16,7 @@ from .agents import (
     MarketingAgent,
     PricingAgent,
     ProductAgent,
+    PromotionsAgent,
     ReviewsAgent,
     SalesAgent,
     UXAgent,
@@ -27,7 +28,9 @@ from .agents.chief_of_staff import ChiefOfStaff
 # Marketing and sales work outside Amazon and use the same findings. The data agent
 # runs last so it can link its opportunities to what the others already proposed.
 DEFAULT_AGENTS: list[type[Agent]] = [
-    InventoryAgent, ReviewsAgent, PricingAgent, AdsAgent, ListingAgent,
+    InventoryAgent, ReviewsAgent,
+    PromotionsAgent,  # deal calendar: needs stock and ratings; holds prices before pricing runs
+    PricingAgent, AdsAgent, ListingAgent,
     ProductAgent,  # fit, store stock and launches, from the market tracker's findings
     MarketingAgent, SalesAgent,
     CreativeAgent,  # reviews the drafts above against brand.toml

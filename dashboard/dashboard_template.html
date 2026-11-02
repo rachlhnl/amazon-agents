@@ -603,7 +603,7 @@ function recapRender() {
 // ------------------------------------------------------------------ action tracker (shared, via the artifact's db)
 // actions/<id>: the current state of each recommendation or team to-do. log/<auto>: one row per
 // change carrying the full state after it, so a report can replay any period.
-const TEAMS = ['Amazon ops', 'Product', 'Marketing', 'Creative'];
+const TEAMS = ['Leadership', 'Amazon ops', 'Product', 'Marketing', 'Creative', 'Data & promotions', 'Finance & stores'];
 const STATUS = {todo: 'Not started', doing: 'In progress', blocked: 'Blocked', done: 'Done', dropped: 'Dropped'};
 const SC_KPI = Object.fromEntries((D.scorecard || []).map(r => [r.key, r.label]));
 let DB = null, USER = null, ME = null, SAMPLE = null, canWrite = false, ACT = {}, LOG = [], trkMsg = '';

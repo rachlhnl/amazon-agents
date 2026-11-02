@@ -28,7 +28,7 @@ def test_collect_tracks_every_agent_and_stage(ctx):
     run(ctx)
     data = dashboard.collect(ctx.wh)
     agents = {a["name"]: a for a in data["agents"]}
-    assert len(agents) == 11 and data["kpis"]["healthy"] == 11
+    assert len(agents) == 12 and data["kpis"]["healthy"] == 12
     assert data["run"]["mode"] == "recommend"
     assert agents["ux"]["stages"]["done"] == 1  # seeded page-speed fix
     assert agents["listing"]["stages"]["in_progress"] == 1

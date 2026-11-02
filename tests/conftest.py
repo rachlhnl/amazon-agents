@@ -15,6 +15,7 @@ def ctx(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setenv("GOALS_PATH", str(ROOT / "goals.toml"))
     monkeypatch.setenv("PLAN_PATH", str(ROOT / "tests" / "no-plan.toml"))  # tests opt in
+    monkeypatch.setenv("PROMOTIONS_PATH", str(ROOT / "tests" / "no-promotions.toml"))  # same
     wh = Warehouse()
     seed(wh)
     return Context(wh, Settings())
