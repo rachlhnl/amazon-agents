@@ -19,6 +19,9 @@ ARTIFACT="${DASHBOARD_URL:-https://claude.ai/artifact/EQVvremS6huZYvNAY1BswG}"
 mkdir -p "$HERE/logs"
 exec >>"$HERE/logs/refresh-$(date +%F).log" 2>&1
 echo "== $(date) =="
+# The Amazon and Walmart pulls can take over an hour; don't let the Mac idle-sleep mid-run.
+# A closed lid still sleeps it.
+command -v caffeinate >/dev/null && { caffeinate -i -w $$ & }
 
 zsh "$HERE/file_exports.sh" || echo "filing exports failed; building from what's already filed"
 
