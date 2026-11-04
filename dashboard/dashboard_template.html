@@ -226,6 +226,7 @@ details.how div { font-size: 12.5px; color: var(--text-secondary); padding: 6px 
   <button role="tab" data-tab="fit">Fit &amp; returns</button>
   <button role="tab" data-tab="customers">Customers</button>
   <button role="tab" data-tab="ops">Sales &amp; stock</button>
+  <button role="tab" data-tab="walmart">Walmart</button>
   <button role="tab" data-tab="data">Where the numbers come from</button>
 </nav>
 
@@ -243,7 +244,8 @@ details.how div { font-size: 12.5px; color: var(--text-secondary); padding: 6px 
       <dt>Impression share</dt><dd>How often Dagacci appears in those search results.</dd>
       <dt>Repeat customer rate</dt><dd>Share of the week's buyers who bought Dagacci before.</dd>
       <dt>New to brand</dt><dd>Buyers who hadn't bought Dagacci in the past 12 months.</dd>
-      <dt>Return rate</dt><dd>Share of orders sent back.</dd>
+      <dt>Refund rate</dt><dd>Units refunded as a share of units ordered, over the last 4 weeks. It updates automatically.</dd>
+      <dt>Return rate</dt><dd>Share of orders sent back, from Voice of the Customer, a monthly download. It reads lower than the refund rate.</dd>
       <dt>Bad experience (NCX)</dt><dd>Orders with a return, complaint or bad feedback.</dd>
       <dt>Return badge</dt><dd>Amazon's "frequently returned" warning on a listing, which puts shoppers off.</dd>
       <dt>Weeks of cover</dt><dd>How many weeks the stock at Amazon lasts at today's sales.</dd>
@@ -403,9 +405,9 @@ details.how div { font-size: 12.5px; color: var(--text-secondary); padding: 6px 
   <div class="section-title" id="sec-customers">Demand & customers</div>
   <div class="card s8">
     <h2>Weekly sales</h2>
-    <p class="sub">Brand total, all channels on Amazon US. Back-to-school peaks in late August.</p>
+    <p class="sub">Ordered product sales on Amazon US, all products. Back-to-school peaks in late August.</p>
     <svg id="sales" height="240"></svg>
-    <details><summary>Show table</summary><div id="sales-table"></div></details><details class="how"><summary>How to read this</summary><div>Each column is one week of Amazon US sales for the brand; the solid column is the latest week. Look for <b>seasonal peaks</b> (late July, late August: back-to-school and nursing-program starts) and whether quiet weeks are trending up or down. Hover a column for orders, average order value and the new-to-brand share.</div></details>
+    <details><summary>Show table</summary><div id="sales-table"></div></details><details class="how"><summary>How to read this</summary><div>Each column is one week of Amazon US sales for the brand; the solid column is the latest week. Look for <b>seasonal peaks</b> (late July, late August: back-to-school and nursing-program starts) and whether quiet weeks are trending up or down. Hover a column for units and the refund rate.</div></details>
   </div>
   <div class="card s4">
     <h2>Share of customers who are new to brand</h2>
@@ -464,6 +466,57 @@ details.how div { font-size: 12.5px; color: var(--text-secondary); padding: 6px 
   </div>
   <div class="sowhat" data-section="ops"></div>
 
+</section>
+
+<section class="grid panel" data-panel="walmart" hidden>
+  <div class="section-title" id="sec-walmart">Walmart Marketplace (Seller Center)</div>
+  <div class="card s12" id="wm-none" hidden><p class="sub">No Walmart snapshot yet. Add walmart_snapshot.json to the walmart folder and rebuild.</p></div>
+  <div class="card s12" id="wm-notes-card">
+    <h2>What stands out</h2>
+    <p class="sub" id="wm-notes-sub"></p>
+    <ul id="wm-notes" style="margin:0;padding-left:20px;line-height:1.6"></ul>
+  </div>
+  <div class="card s12" id="wm-tiles-card">
+    <h2>At a glance</h2>
+    <div class="tiles" id="wm-tiles"></div>
+  </div>
+  <div class="card s12" id="wm-sales-card">
+    <h2>Daily Walmart sales</h2>
+    <p class="sub" id="wm-sales-sub"></p>
+    <svg id="wm-daily" height="220"></svg>
+    <details><summary>Show table</summary><div class="scroll" id="wm-daily-table"></div></details><details class="how"><summary>How to read this</summary><div>Each column is one day of Walmart's <b>GMV</b>: orders placed, less cancellations and refunds recorded that day. A refund can belong to an order from an earlier day. The solid columns are the last 7 days.</div></details>
+  </div>
+  <div class="card s6" id="wm-units-card">
+    <h2>Units sold per day</h2>
+    <p class="sub">Net of refunds</p>
+    <svg id="wm-units" height="180"></svg>
+  </div>
+  <div class="card s6" id="wm-aur-card">
+    <h2>Average price per unit</h2>
+    <p class="sub">GMV ÷ units sold. Refunds can skew single days.</p>
+    <svg id="wm-aur" height="180"></svg>
+  </div>
+  <div class="card s12" id="wm-share-card">
+    <h2>Walmart next to Amazon, by week</h2>
+    <p class="sub">Orders placed before refunds on Walmart, against Amazon sales from Customer Trends. A rough size comparison: the two platforms define sales differently.</p>
+    <div class="scroll" id="wm-share-table"></div>
+  </div>
+  <div class="card s12" id="wm-top-card">
+    <h2>Top items and their stock</h2>
+    <p class="sub" id="wm-top-sub"></p>
+    <div class="scroll" id="wm-top-table"></div>
+  </div>
+  <div class="card s12" id="wm-stock-card">
+    <h2>Restock list</h2>
+    <p class="sub" id="wm-stock-sub"></p>
+    <div class="scroll" id="wm-stock-table"></div><details class="how"><summary>How to read this</summary><div>Items at risk or out of stock among the top 25 by daily sales on the WFS Inventory page. <b>Suggested units</b> are Walmart's own suggestion and only appear when read by hand from Seller Center; check them against what the warehouse has before sending anything.</div></details>
+  </div>
+  <div class="card s12" id="wm-age-card">
+    <h2>How long WFS units have been stored</h2>
+    <p class="sub" id="wm-age-sub"></p>
+    <svg id="wm-age" height="190"></svg>
+    <details><summary>Show table</summary><div id="wm-age-table"></div></details>
+  </div>
 </section>
 
 <section class="grid panel" data-panel="data" hidden>
@@ -525,13 +578,16 @@ function table(cols, rows) {
 }
 
 // ------------------------------------------------------------------ header
-const C = D.customers, S = D.search, L = D.listings;
-$('subtitle').textContent = `Amazon US · data through week ending ${C ? wk(C.latest.week_end) + ', ' + C.latest.week_end.slice(0,4) : '–'} · source: ${D.source === 'spapi' ? 'Selling Partner API' : 'Seller Central CSV exports'} · built ${D.built}`;
+const C = D.customers, S = D.search, L = D.listings, WK = D.weekly;
+const custStale = WK && C && C.latest.week_end < WK.latest.week_end;
+const custAsOf = C ? `Customer Trends download, week ending ${wk(C.latest.week_end)}` : '';
+const salesBasis = WK && WK.source === 'account' ? 'Seller Central ordered product sales' : 'Brand Analytics';
+$('subtitle').textContent = `Amazon US · data through week ending ${WK ? wk(WK.latest.week_end) + ', ' + WK.latest.week_end.slice(0,4) : C ? wk(C.latest.week_end) + ', ' + C.latest.week_end.slice(0,4) : '–'} · source: ${D.source === 'spapi' ? 'Selling Partner API' : 'Seller Central CSV exports'} · built ${D.built}`;
 const live = {customer_trends: 'Customer trends', sqp: 'Search queries', repeat_asin: 'Repeat purchase', basket: 'Market basket', listing_health: 'Listing health'};
-const ageDays = C ? Math.floor((Date.now() - new Date(C.latest.week_end + 'T23:59:59')) / 864e5) : 0;
+const ageDays = (WK || C) ? Math.floor((Date.now() - new Date((WK || C).latest.week_end + 'T23:59:59')) / 864e5) : 0;
 $('chips').innerHTML = (ageDays > 9 ? `<span class="chip stale" title="Brand Analytics posts each week a few days after it ends">Latest week is ${ageDays} days old</span>` : '') +
   Object.entries(live).map(([k, v]) => `<span class="chip ${D.have.includes(k) ? 'live' : 'wait'}">${v}</span>`).join('') +
-  [['Sales & traffic', D.traffic], ['Ads', D.ads], ['Inventory', D.stock]].map(([v, on]) => `<span class="chip ${on ? 'live' : 'wait'}">${v}</span>`).join('') +
+  [['Sales & traffic', D.traffic], ['Ads', D.ads], ['Inventory', D.stock], ['Walmart', D.walmart]].map(([v, on]) => `<span class="chip ${on ? 'live' : 'wait'}">${v}</span>`).join('') +
   '<button class="toggle" id="theme">Dark / light</button>';
 $('theme').onclick = () => {
   const r = document.documentElement, dark = r.dataset.theme ? r.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
@@ -543,21 +599,21 @@ function renderAll() {
   // ---------------------------------------------------------------- hero + tiles
   const cur = C.latest, prev = C.prior;
   // Lead with the freshest sales: Seller Central orders when they're newer than Brand Analytics.
-  const SA = D.sales, fresh = SA && SA.through > cur.week_end;
-  const d = fresh ? (SA.rev_7 / SA.rev_prior - 1) * 100 : (cur.sales / prev.sales - 1) * 100;
-  $('hero-l').textContent = fresh ? `Amazon.com sales, 7 days to ${wk(SA.through)} (Seller Central orders)` : `Weekly sales, week ending ${wk(cur.week_end)}`;
-  $('hero-v').textContent = fmt$(fresh ? SA.rev_7 : cur.sales);
+  const SA = D.sales, wa = WK ? WK.latest : cur, wb = WK ? WK.prior : prev, fresh = SA && SA.through > wa.week_end;
+  const d = fresh ? (SA.rev_7 / SA.rev_prior - 1) * 100 : (wa.sales / wb.sales - 1) * 100;
+  $('hero-l').textContent = fresh ? `Amazon.com sales, 7 days to ${wk(SA.through)} (Seller Central orders)` : `Weekly sales, week ending ${wk(wa.week_end)}`;
+  $('hero-v').textContent = fmt$(fresh ? SA.rev_7 : wa.sales);
   $('hero-d').className = 'delta ' + (d >= 0 ? 'up' : 'down');
-  $('hero-d').textContent = `${d >= 0 ? '▲ +' : '▼ '}${d.toFixed(1)}% vs prior week · ${fmt$(C.peak_week.sales)} at the ${wk(C.peak_week.week_end)} peak (brand, Brand Analytics)`;
-  spark($('spark'), fresh ? SA.series.map(s => s.revenue) : C.series.map(s => s.sales));
+  $('hero-d').textContent = `${d >= 0 ? '▲ +' : '▼ '}${d.toFixed(1)}% vs prior week · ${fmt$((WK || C).peak_week.sales)} at the ${wk((WK || C).peak_week.week_end)} peak (${salesBasis})`;
+  spark($('spark'), fresh ? SA.series.map(s => s.revenue) : (WK || C).series.map(s => s.sales));
   const funnelLast = S.funnel[S.funnel.length - 1];
   const tiles = [
-    {l: `Orders, week ending ${wk(cur.week_end)}`, v: cur.orders.toLocaleString(), d: `${prev.orders.toLocaleString()} prior week`},
-    {l: 'Average order value', v: '$' + cur.aov.toFixed(2), d: `$${prev.aov.toFixed(2)} prior week`},
-    {l: 'New-to-brand customers', v: pct(cur.ntb_share), d: `${pct(prev.ntb_share)} prior week`},
-    {l: 'Repeat purchase rate', v: pct(cur.repeat_rate), d: `${pct(prev.repeat_rate)} prior week`},
+    {l: `Orders, week ending ${wk(cur.week_end)}`, v: cur.orders.toLocaleString(), d: custStale ? custAsOf : `${prev.orders.toLocaleString()} prior week`},
+    {l: 'Average order value', v: '$' + cur.aov.toFixed(2), d: custStale ? custAsOf : `$${prev.aov.toFixed(2)} prior week`},
+    {l: 'New-to-brand customers', v: pct(cur.ntb_share), d: custStale ? custAsOf : `${pct(prev.ntb_share)} prior week`},
+    {l: 'Repeat purchase rate', v: pct(cur.repeat_rate), d: custStale ? custAsOf : `${pct(prev.repeat_rate)} prior week`},
     {l: 'Search purchase share', v: pct(funnelLast.Purchases), d: `vs ${pct(funnelLast.Impressions)} impression share`},
-    {l: 'Return rate', v: pct(L.return_rate), d: 'orders-weighted, new SKUs'},
+    {l: 'Return rate, Voice of the Customer', v: pct(L.return_rate), d: 'orders-weighted, new SKUs; download by hand'},
     {l: 'Orders on badge-risk listings', v: pct(L.badge_share, 0), d: `${fmtN(L.badge_orders.Yes)} badged · ${fmtN(L.badge_orders['At risk'])} at risk`},
   ];
   $('tiles').innerHTML = tiles.map(t => `<div class="tile"><div class="l">${t.l}</div><div class="v">${t.v}</div><div class="d">${t.d}</div></div>`).join('');
@@ -566,7 +622,7 @@ function renderAll() {
   miniLine($('repeat'), C.series.map(s => s.repeat_rate), C.series.map(s => s.week_end), '%');
   funnelChart(); segmentChart(); queryTable();
   fitChart(); reasonsChart(); badgeChart(); linesTable(); watchTable();
-  basketChart(); compChart(); opsRender(); pendingTiles(); insightsRender();
+  basketChart(); compChart(); opsRender(); walmartRender(); pendingTiles(); insightsRender();
 }
 
 const SECTION = {fit: ['Fit & returns', 'fit'], search: ['Search', 'search'], customers: ['Customers', 'customers'], basket: ['Basket', 'customers'], ops: ['Sales & stock', 'ops']};
@@ -622,7 +678,7 @@ function scoreRender() {
 }
 function changesRender() {
   if (!C) return;
-  $('changes-sub').textContent = `Week ending ${wk(C.latest.week_end)} vs ${wk(C.prior.week_end)}, biggest moves first`;
+  $('changes-sub').textContent = `Week ending ${wk((WK || C).latest.week_end)} vs ${wk((WK || C).prior.week_end)}, biggest moves first`;
   const fv = (r, v) => r.unit === '$' ? fmt$(v) : r.unit === '%' ? pct(v) : v.toLocaleString();
   $('changes').innerHTML = table([{h: 'Metric', f: r => esc(r.label)}, {h: 'This week', n: 1, f: r => fv(r, r.now)},
     {h: 'Last week', n: 1, f: r => fv(r, r.prior)},
@@ -1090,14 +1146,14 @@ function spark(svg, vals) {
 
 function salesChart() {
   const svg = $('sales'), W = svg.clientWidth || 700, H = 240, m = {l: 44, r: 8, t: 18, b: 24};
-  const s = C.series, n = s.length, mx = niceMax(Math.max(...s.map(r => r.sales)));
+  const s = (WK || C).series, n = s.length, mx = niceMax(Math.max(...s.map(r => r.sales)));
   const band = (W - m.l - m.r) / n, bw = Math.min(24, band * 0.6), y = v => m.t + (H - m.t - m.b) * (1 - v / mx);
   for (let i = 0; i <= 4; i++) {
     const v = mx * i / 4, yy = y(v);
     el('line', {x1: m.l, x2: W - m.r, y1: yy, y2: yy, stroke: i ? css('--grid') : css('--axis'), 'stroke-width': 1}, svg);
     txt(svg, m.l - 6, yy + 4, fmt$(v).replace('.0K', 'K'), '', 'end');
   }
-  const peakI = s.findIndex(r => r.week_end === C.peak_week.week_end);
+  const peakI = s.findIndex(r => r.week_end === (WK || C).peak_week.week_end);
   s.forEach((r, i) => {
     const cx = m.l + band * i + band / 2, yy = y(r.sales);
     const isLast = i === n - 1;
@@ -1105,9 +1161,13 @@ function salesChart() {
     if (i % 2 === (n - 1) % 2) txt(svg, cx, H - 6, wk(r.week_end), '', 'middle');
     if (isLast || i === peakI) txt(svg, cx, yy - 6, fmt$(r.sales), 'val', 'middle');
     const hit = el('rect', {x: cx - band / 2, y: m.t, width: band, height: H - m.t - m.b, class: 'hit'}, svg);
-    hover(hit, `<div class="t">Week ending ${wk(r.week_end)}</div><b>${fmt$(r.sales)}</b> · ${r.orders.toLocaleString()} orders<br>AOV $${r.aov.toFixed(2)} · new-to-brand ${pct(r.ntb_share)}`);
+    hover(hit, WK ? `<div class="t">Week ending ${wk(r.week_end)}</div><b>${fmt$(r.sales)}</b>${r.units != null ? ` · ${r.units.toLocaleString()} units` : ''}${r.refund_rate_4w != null ? `<br>Refund rate ${pct(r.refund_rate_4w)}, last 4 weeks` : ''}`
+      : `<div class="t">Week ending ${wk(r.week_end)}</div><b>${fmt$(r.sales)}</b> · ${r.orders.toLocaleString()} orders<br>AOV $${r.aov.toFixed(2)} · new-to-brand ${pct(r.ntb_share)}`);
   });
-  $('sales-table').innerHTML = table([
+  $('sales-table').innerHTML = WK ? table([
+    {h: 'Week ending', f: r => r.week_end}, {h: 'Sales', n: 1, f: r => '$' + Math.round(r.sales).toLocaleString()},
+    {h: 'Units', n: 1, f: r => r.units == null ? '–' : r.units.toLocaleString()}, {h: 'Sessions', n: 1, f: r => r.sessions == null ? '–' : r.sessions.toLocaleString()},
+    {h: 'Refund rate, 4 weeks', n: 1, f: r => pct(r.refund_rate_4w)}], s) : table([
     {h: 'Week ending', f: r => r.week_end}, {h: 'Sales', n: 1, f: r => '$' + Math.round(r.sales).toLocaleString()},
     {h: 'Orders', n: 1, f: r => r.orders.toLocaleString()}, {h: 'AOV', n: 1, f: r => '$' + r.aov.toFixed(2)},
     {h: 'New-to-brand', n: 1, f: r => pct(r.ntb_share)}, {h: 'Repeat rate', n: 1, f: r => pct(r.repeat_rate)}], s);
@@ -1204,7 +1264,13 @@ function fitChart() {
   el('line', {x1: mid, x2: mid, y1: 0, y2: H - 22, stroke: css('--axis')}, svg);
   const tl = L.reasons.find(r => r.reason === 'Too Large')?.orders || 0, ts = L.reasons.find(r => r.reason === 'Too Small')?.orders || 0;
   const worst = rows.reduce((a, r) => rate(r, 'Too Large') > rate(a, 'Too Large') ? r : a);
-  $('fit-call').innerHTML = `"Too large" outnumbers "too small" <b>${(tl / ts).toFixed(1)} to 1</b> and is worst at <b>size ${worst.size}</b>. The products run large: update the size chart and add a "size down if between sizes" note, then track this ratio weekly.`;
+  // Direction differs by line, so the advice names which lines run large and which run small.
+  const main = (L.lines || []).filter(l => l.orders >= 500 && l.line !== 'Other');
+  const large = main.filter(l => (l.too_large || 0) > 1.5 * (l.too_small || 0)).map(l => l.line);
+  const small = main.filter(l => (l.too_small || 0) > 1.5 * (l.too_large || 0)).map(l => l.line);
+  $('fit-call').innerHTML = `Overall, "too large" outnumbers "too small" <b>${(tl / ts).toFixed(1)} to 1</b>, worst at <b>size ${worst.size}</b>. But it depends on the product: `
+    + [large.length ? `<b>${esc(large.join(', '))}</b> run large (size-down note)` : '', small.length ? `<b>${esc(small.join(', '))}</b> run small (size-up note)` : '']
+      .filter(Boolean).join('; ') + '. Track each line separately.';
 }
 
 function reasonsChart() {
@@ -1298,6 +1364,7 @@ function opsRender() {
                     {l: 'Best sellers out of stock', v: `${ST.core_out} of ${ST.core}`, d: 'top variants by units/day'});
     if (AD) tl.push({l: 'Ad spend (Quartile)', v: fmt$(AD.spend_month) + '/mo', d: `ACoS ${pct(AD.acos)} · TACoS ${pct(AD.tacos)}`},
                     {l: 'Sales from ads', v: pct(AD.ad_share, 0), d: `${AD.ad_types}, ${wk(AD.period_start)} – ${wk(AD.period_end)}`});
+    if (D.walmart) tl.push({l: 'Walmart sales, 30 days', v: fmt$(D.walmart.last30.gmv), d: `${fmtN(D.walmart.last30.units)} units, through ${wk(D.walmart.through)}`});
     if (D.store) tl.push({l: 'dagacci.com units, 30 days', v: fmtN(D.store.units_30d), d: `${fmtN(D.store.variants)} variants on Shopify`});
     $('ops-tiles').innerHTML = tl.map(t => `<div class="tile"><div class="l">${t.l}</div><div class="v">${t.v}</div><div class="d">${t.d}</div></div>`).join('');
   }
@@ -1327,19 +1394,93 @@ function opsRender() {
   }
 }
 
+function wmColumns(id, s, key, fmtv) {
+  const svg = $(id), W = svg.clientWidth || 700, H = +svg.getAttribute('height'), m = {l: 44, r: 8, t: 18, b: 24}, n = s.length;
+  const vals = s.map(r => Math.max(0, r[key] || 0)), mx = niceMax(Math.max(...vals) || 1), band = (W - m.l - m.r) / n, bw = Math.max(2, Math.min(18, band - 2));
+  const y = v => m.t + (H - m.t - m.b) * (1 - v / mx);
+  for (let i = 0; i <= 5; i++) {
+    const v = mx * i / 5, yy = y(v);
+    el('line', {x1: m.l, x2: W - m.r, y1: yy, y2: yy, stroke: i ? css('--grid') : css('--axis'), 'stroke-width': 1}, svg);
+    txt(svg, m.l - 6, yy + 4, fmtv(v), '', 'end');
+  }
+  const every = Math.max(7, Math.ceil(n / Math.max(2, Math.floor(W / 80)) / 7) * 7);
+  s.forEach((r, i) => {
+    const cx = m.l + band * i + band / 2, v = vals[i], yy = y(v);
+    if (v > 0) el('path', {d: colPath(cx - bw / 2, yy, bw, y(0) - yy), fill: css('--series-1'), opacity: i >= n - 7 ? 1 : 0.55}, svg);
+    if (i % every === (n - 1) % every) txt(svg, cx, H - 6, wk(r.date), '', 'middle');
+    hover(el('rect', {x: cx - band / 2, y: m.t, width: band, height: H - m.t - m.b, class: 'hit'}, svg),
+      `<div class="t">${new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric'})}</div><b>${fmt$(Math.max(r.gmv, 0))}</b> GMV · ${r.units.toLocaleString()} units · ${r.aur == null ? '–' : '$' + r.aur.toFixed(2)} a unit<br>Orders placed ${fmt$(r.auth)} · refunds ${fmt$(r.refunds)}`);
+  });
+}
+
+function walmartRender() {
+  const W = D.walmart, ids = ['notes', 'sales', 'tiles', 'units', 'aur', 'share', 'top', 'stock', 'age'];
+  $('wm-none').hidden = !!W;
+  ids.forEach(i => $(`wm-${i}-card`).hidden = !W);
+  if (!W) return;
+  const ago = Math.floor((Date.now() - new Date(W.captured + 'T23:59:59')) / 864e5);
+  const readAgo = Math.floor((Date.now() - new Date(W.hand_read + 'T23:59:59')) / 864e5), read = W.auto ? ` · read ${wk(W.hand_read)}` : '';
+  $('wm-notes-sub').textContent = `Written by hand from Seller Center on ${wk(W.hand_read)}${readAgo > 9 ? `, now ${readAgo} days old, so check it against the charts below` : ''}. Causes aren't confirmed unless stated.`;
+  $('wm-notes').innerHTML = W.notes.map(n => `<li>${esc(n)}</li>`).join('');
+  const L = W.last30, P = W.prior30, ch = P && P.gmv ? (L.gmv / P.gmv - 1) * 100 : null;
+  $('wm-sales-sub').textContent = `${ago > 9 ? `⚠ Last updated ${ago} days ago. ` : ''}${wk(W.from)} – ${wk(W.through)}: ${fmt$(W.all.gmv)} from ${W.all.units.toLocaleString()} units`;
+  wmColumns('wm-daily', W.daily, 'gmv', v => fmt$(v).replace('.0K', 'K').replace('.00', ''));
+  wmColumns('wm-units', W.daily, 'units', v => fmtN(v));
+  wmColumns('wm-aur', W.daily, 'aur', v => '$' + Math.round(v));
+  $('wm-daily-table').innerHTML = table([{h: 'Day', f: r => r.date}, {h: 'GMV', n: 1, f: r => '$' + Math.round(r.gmv).toLocaleString()},
+    {h: 'Units', n: 1, f: r => r.units.toLocaleString()}, {h: 'Orders', n: 1, f: r => r.orders.toLocaleString()}, {h: 'A unit', n: 1, f: r => r.aur == null ? '–' : '$' + r.aur.toFixed(2)},
+    {h: 'Orders placed', n: 1, f: r => '$' + Math.round(r.auth).toLocaleString()}, {h: 'Cancelled', n: 1, f: r => '$' + Math.round(r.cancelled).toLocaleString()}, {h: 'Refunds', n: 1, f: r => '$' + Math.round(r.refunds).toLocaleString()}], [...W.daily].reverse());
+  const F = W.wfs, E = W.estimates, Q = W.performance, tl = [
+    {l: 'Sales, last 30 days', v: fmt$(L.gmv), d: ch == null ? `${fmtN(L.units)} units` : `<span class="${ch >= 0 ? 'up' : 'down'}">${ch >= 0 ? '▲ +' : '▼ '}${ch.toFixed(1)}%</span> vs ${fmt$(P.gmv)}`},
+    {l: 'Units, last 30 days', v: fmtN(L.units), d: `${L.orders.toLocaleString()} orders`},
+    {l: 'Average price a unit', v: '$' + L.aur.toFixed(2), d: P ? `$${P.aur.toFixed(2)} the 30 days before` : ''},
+    {l: 'Refunds ÷ orders placed', v: pct(L.refund_share), d: `${fmt$(L.refunds)} of ${fmt$(L.auth)}`},
+  ];
+  if (F) tl.push({l: 'WFS items at risk or out', v: F.items_at_risk_or_out.toLocaleString(), d: `of ${F.items_total.toLocaleString()} items`},
+                 {l: 'WFS in-stock sales', v: F.in_stock_sales_pct + '%', d: `Walmart's measure${read}`},
+                 {l: 'WFS units over a year old', v: F.aged_units_pct + '%', d: `${F.items_surplus_aged} items surplus or aged${read}`});
+  if (Q) tl.push({l: 'Account rating', v: Q.rating.toFixed(2), d: `Negative feedback ${Q.negative_feedback_pct}% (standard ${Q.negative_feedback_standard_pct}% or below)${read}`});
+  if (E) tl.push({l: 'Missed sales, Walmart\'s estimate', v: fmt$(E.wfs_restock_monthly_sales).replace('.0K', 'K') + '/mo', d: `Up to this much, on ${E.wfs_restock_items} WFS items to restock${read}`});
+  $('wm-tiles').innerHTML = tl.map(t => `<div class="tile"><div class="l">${t.l}</div><div class="v">${t.v}</div><div class="d">${t.d}</div></div>`).join('');
+  const wks = W.weekly.filter(r => r.amazon).reverse();
+  $('wm-share-card').hidden = !wks.length;
+  $('wm-share-table').innerHTML = table([{h: 'Week ending', f: r => r.week_end}, {h: 'Walmart orders placed', n: 1, f: r => '$' + Math.round(r.auth).toLocaleString()},
+    {h: 'Walmart GMV', n: 1, f: r => '$' + Math.round(r.gmv).toLocaleString()}, {h: 'Amazon sales', n: 1, f: r => '$' + Math.round(r.amazon).toLocaleString()},
+    {h: 'Walmart share of the two', n: 1, f: r => pct(r.share)}], wks);
+  const STATUS = {at_risk: 'At risk', out: 'Out of stock', in_stock: 'In stock'}, stat = r => `<b style="color:${r.status === 'out' ? css('--critical') : r.status === 'at_risk' ? css('--serious') : 'inherit'}">${STATUS[r.status]}</b>`;
+  const sum30 = W.top.reduce((a, r) => a + r.gmv, 0);
+  $('wm-top-sub').textContent = `Top ${W.top.length} of ${W.items_with_activity} items by GMV, ${wk(W.top_from)} – ${wk(W.top_to)}: ${pct(sum30 / L.gmv * 100, 0)} of sales${W.top.every(r => r.sku.split('_')[0] === W.top[0].sku.split('_')[0]) ? `, all one style (${esc(W.top[0].sku.split('_')[0])})` : ''}. Stock is from WFS Inventory; a dash means the item isn't in the top 25 there, so its stock wasn't captured.`;
+  $('wm-top-table').innerHTML = table([{h: 'SKU', f: r => esc(r.sku)}, {h: 'GMV', n: 1, f: r => '$' + Math.round(r.gmv).toLocaleString()}, {h: 'Units', n: 1, f: r => r.units},
+    {h: 'Page views', n: 1, f: r => r.page_views.toLocaleString()}, {h: 'Conversion', n: 1, f: r => pct(r.conversion)}, {h: 'Refunds', n: 1, f: r => '$' + Math.round(r.refunds).toLocaleString()},
+    {h: 'Available', n: 1, f: r => r.stock ? r.stock.available.toLocaleString() : '–'}, {h: 'Days of supply', n: 1, f: r => r.stock && r.stock.days_supply != null ? r.stock.days_supply : '–'}, {h: 'Status', f: r => r.stock ? stat(r.stock) : '–'}], W.top);
+  const low = W.stock.filter(r => r.status !== 'in_stock').sort((a, b) => b.daily_sales - a.daily_sales);
+  $('wm-stock-sub').textContent = `${low.length} of the top ${W.stock.length} items by daily sales. The full account has ${F ? F.items_at_risk_or_out : '–'} items at risk or out.${W.auto ? ' At risk means under 30 days of supply counting inbound, our rule, so it can differ from Seller Center.' : ''}`;
+  $('wm-stock-table').innerHTML = table([{h: 'SKU', f: r => esc(r.sku)}, {h: 'Sold/day', n: 1, f: r => r.daily_units.toFixed(1)}, {h: 'Available', n: 1, f: r => r.available.toLocaleString()},
+    {h: 'Inbound', n: 1, f: r => r.inbound.toLocaleString()}, {h: 'Days', n: 1, f: r => r.days_supply == null ? '–' : r.days_supply}, {h: 'Suggested', n: 1, f: r => r.suggested == null ? '–' : r.suggested.toLocaleString()}, {h: 'Status', f: stat}], low);
+  if (F) {
+    const age = F.age.map(([l, u]) => ({l, u})), tot = age.reduce((a, r) => a + r.u, 0);
+    $('wm-age-sub').textContent = `${tot.toLocaleString()} units at Walmart${read}`;
+    hbars($('wm-age'), age, {label: r => r.l, value: r => r.u, fmt: v => fmtN(v), color: css('--series-1'), H: 190, labelW: 110,
+      tipf: r => `<div class="t">${esc(r.l)}</div><b>${r.u.toLocaleString()}</b> units · ${pct(r.u / tot * 100, 0)}`});
+    $('wm-age-table').innerHTML = table([{h: 'Days stored', f: r => esc(r.l)}, {h: 'Units', n: 1, f: r => r.u.toLocaleString()}, {h: 'Share', n: 1, f: r => pct(r.u / tot * 100, 0)}], age);
+  }
+}
+
 function pendingTiles() {
   $('pending').innerHTML = D.awaiting.map(a => `<div class="tile pending"><div class="l">${a.kpi}</div><div class="v">Awaiting data</div><div class="d">${a.source}</div></div>`).join('');
   const rows = [
-    ['Customer trends', 'Seller Central CSV', 'customer_trends', 'No confirmed API: keep weekly CSV drop'],
+    ['Weekly sales and refund rate', D.weekly && D.weekly.series.some(r => r.refund_rate_4w != null) ? 'GET_SALES_AND_TRAFFIC_REPORT' : 'Seller Central daily export', 'account_daily', 'Updates with the weekly run once the Amazon API is on'],
+    ['Customer trends (new-to-brand, repeat rate, orders)', 'Seller Central CSV', 'customer_trends', 'No API from Amazon: download by hand'],
     ['Search Query Performance', 'GET_BRAND_ANALYTICS_SEARCH_QUERY_PERFORMANCE_REPORT', 'sqp', 'API is ASIN-level; pipeline rolls up to brand'],
     ['Repeat purchase', 'GET_BRAND_ANALYTICS_REPEAT_PURCHASE_REPORT', 'repeat_asin', ''],
     ['Market basket', 'GET_BRAND_ANALYTICS_MARKET_BASKET_REPORT', 'basket', ''],
-    ['Listing health (Voice of the Customer)', 'Seller Central CSV', 'listing_health', 'No API: keep weekly CSV drop'],
+    ['Listing health (Voice of the Customer: badges, complaint reasons, stars)', 'Seller Central CSV', 'listing_health', 'No API from Amazon: download by hand'],
+    ['Walmart Marketplace', D.walmart && D.walmart.auto ? 'Walmart Marketplace API (Item Performance, WFS inventory)' : 'Seller Center, read by hand (walmart_snapshot.json)', 'walmart', D.walmart && D.walmart.auto ? 'Refreshed by the weekly run. Stock age, rating and estimates are still read by hand' : 'Read by hand until Walmart keys are added'],
     ...D.awaiting.map(a => [a.kpi, a.source, null, a.status]),
   ];
   $('connectors').innerHTML = table([
     {h: 'Data', f: r => r[0]}, {h: 'Source / report type', f: r => `<code>${esc(r[1])}</code>`},
-    {h: 'Status', f: r => r[2] && D.have.includes(r[2]) ? `<span class="chip live">Loaded (${D.source === 'spapi' && !r[1].startsWith('Seller') ? 'API' : 'CSV'})</span>` : `<span class="chip wait">${r[3] || 'Waiting'}</span>`},
+    {h: 'Status', f: r => r[2] && D.have.includes(r[2]) ? `<span class="chip live">Loaded (${r[2] === 'walmart' ? (D.walmart && D.walmart.auto ? 'API' : 'snapshot') : D.source === 'spapi' && !r[1].startsWith('Seller') ? 'API' : 'CSV'})</span>` : `<span class="chip wait">${r[3] || 'Waiting'}</span>`},
     {h: 'Notes', f: r => r[2] ? esc(r[3]) : ''}], rows);
 }
 

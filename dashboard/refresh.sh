@@ -3,6 +3,7 @@
 # com.dagacci.kpi-refresh.plist). Stops at the first failure so a half-built
 # dashboard is never published.
 #   1. Seller Central exports waiting in ~/Downloads are filed (file_exports.sh)
+#   1b. With Walmart keys: the last 30 days of Walmart sales and WFS stock (takes up to an hour)
 #   2. With SP-API keys: SP-API -> amazon-agents warehouse and Brand Analytics.
 #      Without them: the dashboard is built from the CSVs in seller_central/.
 #   3. The agents run, so this week's briefs and the promotions plan are current
@@ -21,10 +22,16 @@ echo "== $(date) =="
 
 zsh "$HERE/file_exports.sh" || echo "filing exports failed; building from what's already filed"
 
+# Walmart keys in .env mean a live pull; a failure keeps the tab's last good data.
+if grep -Eq '^WALMART_CLIENT_SECRET=[^#[:space:]]+' "$AGENTS/.env" 2>/dev/null; then
+  python3 -I "$HERE/walmart_api.py" pull || echo "Walmart pull failed; the Walmart tab keeps its last data"
+fi
+
 cd "$AGENTS"
 # An SP-API refresh token in .env means the live pull works; otherwise build from the CSV drops.
 if grep -Eq '^SP_API_REFRESH_TOKEN=[^#[:space:]]+' .env 2>/dev/null; then
-  .venv/bin/amz-agents ingest --only products,metrics,inventory,asin_traffic,shopify
+  .venv/bin/amz-agents ingest --only products,metrics,inventory,asin_traffic
+  .venv/bin/amz-agents ingest --only shopify || echo "shopify ingest skipped"
   python3 -I "$HERE/build_dashboard.py" --source spapi
 else
   echo "No SP-API keys: building from the CSVs in $ROOT/seller_central"
