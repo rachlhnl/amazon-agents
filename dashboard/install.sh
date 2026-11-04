@@ -39,6 +39,8 @@ for k in SP_API_CLIENT_ID SP_API_CLIENT_SECRET SP_API_REFRESH_TOKEN SP_API_SELLE
   grep -qE "^$k=[^[:space:]#]+" "$REPO/.env" || missing+=$k
 done
 (( ${#missing} )) && todo "Still empty in .env: ${missing[*]}" || ok "SP-API credentials present in .env"
+if grep -qE "^WALMART_CLIENT_SECRET=[^[:space:]#]+" "$REPO/.env"; then ok "Walmart keys present in .env"
+else todo "No Walmart keys: the Walmart tab keeps its last data. Add them with: zsh $HERE/walmart_setup.sh keys"; fi
 
 # 4. Claude Code: republishes the page and writes reports, signed in as the dashboard's owner or an Editor.
 if command -v claude >/dev/null; then ok "Claude Code installed ($(claude --version 2>/dev/null | head -1))"
@@ -62,6 +64,7 @@ if [[ "${1:-}" == "--schedule" ]]; then
   sed "s#__HERE__#$HERE#g; s#__DOWNLOADS__#$HOME/Downloads#g" "$HERE/com.dagacci.file-exports.plist" > "$dest"
   launchctl load "$dest"
   ok "Watching ~/Downloads for Seller Central exports ($dest)."
+  todo "Run the schedule on ONE computer only. If another Mac has it, stop it there (SETUP.md, Part 1, step 2)."
   todo "macOS blocks scheduled jobs from Documents and Downloads: System Settings → Privacy & Security → Full Disk Access → add /bin/zsh and /bin/bash."
 else
   todo "When this is the machine that should run the weekly refresh: zsh $HERE/install.sh --schedule"

@@ -15,7 +15,7 @@ Teammates need no setup. They open the dashboard link while signed in to claude.
 1. **Make sure all code is on GitHub:** `git -C ~/Documents/amazon-agents status` should show nothing to commit and nothing to push.
 2. **Stop the scheduled jobs** if they're installed, so two machines don't both publish and write reports:
    `launchctl unload ~/Library/LaunchAgents/com.dagacci.kpi-refresh.plist ~/Library/LaunchAgents/com.dagacci.file-exports.plist`
-3. **Copy these files to the new machine**, using AirDrop, an encrypted drive or a password manager's secure notes. Never email, Slack or git:
+3. **Make the transfer folder:** `zsh ~/Documents/amazon-agents/dashboard/make_transfer.sh` copies everything below except `.env` into `~/Desktop/dagacci-transfer`. It's safe to re-run. Send the folder by AirDrop or an encrypted drive, and send `.env` on its own. Never email, Slack or git. These are the files:
 
    | File | Why |
    |---|---|
@@ -24,7 +24,9 @@ Teammates need no setup. They open the dashboard link while signed in to claude.
    | `~/Documents/amazon-agents/data/warehouse.db` | Sales, stock and traffic history for the agents and the Sales & stock tab |
    | `~/Documents/dagacci/dashboard/history.json` | Weekly KPI and recommendation history. Reports compare against it; it can't be rebuilt for past weeks |
    | `~/Documents/dagacci/seller_central/` | Customer Trends, Search Query, Repeat Purchase, Market Basket and Listing Summary CSVs |
-   | `~/Documents/dagacci/data/` | Quartile export, other one-off exports |
+   | `~/Documents/dagacci/data/` | Quartile export, Amazon daily and monthly history, other one-off exports |
+   | `~/Documents/dagacci/walmart/` | The Walmart tab's snapshot and history. Walmart's API only refreshes recent days |
+   | `~/Documents/dagacci/` (everything else) | HQ pages, forecast, security documents, key script, RMS backups and migration files (customer data) |
 
 ## Part 2: on the new machine (macOS)
 
@@ -66,6 +68,7 @@ Put every value in `~/Documents/amazon-agents/.env`. Don't paste them into chat,
 | `SP_API_REFRESH_TOKEN` | Lets the app read your account without a login | Same page: the arrow next to **Edit App** → **Authorize** → **Authorize app**. It's shown once, so copy it immediately |
 | `SP_API_SELLER_ID` | Your merchant token | Seller Central → Settings → **Account Info** → Your Merchant Token |
 | `SP_API_REGION`, `SP_API_MARKETPLACE_ID` | Already set: `na`, `ATVPDKIKX0DER` (US) | No action needed |
+| `WALMART_CLIENT_ID`, `WALMART_CLIENT_SECRET` | Walmart Marketplace API, for the Walmart tab | Seller Center → seller.walmart.com/api-key → **API Key Management**. Save with `zsh dashboard/walmart_setup.sh keys` |
 | *(not a key)* | Claude account | claude.ai, signed in to Claude Code (Part 2, step 1) |
 
 ### Optional: more data on the dashboard
@@ -84,5 +87,7 @@ Put every value in `~/Documents/amazon-agents/.env`. Don't paste them into chat,
 | `PAGESPEED_API_KEY` | Store page speed (already set) | Google Cloud console → enable **PageSpeed Insights API** → Credentials → **API key** |
 | `GA4_PROPERTY_ID`, `GA4_CREDENTIALS` | Store funnel | Google Analytics → Admin → Property details (ID). Service account JSON from Google Cloud, added as a Viewer on the property |
 | `SMTP_*`, `BRIEF_*` | Emailing the agents' brief | Your mail provider: an app password on a company mailbox |
+
+The same keys work on a second computer, so there's no need to generate new ones. Whichever computer holds `.env` has to meet the security controls in your Amazon developer profile.
 
 Data with no API (manual, see README "Data sources"): **Customer Trends** CSV (weekly) and **Listing Summary** CSV (monthly), both from Seller Central → Brand Analytics / Voice of the Customer, dropped into `~/Documents/dagacci/seller_central/`.
