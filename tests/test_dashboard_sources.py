@@ -241,6 +241,22 @@ def test_spapi_waits_out_throttling(monkeypatch):
     assert len(calls) == 3
 
 
+def test_spapi_survives_a_dropped_connection(monkeypatch):
+    import urllib.error
+    api, calls = _spapi(monkeypatch, [200])
+    real, drops = sources.urllib.request.urlopen, []
+
+    def flaky(req, timeout=None):
+        if not drops:
+            drops.append(1)
+            raise urllib.error.URLError("nodename nor servname provided")
+        return real(req, timeout=timeout)
+
+    monkeypatch.setattr(sources.urllib.request, "urlopen", flaky)
+    assert api._call("GET", "/x") == {"ok": True}
+    assert drops == [1]
+
+
 def test_spapi_does_not_retry_real_errors(monkeypatch):
     import urllib.error
     api, calls = _spapi(monkeypatch, [403])

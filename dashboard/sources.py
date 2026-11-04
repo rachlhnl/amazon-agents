@@ -282,15 +282,24 @@ class SpApiSource:
             "client_secret": self.cfg["client_secret"],
         }).encode()
         req = urllib.request.Request("https://api.amazon.com/auth/o2/token", data=body)
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            self._token = json.load(resp)["access_token"]
+        for attempt in range(SPAPI_TRIES):
+            try:
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    self._token = json.load(resp)["access_token"]
+                break
+            except urllib.error.HTTPError:
+                raise  # a rejected key won't fix itself
+            except (urllib.error.URLError, TimeoutError, OSError):
+                if attempt == SPAPI_TRIES - 1:
+                    raise
+                time.sleep(SPAPI_RETRY_SECONDS)
         self._token_at = time.time()
         return self._token
 
     def _call(self, method, path, payload=None):
         # createReport allows about one request a minute after a burst of 15, so a full
-        # week's search batches need to wait rather than fail. Only throttling and server
-        # errors are retried; anything else is a real failure.
+        # week's search batches need to wait rather than fail. Throttling, server errors and
+        # dropped connections are retried; anything else is a real failure.
         for attempt in range(SPAPI_TRIES):
             req = urllib.request.Request(
                 self.endpoint + path,
@@ -304,6 +313,10 @@ class SpApiSource:
                     return json.load(resp)
             except urllib.error.HTTPError as e:
                 if e.code not in (429, 500, 502, 503, 504) or attempt == SPAPI_TRIES - 1:
+                    raise
+                time.sleep(SPAPI_RETRY_SECONDS)
+            except (urllib.error.URLError, TimeoutError, OSError):  # the connection dropped
+                if attempt == SPAPI_TRIES - 1:
                     raise
                 time.sleep(SPAPI_RETRY_SECONDS)
 
