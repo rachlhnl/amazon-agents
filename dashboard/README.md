@@ -97,3 +97,20 @@ To apply the requests, open Claude Code in this repo and ask it to **"apply the 
 
 Parts are identified by their tab and heading. If a card's heading is renamed, its old review entry no longer applies to it.
 
+## Walmart tab
+
+The Walmart tab reads `$DAGACCI_DATA/walmart/walmart_snapshot.json` (business data, outside this repo).
+
+With `WALMART_CLIENT_ID` and `WALMART_CLIENT_SECRET` in `.env` (`zsh dashboard/walmart_setup.sh keys`), `refresh.sh` runs `walmart_api.py pull`, which refreshes the last 30 days of sales from Walmart's Item Performance report plus WFS stock. Walmart takes 15-45 minutes to prepare each report, so the run can take up to an hour. Older days are kept.
+
+- It only reads: the client refuses any POST except sign-in and report requests, and it doesn't use the Orders API, which returns customer names and addresses.
+- The first pull must be within 2% of the figures read by hand, or nothing is saved. `pull --accept` overrides this after you've reviewed the difference.
+- A failed pull leaves the data alone. The tab warns when it's over 9 days old.
+- Stock age, in-stock sales, rating, Walmart's estimates and the written notes don't come from this pull. They stay as read by hand and show their read date.
+
+## Where the scorecard's numbers come from
+
+- **Weekly sales and refund rate:** updated by the weekly run. `build_dashboard.py --source spapi` saves daily figures from `GET_SALES_AND_TRAFFIC_REPORT` to `$DAGACCI_DATA/seller_central/api_daily/`. History comes from the Business Reports exports (`data/amazon_daily_*.csv`), which match the API. Weeks run Sunday to Saturday. Refund rate is units refunded ÷ units ordered over 4 weeks.
+- **Repeat rate, new-to-brand, orders:** Customer Trends download. Amazon's report list has no API for these. The page shows the week they cover when they lag.
+- **Badges, complaint reasons, stars, Voice of the Customer return rate:** Voice of the Customer download. No API.
+- **Purchase share:** Search Query Performance, API or CSV.

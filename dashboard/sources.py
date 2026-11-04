@@ -16,10 +16,12 @@ import csv
 import datetime as dt
 import glob
 import gzip
+import hashlib
 import json
 import os
 import re
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -207,6 +209,9 @@ def _read_env(path):
                     out[k.strip()] = v.strip().strip("'\"")
     return out
 
+SPAPI_TRIES = 8            # attempts for one call
+SPAPI_RETRY_SECONDS = 65   # a little over the createReport refill time
+
 # What each dashboard table needs from the Reports API. Tables without an API
 # report (customer_trends, listing_health) stay as CSV drop-ins.
 SPAPI_REPORTS = {
@@ -226,6 +231,7 @@ SPAPI_REPORTS = {
     "sales_traffic": {
         "reportType": "GET_SALES_AND_TRAFFIC_REPORT",
         "options": {"dateGranularity": "WEEK", "asinGranularity": "CHILD"},
+        "optional": True,  # not on the page yet, so a failure here must not stop the refresh
     },
     "returns": {
         "reportType": "GET_FBA_FULFILLMENT_CUSTOMER_RETURNS_DATA",
@@ -248,7 +254,7 @@ class SpApiSource:
     """
     name = "spapi"
 
-    def __init__(self, config_path, raw_dir, week_end, asins=None, dry_run=False, env_path=None):
+    def __init__(self, config_path, raw_dir, week_end, asins=None, dry_run=False, env_path=None, known_titles=None):
         with open(config_path) as fh:
             self.cfg = json.load(fh)
         env = _read_env(env_path)
@@ -261,11 +267,13 @@ class SpApiSource:
         self.week_end = dt.date.fromisoformat(week_end)  # Saturday that ends the week
         self.asins = asins or self.cfg.get("asins", [])
         self.dry_run = dry_run
-        self._token = None
+        self.known_titles = known_titles or {}
+        self._token, self._token_at = None, 0.0
 
     # -- HTTP plumbing ----------------------------------------------------------
     def _access_token(self):
-        if self._token:
+        # Sign-in tokens last an hour and a full pull runs longer than that.
+        if self._token and time.time() - self._token_at < 3000:
             return self._token
         body = urllib.parse.urlencode({
             "grant_type": "refresh_token",
@@ -276,18 +284,28 @@ class SpApiSource:
         req = urllib.request.Request("https://api.amazon.com/auth/o2/token", data=body)
         with urllib.request.urlopen(req, timeout=30) as resp:
             self._token = json.load(resp)["access_token"]
+        self._token_at = time.time()
         return self._token
 
     def _call(self, method, path, payload=None):
-        req = urllib.request.Request(
-            self.endpoint + path,
-            method=method,
-            data=json.dumps(payload).encode() if payload is not None else None,
-            headers={"x-amz-access-token": self._access_token(),
-                     "content-type": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            return json.load(resp)
+        # createReport allows about one request a minute after a burst of 15, so a full
+        # week's search batches need to wait rather than fail. Only throttling and server
+        # errors are retried; anything else is a real failure.
+        for attempt in range(SPAPI_TRIES):
+            req = urllib.request.Request(
+                self.endpoint + path,
+                method=method,
+                data=json.dumps(payload).encode() if payload is not None else None,
+                headers={"x-amz-access-token": self._access_token(),
+                         "content-type": "application/json"},
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    return json.load(resp)
+            except urllib.error.HTTPError as e:
+                if e.code not in (429, 500, 502, 503, 504) or attempt == SPAPI_TRIES - 1:
+                    raise
+                time.sleep(SPAPI_RETRY_SECONDS)
 
     def _run_report(self, report_type, options, start, end):
         payload = {
@@ -301,6 +319,12 @@ class SpApiSource:
         if self.dry_run:
             print("  POST /reports/2021-06-30/reports", json.dumps(payload))
             return None
+        batch = (options or {}).get("asin")
+        suffix = "_" + hashlib.sha1(batch.encode()).hexdigest()[:10] if batch else ""
+        saved = os.path.join(self.raw_dir, f"{report_type}_{end.date()}{suffix}.json")
+        if batch and os.path.exists(saved):  # finished search batches aren't requested twice
+            with open(saved) as fh:
+                return json.load(fh)
         rid = self._call("POST", "/reports/2021-06-30/reports", payload)["reportId"]
         for _ in range(120):  # Brand Analytics reports can take several minutes
             rep = self._call("GET", f"/reports/2021-06-30/reports/{rid}")
@@ -319,7 +343,7 @@ class SpApiSource:
             data = gzip.decompress(data)
         os.makedirs(self.raw_dir, exist_ok=True)
         ext = "json" if data[:1] in (b"{", b"[") else "tsv"
-        with open(os.path.join(self.raw_dir, f"{report_type}_{end.date()}.{ext}"), "wb") as fh:
+        with open(os.path.join(self.raw_dir, f"{report_type}_{end.date()}{suffix}.{ext}"), "wb") as fh:
             fh.write(data)
         return json.loads(data) if ext == "json" else data.decode("utf-8", "replace")
 
@@ -334,16 +358,67 @@ class SpApiSource:
                 print(f"[spapi] {key}: skipped, no table mapping yet")
                 continue
             print(f"[spapi] {key}: {spec['reportType']}")
-            if spec.get("per_asin_batch"):
-                docs = [self._run_report(spec["reportType"], {**spec["options"], "asin": b}, start, end)
-                        for b in self._asin_batches()]
-            else:
-                docs = [self._run_report(spec["reportType"], spec["options"], start, end)]
-            docs = [d for d in docs if d is not None]
-            mapper = getattr(self, f"_map_{key}", None)
-            if docs and mapper:
-                t[key] = [row for d in docs for row in mapper(d, week)]
+            try:
+                if spec.get("per_asin_batch"):
+                    docs = [self._run_report(spec["reportType"], {**spec["options"], "asin": b}, start, end)
+                            for b in self._asin_batches()]
+                else:
+                    docs = [self._run_report(spec["reportType"], spec["options"], start, end)]
+                docs = [d for d in docs if d is not None]
+                mapper = getattr(self, f"_map_{key}", None)
+                if docs and mapper:
+                    t[key] = [row for d in docs for row in mapper(d, week)]
+            except Exception as e:
+                if not spec.get("optional"):
+                    raise
+                print(f"[spapi] {key}: skipped, {e}")
+        return t if self.dry_run else self._complete(t)
+
+    def _complete(self, t):
+        """The API leaves out what the CSVs carry: product titles, which the dashboard
+        groups by, and orders per ASIN in the basket report, which it weights by."""
+        orders = {r["asin"]: r["orders"] for r in t.get("repeat_asin", [])}
+        for r in t.get("basket", []):
+            r["orders"] = orders.get(r["asin"], 0)
+        wanted = {r["asin"] for k in ("repeat_asin", "basket") for r in t.get(k, [])}
+        wanted |= {c["asin"] for r in t.get("basket", []) for c in r["combos"]}
+        titles = self.titles(wanted)
+        for r in t.get("repeat_asin", []) + t.get("basket", []):
+            r["title"] = titles.get(r["asin"], r["asin"])
+        for r in t.get("basket", []):
+            for c in r["combos"]:
+                c["title"] = titles.get(c["asin"], c["asin"])
         return t
+
+    def load_daily(self, days=60):
+        """Daily sales, units and refunds for the whole account: one report, any length."""
+        end = dt.datetime.combine(self.week_end, dt.time.max).replace(microsecond=0)
+        start = dt.datetime.combine(self.week_end - dt.timedelta(days=days - 1), dt.time.min)
+        doc = self._run_report("GET_SALES_AND_TRAFFIC_REPORT", {"dateGranularity": "DAY", "asinGranularity": "CHILD"}, start, end)
+        return map_sales_daily(doc) if doc else []
+
+    def titles(self, asins):
+        """Titles from earlier exports first, then the Catalog API, cached so each ASIN
+        is only looked up once. A failed lookup leaves the ASIN as its own title."""
+        path = os.path.join(self.raw_dir, "asin_titles.json")
+        known = dict(self.known_titles)
+        if os.path.exists(path):
+            with open(path) as fh:
+                known.update(json.load(fh))
+        for asin in sorted(set(asins) - set(known)):
+            try:
+                doc = self._call("GET", f"/catalog/2022-04-01/items/{asin}?marketplaceIds={self.marketplace}"
+                                        "&includedData=summaries")
+                name = next((s.get("itemName") for s in doc.get("summaries", []) if s.get("itemName")), None)
+            except urllib.error.HTTPError:
+                continue
+            if name:
+                known[asin] = name
+            time.sleep(0.5)
+        os.makedirs(self.raw_dir, exist_ok=True)
+        with open(path, "w") as fh:
+            json.dump(known, fh, indent=0)
+        return known
 
     def _asin_batches(self):
         batch, out = [], []
@@ -386,11 +461,13 @@ class SpApiSource:
 
     @staticmethod
     def _map_repeat_asin(doc, week):
+        # Amazon sends nulls for ASINs too small to report, and repeatCustomersPctTotal as
+        # a fraction (0.1 for 10%), despite its name. Checked against the CSV for 2026-10-10.
         return [{
-            "week_end": week, "asin": r["asin"], "title": r.get("asin", ""),
-            "orders": r.get("orders", 0), "customers": r.get("uniqueCustomers", 0),
-            "repeat_sales": (r.get("repeatPurchaseRevenue") or {}).get("amount", 0.0),
-            "repeat_customers": round(r.get("uniqueCustomers", 0) * r.get("repeatCustomersPctTotal", 0) / 100),
+            "week_end": week, "asin": r["asin"], "title": r["asin"],
+            "orders": r.get("orders") or 0, "customers": r.get("uniqueCustomers") or 0,
+            "repeat_sales": (r.get("repeatPurchaseRevenue") or {}).get("amount") or 0.0,
+            "repeat_customers": round((r.get("uniqueCustomers") or 0) * (r.get("repeatCustomersPctTotal") or 0)),
         } for r in doc.get("dataByAsin", [])]
 
     @staticmethod
@@ -400,8 +477,122 @@ class SpApiSource:
             row = rows.setdefault(r["asin"], {"week_end": week, "asin": r["asin"], "title": r["asin"],
                                               "orders": 0, "combos": []})
             row["combos"].append({"asin": r["purchasedWithAsin"], "title": r["purchasedWithAsin"],
-                                  "pct": r.get("combinationPct", 0.0), "rank": r.get("purchasedWithRank")})
+                                  "pct": round((r.get("combinationPct") or 0.0) * 100, 2),  # a fraction in the API
+                                  "rank": r.get("purchasedWithRank")})
         return list(rows.values())
+
+    @staticmethod
+    def _map_sales_traffic(doc, week):
+        rows = doc.get("salesAndTrafficByDate", [])
+        if not rows:
+            return []
+        out = {"week_end": week, "sales": 0.0, "units": 0, "order_items": 0, "sessions": 0, "page_views": 0}
+        for r in rows:
+            sales, traffic = r.get("salesByDate") or {}, r.get("trafficByDate") or {}
+            out["sales"] += (sales.get("orderedProductSales") or {}).get("amount") or 0.0
+            out["units"] += sales.get("unitsOrdered") or 0
+            out["order_items"] += sales.get("totalOrderItems") or 0
+            out["sessions"] += traffic.get("sessions") or 0
+            out["page_views"] += traffic.get("pageViews") or 0
+        return [out]
+
+
+def map_sales_daily(doc):
+    out = []
+    for r in doc.get("salesAndTrafficByDate", []):
+        s, t = r.get("salesByDate") or {}, r.get("trafficByDate") or {}
+        out.append({"date": r["date"], "sales": (s.get("orderedProductSales") or {}).get("amount") or 0.0,
+                    "units": s.get("unitsOrdered") or 0, "order_items": s.get("totalOrderItems") or 0,
+                    "units_refunded": s.get("unitsRefunded"), "sessions": t.get("sessions") or 0})
+    return out
+
+
+def save_sales_daily(folder, rows):
+    """Keep every day seen; a later pull replaces the same day, since refunds keep arriving."""
+    path = os.path.join(folder, "sales_daily.json")
+    days = {r["date"]: r for r in load_sales_daily(folder)}
+    days.update({r["date"]: r for r in rows})
+    os.makedirs(folder, exist_ok=True)
+    with open(path, "w") as fh:
+        json.dump([days[d] for d in sorted(days)], fh, indent=0)
+
+
+def load_sales_daily(folder):
+    path = os.path.join(folder, "sales_daily.json")
+    if not os.path.exists(path):
+        return []
+    with open(path) as fh:
+        return json.load(fh)
+
+
+def business_report_daily(folder):
+    """Daily exports from Seller Central's Business Reports (amazon_daily_*.csv). The same
+    measure as the API, so they give the weekly sales series its history. No refunds column."""
+    days = {}
+    for path in sorted(glob.glob(os.path.join(folder, "amazon_daily_*.csv")), key=os.path.getmtime):
+        with open(path, encoding="utf-8-sig", newline="") as fh:
+            for r in csv.DictReader(fh):
+                day = dt.datetime.strptime(r["Date"], "%m/%d/%y").date().isoformat()
+                days[day] = {"date": day, "sales": _f(r["Ordered Product Sales"].replace("$", "")) or 0.0,
+                             "units": _i(r["Units Ordered"]), "order_items": _i(r["Total Order Items"]),
+                             "units_refunded": None, "sessions": _i(r["Sessions - Total"])}
+    return [days[d] for d in sorted(days)]
+
+
+def merge_daily(exports, api):
+    """API days win: they're the fresher copy and the only ones with refunds."""
+    days = {r["date"]: r for r in exports}
+    days.update({r["date"]: r for r in api})
+    return [days[d] for d in sorted(days)]
+
+
+def titles_from(tables):
+    """ASIN -> title from the CSV exports already on disk, to avoid Catalog API calls."""
+    out = {}
+    for key in ("repeat_asin", "basket", "listing_health"):
+        for r in tables.get(key, []):
+            if r.get("title"):
+                out[r["asin"]] = r["title"]
+            for c in r.get("combos", []):
+                if c.get("title"):
+                    out[c["asin"]] = c["title"]
+    return out
+
+
+def save_api_tables(folder, tables):
+    """Keep each week the API returned, one file per table and week. Nothing else stores these
+    tables, and the CSV folder won't have the weeks, so without this they vanish on the next run."""
+    os.makedirs(folder, exist_ok=True)
+    for key, rows in tables.items():
+        by_week = {}
+        for r in rows:
+            by_week.setdefault(r["week_end"], []).append(r)
+        for week, week_rows in by_week.items():
+            path = os.path.join(folder, f"{key}_{week}.json")
+            with open(path + ".tmp", "w") as fh:
+                json.dump(week_rows, fh)
+            os.replace(path + ".tmp", path)
+
+
+def load_api_tables(folder):
+    tables = {}
+    for path in sorted(glob.glob(os.path.join(folder, "*.json"))):
+        key = os.path.basename(path).rsplit("_", 1)[0]
+        with open(path) as fh:
+            tables.setdefault(key, []).extend(json.load(fh))
+    return tables
+
+
+def merge_weekly(csv_tables, api_tables):
+    """Add API weeks to the CSV history. A week that has a CSV keeps the CSV: those exports are
+    what the dashboard was validated against, while the API rows are rolled up from ASIN level."""
+    merged = dict(csv_tables)
+    for key, rows in api_tables.items():
+        have = {r.get("week_end") for r in csv_tables.get(key, [])}
+        new = [r for r in rows if r.get("week_end") not in have]
+        if new:
+            merged[key] = sorted(csv_tables.get(key, []) + new, key=lambda r: r["week_end"])
+    return merged
 
 
 class WarehouseSource:
@@ -459,3 +650,18 @@ class WarehouseSource:
         finally:
             db.close()
         return {k: v for k, v in t.items() if v and not (len(v) == 1 and not any(v[0].values()))}
+
+
+class WalmartSource:
+    """Walmart Marketplace snapshot read from Seller Center (no API connection yet):
+    <folder>/walmart_snapshot.json. Lives with the business data, outside the repo."""
+    name = "walmart"
+
+    def __init__(self, folder):
+        self.path = os.path.join(folder, "walmart_snapshot.json")
+
+    def load(self):
+        if not os.path.exists(self.path):
+            return {}
+        with open(self.path) as fh:
+            return {"walmart": json.load(fh)}

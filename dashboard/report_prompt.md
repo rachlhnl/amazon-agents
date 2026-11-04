@@ -3,7 +3,7 @@ Write this week's Dagacci KPI report into the dashboard's shared database. Only 
 Artifact: https://claude.ai/artifact/EQVvremS6huZYvNAY1BswG (use the ArtifactData tool with this url)
 KPI data: ~/Documents/dagacci/dashboard/kpis.json and ~/Documents/dagacci/dashboard/history.json
 
-1. Read kpis.json. The data week is customers.latest.week_end (call it W). The report id is `week-W`.
+1. Read kpis.json. The data week is weekly.latest.week_end (call it W). The report id is `week-W`.
 2. List the `reports` collection. If `week-W` already exists, stop: the team or an earlier run already wrote it.
 3. Activity window: `from` = the largest `to` among existing `week-*` reports, or 7 days ago if none; `to` = now. Both are ISO timestamps (UTC, e.g. 2026-10-27T07:00:00.000Z).
 4. List the `actions` and `log` collections. From `log`, collect entries with `at` inside the window: actions whose `changes.status[1]` is "done" (use `state.title`, `state.team` and `state.doneNote`), and new team to-dos (`changes.custom`). From `actions`, note anything with status "blocked", or with a `due` date before today and a status other than done or dropped.

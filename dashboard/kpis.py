@@ -96,6 +96,40 @@ def customer_kpis(rows):
     }
 
 
+def weekly_kpis(daily, customer_rows=None):
+    """Weekly sales from the account's daily figures (Business Reports or the API), which
+    update on their own, unlike Customer Trends. Weeks run Sunday to Saturday; a partial
+    week is left out. Falls back to Customer Trends when no daily figures are loaded."""
+    weeks, week = [], []
+    for r in sorted(daily or [], key=lambda x: x["date"]):
+        d = dt.date.fromisoformat(r["date"])
+        if d.weekday() == 6:
+            week = []
+        week.append(r)
+        if d.weekday() == 5 and len(week) == 7:
+            ref = [x["units_refunded"] for x in week]
+            weeks.append({"week_end": r["date"], "sales": sum(x["sales"] for x in week),
+                          "units": sum(x["units"] for x in week), "order_items": sum(x["order_items"] for x in week),
+                          "sessions": sum(x["sessions"] for x in week),
+                          "units_refunded": None if None in ref else sum(ref)})
+    source = "account"
+    if not weeks:
+        if not customer_rows:
+            return None
+        source = "customer_trends"
+        weeks = [{"week_end": r["week_end"], "sales": r["sales"], "units": None, "order_items": r["orders"],
+                  "sessions": None, "units_refunded": None} for r in sorted(customer_rows, key=lambda x: x["week_end"])]
+    for i, w in enumerate(weeks):
+        # Refunds land weeks after the sale, so one week is noisy: use the last four.
+        last4 = weeks[max(0, i - 3): i + 1]
+        known = len(last4) == 4 and all(x["units_refunded"] is not None and x["units"] for x in last4)
+        w["refund_rate_4w"] = (100 * sum(x["units_refunded"] for x in last4) / sum(x["units"] for x in last4)) if known else None
+    peak = max(weeks[-16:], key=lambda r: r["sales"])
+    return {"source": source, "latest": weeks[-1], "prior": weeks[-2] if len(weeks) > 1 else None,
+            "series": weeks[-16:], "last4_sales": sum(r["sales"] for r in weeks[-4:]),
+            "peak_week": {"week_end": peak["week_end"], "sales": peak["sales"]}}
+
+
 def search_kpis(rows):
     weeks = sorted({r["week_end"] for r in rows})
     stages = [("Impressions", "impr"), ("Clicks", "clicks"), ("Cart adds", "cart"), ("Purchases", "purch")]
@@ -188,6 +222,8 @@ def listing_kpis(rows):
             reasons[r["top_ncx_reason"]] += attributed
             if size and r["top_ncx_reason"] in ("Too Large", "Too Small"):
                 fit[size][r["top_ncx_reason"]] += attributed
+            if r["top_ncx_reason"] in ("Too Large", "Too Small"):
+                by_line[line][r["top_ncx_reason"]] += attributed
         if size:
             fit[size]["orders"] += r["orders"]
         b = by_line[line]
@@ -216,6 +252,9 @@ def listing_kpis(rows):
             "ncx_rate": _share(v["ncx"], v["orders"]),
             "stars": v["stars_w"] / v["stars_o"] if v["stars_o"] else None,
             "badge_share": _share(v["badge_orders"], v["orders"]),
+            # complaints per 100 orders whose top reason is fit, by direction
+            "too_large": 100 * v["Too Large"] / v["orders"] if v["orders"] else 0,
+            "too_small": 100 * v["Too Small"] / v["orders"] if v["orders"] else 0,
         } for k, v in by_line.items()), key=lambda x: -x["orders"]),
         "watchlist": [{
             "asin": r["asin"], "title": r["title"], "line": line_of(r["title"]), "size": size_of(r["title"]),
@@ -427,10 +466,53 @@ def fmt_int(v):
     return f"{round(v):,}"
 
 
+def walmart_kpis(snap, customers=None):
+    """Roll the Seller Center snapshot up for the Walmart tab. GMV is Walmart's net figure
+    (orders placed less cancellations and refunds), so the comparison with Amazon uses
+    orders placed (auth) instead."""
+    daily = sorted(snap["daily"], key=lambda r: r["date"])
+    for r in daily:
+        r["aur"] = r["gmv"] / r["units"] if r["units"] > 0 else None
+
+    def total(rows):
+        s = {k: sum(r[k] for r in rows) for k in ("gmv", "net", "units", "orders", "auth", "cancelled", "refunds")}
+        s["days"] = len(rows)
+        s["aur"] = s["gmv"] / s["units"] if s["units"] > 0 else None
+        s["refund_share"] = _share(s["refunds"], s["auth"])
+        return s
+
+    amazon = {r["week_end"]: r["sales"] for r in (customers or {}).get("series", [])}
+    weekly, week = [], []
+    for r in daily:
+        d = dt.date.fromisoformat(r["date"])
+        if d.weekday() == 6:  # weeks run Sunday to Saturday, like Brand Analytics
+            week = []
+        week.append(r)
+        if d.weekday() == 5 and len(week) == 7:
+            w = {"week_end": r["date"], **total(week), "amazon": amazon.get(r["date"])}
+            w["share"] = _share(w["auth"], w["auth"] + w["amazon"]) if w["amazon"] else None
+            weekly.append(w)
+    stock = {r["sku"]: r for r in snap.get("stock", [])}
+    return {
+        "captured": snap["captured"], "source": snap.get("source"), "auto": bool(snap.get("auto")),
+        "hand_read": snap.get("hand_read") or snap["captured"], "from": daily[0]["date"], "through": daily[-1]["date"],
+        "daily": daily, "weekly": weekly, "all": total(daily),
+        "last30": total(daily[-30:]), "prior30": total(daily[-60:-30]) if len(daily) >= 60 else None,
+        "top": [{**t, "stock": stock.get(t["sku"])} for t in snap.get("top_items", [])],
+        "top_from": snap.get("top_items_from"), "top_to": snap.get("top_items_to"),
+        "items_with_activity": snap.get("items_with_activity"), "stock": snap.get("stock", []),
+        "wfs": snap.get("wfs"), "performance": snap.get("performance"),
+        "estimates": snap.get("walmart_estimates"), "notes": snap.get("notes", []),
+    }
+
+
 def build(tables, source_name):
     out = {"source": source_name, "have": sorted(tables), "awaiting": AWAITING}
     if "customer_trends" in tables:
         out["customers"] = customer_kpis(tables["customer_trends"])
+    weekly = weekly_kpis(tables.get("account_daily"), tables.get("customer_trends"))
+    if weekly:
+        out["weekly"] = weekly
     if "sqp" in tables:
         out["search"] = search_kpis(tables["sqp"])
     if "listing_health" in tables:
@@ -439,7 +521,11 @@ def build(tables, source_name):
         out["repeat"] = repeat_kpis(tables["repeat_asin"])
     if "basket" in tables:
         out["basket"] = basket_kpis(tables["basket"])
+    if "sales_traffic" in tables:  # kept for comparing with Customer Trends; not on the page yet
+        out["sales_api"] = tables["sales_traffic"]
     out.update(ops_kpis(tables))
+    if "walmart" in tables:
+        out["walmart"] = walmart_kpis(tables["walmart"], out.get("customers"))
     connected = {"Conversion rate & sessions by child ASIN": "traffic",
                  "Stockout rate on core sizes, weeks of cover": "stock",
                  "ACoS, TACoS, new-to-brand from ads": "ads"}
@@ -479,22 +565,41 @@ def insights(k):
         big, small = reasons.get("Too Large", 0), reasons.get("Too Small", 0)
         fit_share = _share(big + small, sum(reasons.values()))
         sized = [r for r in L["fit_by_size"] if r["orders"] >= 300]
-        worst = max(sized, key=lambda r: r["Too Large"] / r["orders"])
         fit_rate = 100 * sum(r["Too Large"] + r["Too Small"] for r in sized) / sum(r["orders"] for r in sized)
-        if big > 1.5 * small:
+        # Fit runs in different directions by line (classic sets large, men's cargo small), so the
+        # advice is per line: a blanket "size down" would make the lines that run small worse.
+        main = [l for l in L["lines"] if l["orders"] >= 500 and l["line"] != "Other"]
+        ways = {"large": [], "small": []}
+        for l in main:
+            lg, sm = l.get("too_large", 0), l.get("too_small", 0)
+            if lg > 1.5 * sm:
+                ways["large"].append(l)
+            elif sm > 1.5 * lg:
+                ways["small"].append(l)
+        names = lambda ls: ", ".join(l["line"] for l in ls)
+        if big + small and (ways["large"] or ways["small"]):
+            def say(ls, word):  # the biggest line by orders, plus how many more go the same way
+                if not ls:
+                    return ""
+                more = f" and {len(ls) - 1} more line{'s' if len(ls) > 2 else ''}" if len(ls) > 1 else ""
+                return f'{ls[0]["line"]}{more} run{"s" if len(ls) == 1 else ""} {word}'
+            title = "Fit depends on the product: " + "; ".join(p for p in (say(ways["large"], "large"), say(ways["small"], "small")) if p)
+            rate = lambda l, k: f'{l[k]:.1f}'
+            actions = ["Re-measure and update the size chart on every listing, starting with the watchlist SKUs."]
+            if ways["large"]:
+                actions.append(f'{names(ways["large"])}: add "Runs large: if between sizes, size down" to the first bullet and the size chart.')
+            if ways["small"]:
+                actions.append(f'{names(ways["small"])}: add "Fitted: if between sizes, size up", with chest, sleeve and inseam measurements.')
+            actions.append("Ask the factory to correct each line's pattern: smaller where it runs large, roomier where it runs small.")
             out.append({
                 "section": "fit", "priority": 1, "effort": "Low",
-                "title": "The products run large, and that drives most bad experiences",
-                "finding": f'"Too large" outnumbers "too small" {big / small:.1f} to 1 and makes up {fit_share:.0f}% of '
-                           f'bad-experience orders. It is worst at size {worst["size"]} '
-                           f'({100 * worst["Too Large"] / worst["orders"]:.1f} per 100 orders).',
+                "title": title,
+                "finding": "Fit complaints per 100 orders, too large / too small: "
+                           + "; ".join(f'{l["line"]} {rate(l, "too_large")} / {rate(l, "too_small")}' for l in main)
+                           + f'. Fit is {fit_share:.0f}% of bad-experience orders.',
                 "why": f'Fit returns are what put {L["badge_share"]:.0f}% of orders on listings with, or close to, '
                        'Amazon\'s "frequently returned" badge, which lowers conversion.',
-                "actions": [
-                    "Re-measure and update the size chart on every listing, starting with the watchlist SKUs.",
-                    'Add "Runs large: size down if between sizes" to the first bullet and the main image.',
-                    "Ask the factory to grade the core unisex pattern down half a size on the next production run.",
-                ],
+                "actions": actions,
                 "kpi": "Fit complaints per 100 orders", "current": f"{fit_rate:.1f}", "target": f"{fit_rate / 2:.1f}",
             })
         risky = [w for w in L["watchlist"] if w["badge"] and (w["top_reason"] or "").startswith("Too")]
@@ -682,7 +787,8 @@ def impact(i, k):
     Sales dollars only (no margin data yet); None where there's no defensible basis."""
     C, S, L = k.get("customers"), k.get("search"), k.get("listings")
     sa, st, tr = k.get("sales"), k.get("stock"), k.get("traffic")
-    month = C["last4_sales"] / 4 * WEEKS_PER_MONTH if C else None
+    W = k.get("weekly")
+    month = (W or C)["last4_sales"] / 4 * WEEKS_PER_MONTH if (W or C) else None
     aov = C["latest"]["aov"] if C else None
     unit_price = sa["rev_total"] / sa["units_total"] if sa and sa["units_total"] else aov
     mkt = sum(s["weekly_market_purchases"] for s in S["segments"]) if S else 0
@@ -786,13 +892,22 @@ def scorecard(k, targets):
     vals = {}
     if C:
         vals["weekly_sales"] = (C["latest"]["sales"], C["prior"]["sales"], f"Week ending {C['latest']['week_end']}, Brand Analytics")
-        vals["repeat_rate"] = (C["latest"]["repeat_rate"], C["prior"]["repeat_rate"], "Share of the week's customers who bought before")
+        vals["repeat_rate"] = (C["latest"]["repeat_rate"], C["prior"]["repeat_rate"],
+                               f"Share of the week's customers who bought before. Customer Trends download, week ending {C['latest']['week_end']}")
     if L:
         vals["return_rate"] = (L["return_rate"], None, "Voice of the Customer, new-condition listings (rolling window)")
+    W, labels = k.get("weekly"), {}
+    if W and W["source"] == "account":
+        a, b = W["latest"], W["prior"]
+        vals["weekly_sales"] = (a["sales"], b["sales"] if b else None, f"Week ending {a['week_end']}, Seller Central ordered product sales")
+        if a["refund_rate_4w"] is not None:
+            vals["return_rate"] = (a["refund_rate_4w"], b["refund_rate_4w"] if b else None,
+                                   f"Units refunded ÷ units ordered, 4 weeks to {a['week_end']}. Not the same measure as Voice of the Customer")
+            labels["return_rate"] = "Refund rate"
     if S:
         f = S["funnel"]
         vals["search_purchase_share"] = (f[-1]["Purchases"], f[-2]["Purchases"] if len(f) > 1 else None,
-                                         "Dagacci's share of purchases on the top 1,500 searches")
+                                         f"Dagacci's share of purchases on the top 1,500 searches, week ending {f[-1]['week_end']}")
     out = []
     for key, t in targets.items():
         if key.startswith("_") or key not in vals:
@@ -801,18 +916,21 @@ def scorecard(k, targets):
         up = t["better"] == "up"
         gap = (now - t["target"]) if up else (t["target"] - now)  # >= 0 means on target
         status = "on" if gap >= 0 else "close" if abs(gap) <= 0.1 * t["target"] else "off"
-        out.append({"key": key, "label": t["label"], "unit": t["unit"], "better": t["better"], "now": now,
+        out.append({"key": key, "label": labels.get(key, t["label"]), "unit": t["unit"], "better": t["better"], "now": now,
                     "prior": prior, "target": t["target"], "status": status, "note": note})
     return out
 
 
 def changes(k):
     """What moved since last week, biggest relative change first."""
-    C, S = k.get("customers"), k.get("search")
+    C, S, W = k.get("customers"), k.get("search"), k.get("weekly")
     rows = []
-    if C:
+    if W and W["prior"]:
+        rows.append(("Weekly sales", W["latest"]["sales"], W["prior"]["sales"], "$", True))
+    # Customer figures only count here when their download covers the same week.
+    if C and (not W or C["latest"]["week_end"] == W["latest"]["week_end"]):
         a, b = C["latest"], C["prior"]
-        rows += [("Weekly sales", a["sales"], b["sales"], "$", True), ("Orders", a["orders"], b["orders"], "n", True),
+        rows += [("Orders", a["orders"], b["orders"], "n", True),
                  ("Average order value", a["aov"], b["aov"], "$", True),
                  ("New-to-brand share", a["ntb_share"], b["ntb_share"], "%", True),
                  ("Repeat customer rate", a["repeat_rate"], b["repeat_rate"], "%", True)]

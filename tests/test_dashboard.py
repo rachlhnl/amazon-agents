@@ -151,3 +151,23 @@ def test_ceo_view_flags_example_config(ctx):
     s = data["scorecard"]
     assert s and s["now"]["revenue"] > 0 and set(s["now"]) >= {"profit", "tacos", "units"}
     assert data["market"] is None
+
+
+def test_history_keeps_lagging_figures_out_of_newer_weeks(tmp_path):
+    import importlib.util, sys
+    from pathlib import Path
+    d = Path(__file__).parent.parent / "dashboard"
+    sys.path.insert(0, str(d))
+    spec = importlib.util.spec_from_file_location("build_dashboard_t", d / "build_dashboard.py")
+    b = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(b)
+    data = {"built": "x", "insights": [],
+            "weekly": {"source": "account", "latest": {"week_end": "2026-10-31"},
+                       "series": [{"week_end": "2026-10-31", "sales": 9.0, "refund_rate_4w": 1.0}]},
+            "customers": {"latest": {"week_end": "2026-10-24"}, "series": []},
+            "search": {"funnel": [{"week_end": "2026-10-24", "Purchases": 5.0}]},
+            "scorecard": [{"key": "weekly_sales", "now": 9.0}, {"key": "repeat_rate", "now": 7.0},
+                          {"key": "search_purchase_share", "now": 5.0}]}
+    h = b.update_history(str(tmp_path / "h.json"), data)
+    assert h["2026-10-31"]["kpis"] == {"weekly_sales": 9.0, "return_rate": 1.0}
+    assert h["2026-10-24"]["kpis"] == {"search_purchase_share": 5.0}
